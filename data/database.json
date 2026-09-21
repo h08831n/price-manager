@@ -127,7 +127,7 @@
       "active": true,
       "attributes": {},
       "created_at": "2026-09-21T10:18:01.122Z",
-      "updated_at": "2026-09-21T10:18:56.089Z"
+      "updated_at": "2026-09-21T10:44:16.970Z"
     }
   ],
   "sites": [
@@ -1399,6 +1399,98 @@
   "errors": [],
   "logs": [
     {
+      "id": 42,
+      "level": "INFO",
+      "message": "نتیجه انتشار در وردپرس: 2 موفق، 0 ناموفق",
+      "metadata": {
+        "updated": 2,
+        "failed": 0
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T10:44:17.042Z"
+    },
+    {
+      "id": 41,
+      "level": "INFO",
+      "message": "ارسال به وب‌سایت وردپرس/ووکامرس (2 محصول)",
+      "metadata": {
+        "priceTableId": 1,
+        "count": 2,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T10:44:17.009Z"
+    },
+    {
+      "id": 40,
+      "level": "INFO",
+      "message": "نتیجه انتشار در وردپرس: 2 موفق، 0 ناموفق",
+      "metadata": {
+        "updated": 2,
+        "failed": 0
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T10:43:47.141Z"
+    },
+    {
+      "id": 39,
+      "level": "INFO",
+      "message": "ارسال به وب‌سایت وردپرس/ووکامرس (2 محصول)",
+      "metadata": {
+        "priceTableId": 1,
+        "count": 2,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T10:43:47.106Z"
+    },
+    {
+      "id": 38,
+      "level": "INFO",
+      "message": "نتیجه انتشار در وردپرس: 2 موفق، 0 ناموفق",
+      "metadata": {
+        "updated": 2,
+        "failed": 0
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T10:43:28.698Z"
+    },
+    {
+      "id": 37,
+      "level": "INFO",
+      "message": "ارسال به وب‌سایت وردپرس/ووکامرس (2 محصول)",
+      "metadata": {
+        "priceTableId": 1,
+        "count": 2,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T10:43:28.653Z"
+    },
+    {
+      "id": 36,
+      "level": "INFO",
+      "message": "نتیجه انتشار در وردپرس: 2 موفق، 0 ناموفق",
+      "metadata": {
+        "updated": 2,
+        "failed": 0
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T10:43:01.915Z"
+    },
+    {
+      "id": 35,
+      "level": "INFO",
+      "message": "ارسال به وب‌سایت وردپرس/ووکامرس (2 محصول)",
+      "metadata": {
+        "priceTableId": 1,
+        "count": 2,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T10:43:01.864Z"
+    },
+    {
       "id": 34,
       "level": "INFO",
       "message": "نتیجه انتشار در وردپرس: 2 موفق، 0 ناموفق",
@@ -1864,6 +1956,54 @@
     }
   ],
   "import_history": [
+    {
+      "id": 7,
+      "file_name": "test_products.xlsx",
+      "import_type": "products",
+      "uploaded_at": "2026-09-21T10:44:16.970Z",
+      "rows_total": 1,
+      "rows_new": 1,
+      "rows_updated": 0,
+      "rows_unchanged": 0,
+      "rows_failed": 0,
+      "status": "SUCCESS"
+    },
+    {
+      "id": 6,
+      "file_name": "test_products.xlsx",
+      "import_type": "products",
+      "uploaded_at": "2026-09-21T10:43:47.067Z",
+      "rows_total": 1,
+      "rows_new": 1,
+      "rows_updated": 0,
+      "rows_unchanged": 0,
+      "rows_failed": 0,
+      "status": "SUCCESS"
+    },
+    {
+      "id": 5,
+      "file_name": "test_products.xlsx",
+      "import_type": "products",
+      "uploaded_at": "2026-09-21T10:43:28.615Z",
+      "rows_total": 1,
+      "rows_new": 1,
+      "rows_updated": 0,
+      "rows_unchanged": 0,
+      "rows_failed": 0,
+      "status": "SUCCESS"
+    },
+    {
+      "id": 4,
+      "file_name": "test_products.xlsx",
+      "import_type": "products",
+      "uploaded_at": "2026-09-21T10:43:01.813Z",
+      "rows_total": 1,
+      "rows_new": 1,
+      "rows_updated": 0,
+      "rows_unchanged": 0,
+      "rows_failed": 0,
+      "status": "SUCCESS"
+    },
     {
       "id": 3,
       "file_name": "test_products.xlsx",

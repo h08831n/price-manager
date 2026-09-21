@@ -450,22 +450,111 @@ apiRouter.get('/table-sources', (req: Request, res: Response) => {
 
 apiRouter.post('/table-sources', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { price_table_id, site_id, source_page_id, update_time_xpath, recheck_enabled, active } = req.body;
+  const {
+    price_table_id,
+    site_id,
+    source_page_id,
+    new_url,
+    update_time_xpath,
+    recheck_enabled,
+    active,
+    max_attempts_override,
+    retry_interval_override,
+    timeout_override,
+    price_guard_override
+  } = req.body;
+
+  const ptId = parseInt(price_table_id, 10);
+  const sId = parseInt(site_id, 10);
+  let spId = source_page_id ? parseInt(source_page_id, 10) : 0;
+
+  // 1. Validate price_table_id
+  if (!ptId || isNaN(ptId)) {
+    return res.status(400).json({ error: 'شناسه جدول قیمت الزامی است.' });
+  }
+  const tableExists = schema.price_tables.some((t) => t.id === ptId);
+  if (!tableExists) {
+    return res.status(400).json({ error: 'جدول قیمت مشخص شده وجود ندارد.' });
+  }
+
+  // 2. Validate site_id
+  if (!sId || isNaN(sId)) {
+    return res.status(400).json({ error: 'شناسه سایت منبع الزامی است.' });
+  }
+  const siteExists = schema.sites.some((s) => s.id === sId);
+  if (!siteExists) {
+    return res.status(400).json({ error: 'سایت منبع مشخص شده وجود ندارد.' });
+  }
+
+  // Handle inline creation of new source page if new_url is provided
+  if (new_url && (!spId || spId === 0)) {
+    const cleanUrl = String(new_url).trim();
+    if (!cleanUrl) {
+      return res.status(400).json({ error: 'آدرس صفحه الزامی است.' });
+    }
+    let existingPage = schema.source_pages.find((p) => p.site_id === sId && p.url === cleanUrl);
+    if (!existingPage) {
+      existingPage = {
+        id: db.getNextId('source_pages'),
+        site_id: sId,
+        url: cleanUrl,
+        active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      schema.source_pages.push(existingPage);
+    }
+    spId = existingPage.id;
+  }
+
+  // 3. Validate source_page_id
+  if (!spId || isNaN(spId)) {
+    return res.status(400).json({ error: 'شناسه صفحه منبع الزامی است.' });
+  }
+  const sourcePage = schema.source_pages.find((p) => p.id === spId);
+  if (!sourcePage) {
+    return res.status(400).json({ error: 'صفحه منبع مشخص شده وجود ندارد.' });
+  }
+
+  // 4. Validate source_page belongs to the specified site
+  if (sourcePage.site_id !== sId) {
+    return res.status(400).json({ error: 'صفحه منبع انتخاب شده متعلق به این سایت نیست.' });
+  }
+
+  // 5. Prevent duplicate mapping of PriceTable + Site + SourcePage
+  const isDuplicate = schema.table_sources.some(
+    (ts) => ts.price_table_id === ptId && ts.site_id === sId && ts.source_page_id === spId
+  );
+  if (isDuplicate) {
+    return res.status(400).json({ error: 'این منبع قبلاً برای این جدول قیمت ثبت شده است.' });
+  }
 
   const newSource = {
     id: db.getNextId('table_sources'),
-    price_table_id: parseInt(price_table_id, 10),
-    site_id: parseInt(site_id, 10),
-    source_page_id: parseInt(source_page_id, 10),
-    update_time_xpath: update_time_xpath || '',
-    recheck_enabled: Boolean(recheck_enabled),
+    price_table_id: ptId,
+    site_id: sId,
+    source_page_id: spId,
+    update_time_xpath: update_time_xpath ? String(update_time_xpath).trim() : '',
+    recheck_enabled: recheck_enabled !== undefined ? Boolean(recheck_enabled) : true,
     active: active !== undefined ? Boolean(active) : true,
+    max_attempts_override: max_attempts_override !== undefined && max_attempts_override !== '' && max_attempts_override !== null
+      ? parseInt(String(max_attempts_override), 10)
+      : null,
+    retry_interval_override: retry_interval_override !== undefined && retry_interval_override !== '' && retry_interval_override !== null
+      ? parseInt(String(retry_interval_override), 10)
+      : null,
+    timeout_override: timeout_override !== undefined && timeout_override !== '' && timeout_override !== null
+      ? parseInt(String(timeout_override), 10)
+      : null,
+    price_guard_override: price_guard_override !== undefined && price_guard_override !== '' && price_guard_override !== null
+      ? parseFloat(String(price_guard_override))
+      : null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
 
   schema.table_sources.push(newSource);
-  db.logConfigChange('table_source', newSource.id, 'create', null, `Table ${price_table_id} -> Site ${site_id}`);
+  db.logConfigChange('table_source', newSource.id, 'create', null, `Table ${ptId} -> Site ${sId}`);
   db.save();
   res.json(newSource);
 });
@@ -476,16 +565,85 @@ apiRouter.put('/table-sources/:id', (req: Request, res: Response) => {
   const ts = schema.table_sources.find((s) => s.id === id);
   if (!ts) return res.status(404).json({ error: 'منبع جدول یافت نشد.' });
 
-  if (req.body.source_page_id !== undefined) ts.source_page_id = parseInt(req.body.source_page_id, 10);
-  if (req.body.price_table_id !== undefined) ts.price_table_id = parseInt(req.body.price_table_id, 10);
-  if (req.body.site_id !== undefined) ts.site_id = parseInt(req.body.site_id, 10);
-  if (req.body.update_time_xpath !== undefined) ts.update_time_xpath = req.body.update_time_xpath;
+  const ptId = req.body.price_table_id !== undefined ? parseInt(req.body.price_table_id, 10) : ts.price_table_id;
+  const sId = req.body.site_id !== undefined ? parseInt(req.body.site_id, 10) : ts.site_id;
+  let spId = req.body.source_page_id !== undefined ? parseInt(req.body.source_page_id, 10) : ts.source_page_id;
+
+  // Handle inline creation of new source page on edit if requested
+  if (req.body.new_url && (!spId || spId === 0)) {
+    const cleanUrl = String(req.body.new_url).trim();
+    if (cleanUrl) {
+      let existingPage = schema.source_pages.find((p) => p.site_id === sId && p.url === cleanUrl);
+      if (!existingPage) {
+        existingPage = {
+          id: db.getNextId('source_pages'),
+          site_id: sId,
+          url: cleanUrl,
+          active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        schema.source_pages.push(existingPage);
+      }
+      spId = existingPage.id;
+    }
+  }
+
+  // 1. Validate price_table
+  if (!schema.price_tables.some((t) => t.id === ptId)) {
+    return res.status(400).json({ error: 'جدول قیمت مشخص شده وجود ندارد.' });
+  }
+
+  // 2. Validate site
+  if (!schema.sites.some((s) => s.id === sId)) {
+    return res.status(400).json({ error: 'سایت منبع مشخص شده وجود ندارد.' });
+  }
+
+  // 3. Validate source_page
+  const sourcePage = schema.source_pages.find((p) => p.id === spId);
+  if (!sourcePage) {
+    return res.status(400).json({ error: 'صفحه منبع مشخص شده وجود ندارد.' });
+  }
+
+  // 4. Validate source_page belongs to site
+  if (sourcePage.site_id !== sId) {
+    return res.status(400).json({ error: 'صفحه منبع انتخاب شده متعلق به این سایت نیست.' });
+  }
+
+  // 5. Duplicate check against other sources
+  const isDuplicate = schema.table_sources.some(
+    (other) => other.id !== id && other.price_table_id === ptId && other.site_id === sId && other.source_page_id === spId
+  );
+  if (isDuplicate) {
+    return res.status(400).json({ error: 'منبع دیگری با همین مشخصات برای این جدول ثبت شده است.' });
+  }
+
+  ts.price_table_id = ptId;
+  ts.site_id = sId;
+  ts.source_page_id = spId;
+  if (req.body.update_time_xpath !== undefined) ts.update_time_xpath = String(req.body.update_time_xpath).trim();
   if (req.body.recheck_enabled !== undefined) ts.recheck_enabled = Boolean(req.body.recheck_enabled);
   if (req.body.active !== undefined) ts.active = Boolean(req.body.active);
-  if (req.body.max_attempts_override !== undefined) ts.max_attempts_override = req.body.max_attempts_override ? parseInt(req.body.max_attempts_override, 10) : null;
-  if (req.body.retry_interval_override !== undefined) ts.retry_interval_override = req.body.retry_interval_override ? parseInt(req.body.retry_interval_override, 10) : null;
-  if (req.body.timeout_override !== undefined) ts.timeout_override = req.body.timeout_override ? parseInt(req.body.timeout_override, 10) : null;
-  if (req.body.price_guard_override !== undefined) ts.price_guard_override = req.body.price_guard_override ? parseFloat(req.body.price_guard_override) : null;
+  if (req.body.max_attempts_override !== undefined) {
+    ts.max_attempts_override = req.body.max_attempts_override !== '' && req.body.max_attempts_override !== null
+      ? parseInt(String(req.body.max_attempts_override), 10)
+      : null;
+  }
+  if (req.body.retry_interval_override !== undefined) {
+    ts.retry_interval_override = req.body.retry_interval_override !== '' && req.body.retry_interval_override !== null
+      ? parseInt(String(req.body.retry_interval_override), 10)
+      : null;
+  }
+  if (req.body.timeout_override !== undefined) {
+    ts.timeout_override = req.body.timeout_override !== '' && req.body.timeout_override !== null
+      ? parseInt(String(req.body.timeout_override), 10)
+      : null;
+  }
+  if (req.body.price_guard_override !== undefined) {
+    ts.price_guard_override = req.body.price_guard_override !== '' && req.body.price_guard_override !== null
+      ? parseFloat(String(req.body.price_guard_override))
+      : null;
+  }
   ts.updated_at = new Date().toISOString();
 
   db.logConfigChange('table_source', ts.id, 'update', null, ts.update_time_xpath);

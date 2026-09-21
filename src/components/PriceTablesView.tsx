@@ -23,12 +23,20 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   onExport,
   onDownloadTemplate
 }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTable, setEditingTable] = useState<Partial<PriceTable> | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newTable, setNewTable] = useState<Partial<PriceTable>>({
+    name: '',
+    factory_id: factories[0]?.id || 1,
+    start_time: '11:00',
+    retry_interval_minutes: 30,
+    max_attempts: 5,
+    price_guard_percent: 30,
+    active: true
+  });
   const [runningId, setRunningId] = useState<number | null>(null);
 
   const handleOpenAdd = () => {
-    setEditingTable({
+    setNewTable({
       name: '',
       factory_id: factories[0]?.id || 1,
       start_time: '11:00',
@@ -37,13 +45,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
       price_guard_percent: 30,
       active: true
     });
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (table: PriceTable, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingTable({ ...table });
-    setIsModalOpen(true);
+    setIsAddModalOpen(true);
   };
 
   const handleRun = async (tableId: number, e: React.MouseEvent) => {
@@ -56,12 +58,11 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTable) return;
-    await onSaveTable(editingTable);
-    setIsModalOpen(false);
-    setEditingTable(null);
+    if (!newTable.name?.trim()) return;
+    await onSaveTable(newTable);
+    setIsAddModalOpen(false);
   };
 
   return (
@@ -168,18 +169,11 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
 
                       <button
                         onClick={() => onSelectTable(tbl)}
-                        className="p-1 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded"
-                        title="مشاهده جزئیات و منابع"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded transition-colors"
+                        title="ویرایش کامل جدول و مدیریت منابع و سلکتورها"
                       >
-                        <Eye className="w-4 h-4" />
-                      </button>
-
-                      <button
-                        onClick={(e) => handleOpenEdit(tbl, e)}
-                        className="p-1 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded"
-                        title="ویرایش جدول"
-                      >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-3.5 h-3.5 text-slate-700" />
+                        <span>ویرایش و منابع</span>
                       </button>
                     </div>
                   </td>
@@ -190,15 +184,15 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
         </div>
       </div>
 
-      {/* Edit / Add Modal */}
-      {isModalOpen && editingTable && (
+      {/* Add New Table Modal */}
+      {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg p-6 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-sm font-bold text-gray-900 mb-4">
-              {editingTable.id ? 'ویرایش جدول قیمت' : 'افزودن جدول قیمت جدید'}
+              افزودن جدول قیمت جدید
             </h3>
 
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+            <form onSubmit={handleCreateSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-gray-700 font-medium mb-1">
                   نام جدول <span className="text-rose-500">*</span>
@@ -206,8 +200,9 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                 <input
                   type="text"
                   required
-                  value={editingTable.name || ''}
-                  onChange={(e) => setEditingTable({ ...editingTable, name: e.target.value })}
+                  placeholder="مثال: میلگرد ذوب آهن"
+                  value={newTable.name || ''}
+                  onChange={(e) => setNewTable({ ...newTable, name: e.target.value })}
                   className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
                 />
               </div>
@@ -215,9 +210,9 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
               <div>
                 <label className="block text-gray-700 font-medium mb-1">کارخانه مربوطه</label>
                 <select
-                  value={editingTable.factory_id || 1}
+                  value={newTable.factory_id || 1}
                   onChange={(e) =>
-                    setEditingTable({ ...editingTable, factory_id: parseInt(e.target.value, 10) })
+                    setNewTable({ ...newTable, factory_id: parseInt(e.target.value, 10) })
                   }
                   className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none"
                 >
@@ -236,8 +231,8 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                     type="text"
                     required
                     placeholder="11:00"
-                    value={editingTable.start_time || '11:00'}
-                    onChange={(e) => setEditingTable({ ...editingTable, start_time: e.target.value })}
+                    value={newTable.start_time || '11:00'}
+                    onChange={(e) => setNewTable({ ...newTable, start_time: e.target.value })}
                     className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 text-left font-mono"
                   />
                 </div>
@@ -246,9 +241,9 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                   <label className="block text-gray-700 font-medium mb-1">فاصله تلاش مجدد (دقیقه)</label>
                   <input
                     type="number"
-                    value={editingTable.retry_interval_minutes || 30}
+                    value={newTable.retry_interval_minutes || 30}
                     onChange={(e) =>
-                      setEditingTable({ ...editingTable, retry_interval_minutes: parseInt(e.target.value, 10) })
+                      setNewTable({ ...newTable, retry_interval_minutes: parseInt(e.target.value, 10) })
                     }
                     className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                   />
@@ -260,9 +255,9 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                   <label className="block text-gray-700 font-medium mb-1">حداکثر دفعات تلاش (Max Attempts)</label>
                   <input
                     type="number"
-                    value={editingTable.max_attempts || 5}
+                    value={newTable.max_attempts || 5}
                     onChange={(e) =>
-                      setEditingTable({ ...editingTable, max_attempts: parseInt(e.target.value, 10) })
+                      setNewTable({ ...newTable, max_attempts: parseInt(e.target.value, 10) })
                     }
                     className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                   />
@@ -272,9 +267,9 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                   <label className="block text-gray-700 font-medium mb-1">آستانه هشدار Price Guard (درصد)</label>
                   <input
                     type="number"
-                    value={editingTable.price_guard_percent || 30}
+                    value={newTable.price_guard_percent || 30}
                     onChange={(e) =>
-                      setEditingTable({ ...editingTable, price_guard_percent: parseFloat(e.target.value) })
+                      setNewTable({ ...newTable, price_guard_percent: parseFloat(e.target.value) })
                     }
                     className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                   />
@@ -285,8 +280,8 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                 <input
                   type="checkbox"
                   id="tbl-active-toggle"
-                  checked={editingTable.active ?? true}
-                  onChange={(e) => setEditingTable({ ...editingTable, active: e.target.checked })}
+                  checked={newTable.active ?? true}
+                  onChange={(e) => setNewTable({ ...newTable, active: e.target.checked })}
                   className="rounded text-slate-900 focus:ring-0"
                 />
                 <label htmlFor="tbl-active-toggle" className="text-gray-700 font-medium cursor-pointer">
@@ -297,7 +292,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
               <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsAddModalOpen(false)}
                   className="px-4 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded transition-colors"
                 >
                   انصراف
@@ -306,7 +301,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                   type="submit"
                   className="px-4 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
                 >
-                  ذخیره جدول
+                  ثبت و ایجاد جدول
                 </button>
               </div>
             </form>

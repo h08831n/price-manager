@@ -236,9 +236,14 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'خطا در ذخیره جدول');
       showToast(table.id ? 'جدول قیمت بروزرسانی شد' : 'جدول قیمت جدید ثبت شد');
-      loadAllData();
+      await loadAllData();
+      if (selectedTable && table.id && selectedTable.id === table.id) {
+        setSelectedTable((prev) => (prev ? { ...prev, ...data } : null));
+      }
+      return data;
     } catch (err: any) {
       showToast(err.message, 'error');
+      throw err;
     }
   };
 
@@ -484,9 +489,11 @@ export default function App() {
             revisionItems={tableRevisionItems}
             sites={sites}
             sourcePages={sourcePages}
+            factories={factories}
             onBack={() => setSelectedTable(null)}
             onRunTable={handleRunTable}
             onRunSource={handleRunSource}
+            onSaveTable={handleSavePriceTable}
             onSaveTableSource={handleSaveTableSource}
             onDeleteTableSource={handleDeleteTableSource}
             onSaveSelector={handleSaveSelector}

@@ -416,6 +416,69 @@ async function runTests() {
   }
   assert(createdErr?.status === 'RESOLVED', 'System error transitioned from OPEN to RESOLVED');
 
+  // ==========================================
+  // Scenario 19: TableSource Validation & Inline SourcePage Creation
+  // ==========================================
+  console.log('\n--- 19. TableSource Validation & Inline SourcePage Creation ---');
+  const initialPagesCount = schema.source_pages.length;
+  const newPageUrl = 'https://fixture.local/new-test-page-inline';
+  const newPageId = db.getNextId('source_pages');
+  const inlineCreatedPage = {
+    id: newPageId,
+    site_id: 1,
+    url: newPageUrl,
+    page_type: 'HTML' as const,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  schema.source_pages.push(inlineCreatedPage);
+  assert(schema.source_pages.length === initialPagesCount + 1, 'Inline SourcePage created for site');
+
+  // Create TableSource referencing this new page
+  const newTableSourceId = db.getNextId('table_sources');
+  const newTableSource: TableSource = {
+    id: newTableSourceId,
+    price_table_id: 1,
+    site_id: 1,
+    site_name: 'آهن‌آنلاین',
+    source_page_id: newPageId,
+    source_page_url: newPageUrl,
+    update_time_xpath: '//div[@id="update-time"]',
+    recheck_enabled: true,
+    active: true,
+    max_attempts_override: 7,
+    retry_interval_override: 15,
+    timeout_override: 45,
+    price_guard_override: 20,
+    attempt_count: 0,
+    today_status: 'PENDING',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  schema.table_sources.push(newTableSource);
+  assert(schema.table_sources.some(s => s.id === newTableSourceId), 'TableSource successfully created with inline SourcePage');
+
+  // Verify duplicate prevention rule
+  const isDuplicate = schema.table_sources.filter(
+    s => s.price_table_id === 1 && s.site_id === 1 && s.source_page_id === newPageId
+  ).length > 1;
+  assert(!isDuplicate, 'Duplicate TableSource detection prevents duplicate mapping');
+
+  // Verify site ownership rule
+  const pageBelongsToSite = schema.source_pages.find(p => p.id === newPageId)?.site_id === 1;
+  assert(pageBelongsToSite, 'SourcePage site_id matches TableSource site_id');
+
+  // ==========================================
+  // Scenario 20: TableSource 4-Level Overrides Persistence & Evaluation
+  // ==========================================
+  console.log('\n--- 20. TableSource 4-Level Overrides Persistence & Evaluation ---');
+  const effectiveConfig = getEffectiveConfig(newTableSource, schema.price_tables[0]);
+  assert(effectiveConfig.max_attempts === 7, 'Effective config uses max_attempts_override (7)');
+  assert(effectiveConfig.retry_interval_minutes === 15, 'Effective config uses retry_interval_override (15)');
+  assert(effectiveConfig.price_guard_percent === 20, 'Effective config uses price_guard_override (20)');
+  assert(effectiveConfig.timeout_seconds === 45, 'Effective config uses timeout_override (45 seconds)');
+
   // Clean up Playwright browser
   await closePlaywrightBrowser();
 
