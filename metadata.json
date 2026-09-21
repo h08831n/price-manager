@@ -1,0 +1,6 @@
+{
+  "name": "سامانه هوشمند جمع‌آوری قیمت و همگام‌سازی ووکامرس",
+  "description": "سیستم پیشرفته و مینیمال پایش و استخراج قیمت از سایت‌های رقیب با XPath، مدیریت جداول قیمت، Price Guard، اعتبارسنجی و انتشار به وردپرس",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

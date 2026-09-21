@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: price_collector_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: price_system
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend & Scheduler API Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: price_collector_backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:postgres_secure_password@postgres:5432/price_system
+      - WORDPRESS_URL=${WORDPRESS_URL:-https://example.com}
+      - WORDPRESS_API_TOKEN=${WORDPRESS_API_TOKEN:-your-token-here}
+      - TZ=Asia/Tehran
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/applet/data
+
+  # Scraper Worker (with Playwright Chromium dependencies installed)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: price_collector_worker
+    restart: unless-stopped
+    command: ["npm", "run", "dev"]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres_secure_password@postgres:5432/price_system
+      - TZ=Asia/Tehran
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/applet/data
+
+volumes:
+  postgres_data:
