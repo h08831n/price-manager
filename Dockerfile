@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY package*.json ./
 RUN npm install
+RUN npx playwright install chromium
 
 COPY . .
 RUN npm run build

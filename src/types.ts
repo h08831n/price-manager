@@ -55,11 +55,14 @@ export interface Product {
   updated_at: string;
 }
 
+export type ScrapeMethod = 'FETCH' | 'PLAYWRIGHT';
+
 export interface Site {
   id: number;
   name: string;
   base_url: string;
-  browser: string;
+  scrape_method: ScrapeMethod;
+  browser: 'Chromium';
   timeout: number; // in seconds
   wait_after_load: number; // in milliseconds
   active: boolean;
@@ -102,7 +105,7 @@ export interface TableSource {
   source_page_id: number;
   source_page_url?: string;
   active: boolean;
-  update_time_xpath: string;
+  update_time_xpath?: string | null;
   recheck_enabled: boolean;
   max_attempts_override?: number | null;
   retry_interval_override?: number | null;
@@ -125,14 +128,39 @@ export interface ProductSelector {
   product_name?: string;
   table_source_id: number;
   site_name?: string;
+  update_time_xpath?: string | null;
   price_xpath: string;
   active: boolean;
+  last_update_text?: string | null;
+  last_update_date?: string | null;
+  last_update_time?: string | null;
+  last_fresh?: boolean | null;
   last_extracted_value?: string | null;
-  last_status?: 'VALID' | 'INVALID' | 'BLOCKED' | 'NOT_FOUND' | null;
+  last_status?: 'VALID' | 'INVALID' | 'BLOCKED' | 'NOT_FOUND' | 'NOT_UPDATED' | null;
   last_extracted_at?: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type PickerTarget =
+  | {
+      type: 'TABLE_UPDATE';
+      tableSourceId: number;
+    }
+  | {
+      type: 'PRODUCT_UPDATE';
+      tableSourceId: number;
+      productId: number;
+      selectorId?: number;
+    }
+  | {
+      type: 'PRODUCT_PRICE';
+      tableSourceId: number;
+      productId: number;
+      selectorId?: number;
+    };
+
+export type SelectorTestType = 'PRICE' | 'DATE';
 
 export type RunTriggerType = 'SCHEDULED' | 'MANUAL_TABLE' | 'MANUAL_SOURCE' | 'TEST_PAGE' | 'TEST_XPATH' | 'RECHECK';
 export type RunStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | 'PARTIAL' | 'BLOCKED';
@@ -162,6 +190,7 @@ export type ErrorType =
   | 'PAGE_TIMEOUT'
   | 'PAGE_LOAD_FAILED'
   | 'UPDATE_XPATH_NOT_FOUND'
+  | 'PRODUCT_UPDATE_XPATH_NOT_FOUND'
   | 'PRICE_XPATH_NOT_FOUND'
   | 'PRICE_XPATH_MULTIPLE_MATCHES'
   | 'INVALID_PRICE'

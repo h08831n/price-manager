@@ -152,12 +152,22 @@ export async function executePriceTable(
         dailySource.status = 'FAILED';
         // Create error in error center
         for (const errMsg of res.errors) {
+          const errType = errMsg.includes('المان تاریخ محصول')
+            ? 'PRODUCT_UPDATE_XPATH_NOT_FOUND'
+            : errMsg.includes('المان تاریخ و زمان بروزرسانی جدول')
+            ? 'UPDATE_XPATH_NOT_FOUND'
+            : errMsg.includes('قیمت محصول')
+            ? 'PRICE_XPATH_NOT_FOUND'
+            : errMsg.includes('مهلت بارگذاری')
+            ? 'PAGE_TIMEOUT'
+            : 'PAGE_LOAD_FAILED';
+
           createErrorRecord({
             run_id: runId,
             price_table_id: priceTableId,
             site_id: source.site_id,
             source_page_id: source.source_page_id,
-            error_type: errMsg.includes('XPath') ? 'PRICE_XPATH_NOT_FOUND' : 'PAGE_LOAD_FAILED',
+            error_type: errType as any,
             error_message: errMsg,
             execution_stage: 'SCRAPING',
             screenshot_path: res.screenshotPath,
@@ -183,8 +193,8 @@ export async function executePriceTable(
             price_table_id: priceTableId,
             raw_value: prodRes.raw_value,
             parsed_price: prodRes.parsed_price,
-            source_update_date: res.updateResult.normalized_date || undefined,
-            source_update_time: res.updateResult.normalized_time || undefined,
+            source_update_date: prodRes.product_update_date || res.updateResult.normalized_date || undefined,
+            source_update_time: prodRes.product_update_time || res.updateResult.normalized_time || undefined,
             attempt_number: dailySource.attempt_count,
             is_recheck: dailySource.recheck_count > 0,
             extracted_at: new Date().toISOString(),

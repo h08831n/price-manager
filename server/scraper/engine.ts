@@ -1,17 +1,19 @@
 // Core Scraper Engine with Page Actions, Snapshots, and Shared Page Optimization
 import fs from 'fs';
 import path from 'path';
-import { JSDOM } from 'jsdom';
 import { db } from '../db/database';
 import { FIXTURE_PAGES } from '../fixtures/fixtures';
-import { executePageActions } from './pageActions';
-import { extractXPathFromHtml } from './xpathExtractor';
+import { extractXPathFromHtml, XPathResult } from './xpathExtractor';
 import { evaluateFreshness, FreshnessResult } from './freshness';
-import { parseProductPrice, PriceParseResult } from './priceParser';
-import { TableSource, SourcePage, ProductSelector, PageAction } from '../../src/types';
+import { parseProductPrice } from './priceParser';
+import { TableSource, SourcePage, ProductSelector, PageAction, Site } from '../../src/types';
+import { loadSourcePage, LoadedPage } from './pageLoader';
 
 const SNAPSHOTS_DIR = path.join(process.cwd(), 'data', 'snapshots');
 const SCREENSHOTS_DIR = path.join(process.cwd(), 'data', 'screenshots');
+
+if (!fs.existsSync(SNAPSHOTS_DIR)) fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
+if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
 export interface ScrapedProductResult {
   product_id: number;
@@ -21,6 +23,9 @@ export interface ScrapedProductResult {
   raw_value: string;
   parsed_price: number;
   valid: boolean;
+  product_update_date?: string | null;
+  product_update_time?: string | null;
+  product_fresh?: boolean | null;
   error?: string;
 }
 
@@ -54,7 +59,8 @@ export async function fetchHtmlForUrl(url: string, timeoutMs: number = 30000): P
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept-Language': 'fa,en-US;q=0.9,en;q=0.8'
       }
     });
@@ -75,41 +81,6 @@ export async function fetchHtmlForUrl(url: string, timeoutMs: number = 30000): P
   }
 }
 
-// Generate simple SVG/PNG placeholder screenshot representation for visual inspection
-function saveHtmlSnapshotAndScreenshot(html: string, contextName: string): { htmlPath: string; screenshotPath: string } {
-  const timestamp = Date.now();
-  const safeName = contextName.replace(/[^a-zA-Z0-9_\-]/g, '_');
-  const htmlFilename = `${safeName}_${timestamp}.html`;
-  const screenshotFilename = `${safeName}_${timestamp}.svg`;
-
-  const htmlFullPath = path.join(SNAPSHOTS_DIR, htmlFilename);
-  const screenshotFullPath = path.join(SCREENSHOTS_DIR, screenshotFilename);
-
-  fs.writeFileSync(htmlFullPath, html, 'utf-8');
-
-  // Generate SVG snapshot summary as screenshot
-  const lines = html.split('\n').slice(0, 30).map((l) => l.trim().slice(0, 80)).join('\n');
-  const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
-    <rect width="800" height="500" fill="#0f172a"/>
-    <rect x="20" y="20" width="760" height="460" rx="8" fill="#1e293b" stroke="#334155" stroke-width="2"/>
-    <text x="40" y="60" fill="#38bdf8" font-family="monospace" font-size="16" font-weight="bold">📷 HTML Snapshot Capture [${new Date().toISOString()}]</text>
-    <text x="40" y="90" fill="#94a3b8" font-family="monospace" font-size="12">Context: ${contextName}</text>
-    <line x1="40" y1="105" x2="740" y2="105" stroke="#475569" stroke-width="1"/>
-    <foreignObject x="40" y="115" width="720" height="340">
-      <div xmlns="http://www.w3.org/1999/xhtml" style="color: #cbd5e1; font-family: monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; overflow: hidden; height: 330px;">
-        ${lines.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-      </div>
-    </foreignObject>
-  </svg>`;
-
-  fs.writeFileSync(screenshotFullPath, svgContent, 'utf-8');
-
-  return {
-    htmlPath: `/api/snapshots/${htmlFilename}`,
-    screenshotPath: `/api/screenshots/${screenshotFilename}`
-  };
-}
-
 export async function scrapeTableSource(
   tableSource: TableSource,
   runId: number,
@@ -118,7 +89,19 @@ export async function scrapeTableSource(
   const startTime = Date.now();
   const schema = db.getSchema();
   const sourcePage = schema.source_pages.find((p) => p.id === tableSource.source_page_id);
-  const site = schema.sites.find((s) => s.id === tableSource.site_id);
+  const site = schema.sites.find((s) => s.id === tableSource.site_id) || {
+    id: tableSource.site_id,
+    name: 'سایت',
+    base_url: '',
+    scrape_method: 'FETCH' as const,
+    browser: 'Chromium' as const,
+    timeout: 30,
+    wait_after_load: 1000,
+    active: true,
+    created_at: '',
+    updated_at: ''
+  };
+
   const selectors = schema.product_selectors.filter(
     (sel) => sel.table_source_id === tableSource.id && sel.active
   );
@@ -126,8 +109,8 @@ export async function scrapeTableSource(
     (act) => act.source_page_id === tableSource.source_page_id && act.active
   );
 
-  const url = sourcePage?.url || site?.base_url || '';
-  const timeoutMs = (tableSource.timeout_override || site?.timeout || 30) * 1000;
+  const url = sourcePage?.url || site.base_url || '';
+  const timeoutMs = (tableSource.timeout_override || site.timeout || 30) * 1000;
 
   const result: SourceScrapeResult = {
     table_source_id: tableSource.id,
@@ -154,41 +137,27 @@ export async function scrapeTableSource(
     return result;
   }
 
-  let rawHtml = preloadedHtml || '';
+  let loadedPage: LoadedPage | null = null;
 
   try {
-    // 1. Fetch page HTML if not preloaded
-    if (!rawHtml) {
-      db.log('INFO', `بارگذاری آدرس منبع: ${url}`, { url, table_source_id: tableSource.id }, { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id });
-      rawHtml = await fetchHtmlForUrl(url, timeoutMs);
-    }
+    db.log(
+      'INFO',
+      `بارگذاری صفحه منبع: ${url} (روش: ${site.scrape_method})`,
+      { url, table_source_id: tableSource.id, scrape_method: site.scrape_method },
+      { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
+    );
 
-    // 2. Initialize DOM and execute Page Actions if configured
-    const dom = new JSDOM(rawHtml, {
-      url,
-      runScripts: 'dangerously',
-      resources: 'usable'
-    });
+    // Single page load for this table source
+    loadedPage = await loadSourcePage(url, site, actions, timeoutMs, preloadedHtml);
 
-    if (actions.length > 0) {
-      db.log('INFO', `اجرای ${actions.length} دستور تعاملی (Page Action)`, { count: actions.length }, { run_id: runId, table_source_id: tableSource.id });
-      const actionResults = await executePageActions(dom.window, actions);
-      const failedAction = actionResults.find((a) => !a.success);
-      if (failedAction) {
-        throw new Error(`خطا در اجرای دستور تعاملی ردیف ${failedAction.order} (${failedAction.action_type}): ${failedAction.error}`);
-      }
-      // Re-serialize modified DOM
-      rawHtml = dom.serialize();
-    }
-
-    // 3. Extract Freshness via update_time_xpath
-    if (tableSource.update_time_xpath) {
-      const updateExtraction = extractXPathFromHtml(rawHtml, tableSource.update_time_xpath);
+    // 1. Table-Level Freshness Check (Rule 1 & Rule 2)
+    if (tableSource.update_time_xpath && tableSource.update_time_xpath.trim()) {
+      const updateExtraction = await loadedPage.evaluateXPath(tableSource.update_time_xpath.trim());
       if (!updateExtraction.success || !updateExtraction.firstValue) {
-        const snapshot = saveHtmlSnapshotAndScreenshot(rawHtml, `update_xpath_fail_${tableSource.id}`);
+        const snapshot = await loadedPage.captureSnapshot(`update_xpath_fail_${tableSource.id}`);
         result.htmlSnapshotPath = snapshot.htmlPath;
         result.screenshotPath = snapshot.screenshotPath;
-        throw new Error(`المان تاریخ و زمان بروزرسانی با XPath (${tableSource.update_time_xpath}) یافت نشد`);
+        throw new Error(`المان تاریخ و زمان بروزرسانی جدول با XPath (${tableSource.update_time_xpath}) یافت نشد`);
       }
 
       result.updateResult = evaluateFreshness(updateExtraction.firstValue);
@@ -196,34 +165,92 @@ export async function scrapeTableSource(
 
       db.log(
         result.fresh ? 'INFO' : 'WARNING',
-        `بررسی تازگی منبع: ${result.updateResult.raw_text} -> ${result.fresh ? 'بروز (امروز)' : 'قدیمی'} (${result.updateResult.reason})`,
+        `بررسی تازگی جدول منبع: ${result.updateResult.raw_text} -> ${result.fresh ? 'بروز (امروز)' : 'قدیمی'} (${result.updateResult.reason})`,
         result.updateResult,
         { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
       );
+
+      // If table-level update is stale: mark NOT_UPDATED and do not extract products
+      if (!result.fresh) {
+        result.success = true; // Completed without crash, but not updated yet today
+        result.duration_ms = Date.now() - startTime;
+        return result;
+      }
     } else {
-      // If no update XPath configured, consider it fresh by default
+      // Table update XPath not configured: proceed directly to products
       result.fresh = true;
       result.updateResult = {
-        raw_text: 'بدون XPath تاریخ (پیش‌فرض بروز)',
-        normalized_date: new Date().toISOString().split('T')[0],
+        raw_text: 'بدون XPath تاریخ جدول',
+        normalized_date: null,
         normalized_time: null,
         fresh: true,
-        reason: 'فاقد سلکتور تاریخ'
+        reason: 'فاقد سلکتور تاریخ جدول'
       };
     }
 
-    // If source is not fresh, record status and return
-    if (!result.fresh) {
-      result.success = true; // Execution succeeded, but data not fresh yet today
-      result.duration_ms = Date.now() - startTime;
-      return result;
-    }
+    // 2. Product-Level Extractions (Rule 3)
+    let freshProductCount = 0;
 
-    // 4. Extract Product Prices
     for (const selector of selectors) {
-      const extraction = extractXPathFromHtml(rawHtml, selector.price_xpath);
+      // Product-Level Date Freshness Check
+      let productFresh = true;
+      let prodUpdateDate: string | null = null;
+      let prodUpdateTime: string | null = null;
 
-      if (!extraction.success || !extraction.firstValue) {
+      if (selector.update_time_xpath && selector.update_time_xpath.trim()) {
+        const prodDateExt = await loadedPage.evaluateXPath(selector.update_time_xpath.trim());
+        if (!prodDateExt.success || !prodDateExt.firstValue) {
+          const errMsg = `المان تاریخ محصول با XPath (${selector.update_time_xpath}) یافت نشد`;
+          result.errors.push(errMsg);
+          selector.last_status = 'NOT_FOUND';
+          selector.last_extracted_value = null;
+          selector.last_extracted_at = new Date().toISOString();
+          continue;
+        }
+
+        const evaluatedProdDate = evaluateFreshness(prodDateExt.firstValue);
+        selector.last_update_text = prodDateExt.firstValue;
+        selector.last_update_date = evaluatedProdDate.normalized_date;
+        selector.last_update_time = evaluatedProdDate.normalized_time;
+        selector.last_fresh = evaluatedProdDate.fresh;
+        prodUpdateDate = evaluatedProdDate.normalized_date;
+        prodUpdateTime = evaluatedProdDate.normalized_time;
+        productFresh = evaluatedProdDate.fresh;
+
+        if (!productFresh) {
+          selector.last_status = 'NOT_UPDATED';
+          selector.last_extracted_at = new Date().toISOString();
+          result.products.push({
+            product_id: selector.product_id,
+            post_id: selector.post_id,
+            selector_id: selector.id,
+            price_xpath: selector.price_xpath,
+            raw_value: '',
+            parsed_price: 0,
+            valid: false,
+            product_update_date: prodUpdateDate,
+            product_update_time: prodUpdateTime,
+            product_fresh: false,
+            error: `محصول بروزرسانی امروز نشده است: ${evaluatedProdDate.raw_text}`
+          });
+          db.log(
+            'INFO',
+            `تاریخ محصول ${selector.product_id} قدیمی است (${evaluatedProdDate.raw_text})؛ قیمت از این منبع استخراج نشد.`,
+            { selector_id: selector.id, raw_date: evaluatedProdDate.raw_text },
+            { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
+          );
+          continue;
+        }
+      } else {
+        // Inherit table date if present
+        prodUpdateDate = result.updateResult.normalized_date;
+        prodUpdateTime = result.updateResult.normalized_time;
+      }
+
+      // Extract Product Price
+      const priceExtraction = await loadedPage.evaluateXPath(selector.price_xpath);
+
+      if (!priceExtraction.success || !priceExtraction.firstValue) {
         const errorMsg = `قیمت محصول با XPath (${selector.price_xpath}) یافت نشد`;
         result.products.push({
           product_id: selector.product_id,
@@ -233,18 +260,20 @@ export async function scrapeTableSource(
           raw_value: '',
           parsed_price: 0,
           valid: false,
+          product_update_date: prodUpdateDate,
+          product_update_time: prodUpdateTime,
+          product_fresh: productFresh,
           error: errorMsg
         });
         result.errors.push(errorMsg);
 
-        // Update selector status
         selector.last_extracted_value = null;
         selector.last_status = 'NOT_FOUND';
         selector.last_extracted_at = new Date().toISOString();
         continue;
       }
 
-      const parsed = parseProductPrice(extraction.firstValue);
+      const parsed = parseProductPrice(priceExtraction.firstValue);
       result.products.push({
         product_id: selector.product_id,
         post_id: selector.post_id,
@@ -253,11 +282,16 @@ export async function scrapeTableSource(
         raw_value: parsed.raw,
         parsed_price: parsed.price,
         valid: parsed.valid,
+        product_update_date: prodUpdateDate,
+        product_update_time: prodUpdateTime,
+        product_fresh: productFresh,
         error: parsed.error
       });
 
       if (!parsed.valid) {
         result.errors.push(`قیمت نامعتبر برای محصول ${selector.product_id}: ${parsed.error}`);
+      } else {
+        freshProductCount++;
       }
 
       // Update selector status in DB
@@ -266,15 +300,34 @@ export async function scrapeTableSource(
       selector.last_extracted_at = new Date().toISOString();
     }
 
-    result.success = result.errors.length === 0 || result.products.some((p) => p.valid);
+    // 3. Overall Source Freshness & Status Calculation (Rule 4)
+    const allSelectorsHadProductDate =
+      selectors.length > 0 && selectors.every((s) => s.update_time_xpath && s.update_time_xpath.trim());
+
+    if (allSelectorsHadProductDate && freshProductCount === 0) {
+      // If all products had individual dates and all were stale -> source is NOT_UPDATED
+      result.fresh = false;
+      result.success = true;
+    } else {
+      result.fresh = freshProductCount > 0 || (result.fresh && selectors.length === 0);
+      result.success = result.errors.length === 0 || freshProductCount > 0;
+    }
   } catch (err: any) {
     result.errors.push(err.message);
     result.success = false;
 
-    if (!result.htmlSnapshotPath && rawHtml) {
-      const snapshot = saveHtmlSnapshotAndScreenshot(rawHtml, `error_${tableSource.id}`);
-      result.htmlSnapshotPath = snapshot.htmlPath;
-      result.screenshotPath = snapshot.screenshotPath;
+    if (loadedPage && !result.htmlSnapshotPath) {
+      try {
+        const snapshot = await loadedPage.captureSnapshot(`error_${tableSource.id}`);
+        result.htmlSnapshotPath = snapshot.htmlPath;
+        result.screenshotPath = snapshot.screenshotPath;
+      } catch {
+        // Snapshot failed
+      }
+    }
+  } finally {
+    if (loadedPage) {
+      await loadedPage.close().catch(() => {});
     }
   }
 

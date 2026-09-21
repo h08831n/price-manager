@@ -70,6 +70,8 @@ export const SitesView: React.FC<SitesViewProps> = ({
     setEditingSite({
       name: '',
       base_url: '',
+      scrape_method: 'FETCH',
+      browser: 'Chromium',
       timeout: 30,
       wait_after_load: 1000,
       active: true
@@ -161,6 +163,18 @@ export const SitesView: React.FC<SitesViewProps> = ({
             </div>
 
             <div className="text-xs space-y-2 text-gray-600">
+              <div className="flex justify-between py-1 border-b border-gray-50 items-center">
+                <span>روش جمع‌آوری داده:</span>
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
+                    currentSite.scrape_method === 'PLAYWRIGHT'
+                      ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                      : 'bg-blue-100 text-blue-800 border border-blue-200'
+                  }`}
+                >
+                  {currentSite.scrape_method === 'PLAYWRIGHT' ? 'Playwright (مرورگر زنده)' : 'FETCH (درخواست HTTP)'}
+                </span>
+              </div>
               <div className="flex justify-between py-1 border-b border-gray-50">
                 <span>مهلت بارگذاری صفحه (Timeout):</span>
                 <span className="font-semibold text-gray-900 font-mono">{currentSite.timeout} ثانیه</span>
@@ -374,7 +388,7 @@ export const SitesView: React.FC<SitesViewProps> = ({
                               <span>اجرای این منبع</span>
                             </button>
                             <button
-                              onClick={() => onOpenTester(ts.id, sp?.url || '', ts.update_time_xpath)}
+                              onClick={() => onOpenTester(ts.id, sp?.url || '', ts.update_time_xpath || undefined)}
                               className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 border border-gray-300"
                             >
                               <Code className="w-3 h-3" />
@@ -450,6 +464,25 @@ export const SitesView: React.FC<SitesViewProps> = ({
                   onChange={(e) => setEditingSite({ ...editingSite, base_url: e.target.value })}
                   className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 dir-ltr text-right font-mono"
                 />
+              </div>
+
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">
+                  روش جمع‌آوری و رندر صفحات (Scrape Method) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={editingSite.scrape_method || 'FETCH'}
+                  onChange={(e) => setEditingSite({ ...editingSite, scrape_method: e.target.value as any })}
+                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-medium text-xs"
+                >
+                  <option value="FETCH">FETCH (سبک و سریع - مناسب صفحات ساده بدون جاوااسکریپت سنگین)</option>
+                  <option value="PLAYWRIGHT">PLAYWRIGHT (مرورگر واقعی Headless Chromium - رندر کامل JS، کلیک و اسکرول)</option>
+                </select>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {editingSite.scrape_method === 'PLAYWRIGHT'
+                    ? 'از مرورگر واقعی Chromium برای اجرای کدهای جاوااسکریپت صفحه و اجرای کامل اکشن‌های کلیک و اسکرول استفاده می‌شود.'
+                    : 'از درخواست استاندارد HTTP Fetch استفاده می‌شود که بسیار سریع و کم‌مصرف است (دستورات کلیک/اسکرول تعاملی در این حالت شبیه‌سازی نمی‌شوند).'}
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

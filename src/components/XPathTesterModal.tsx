@@ -4,6 +4,7 @@ import { X, Play, CheckCircle2, AlertCircle, RefreshCw, Hash, Calendar } from 'l
 interface XPathTesterModalProps {
   initialUrl: string;
   initialXPath?: string;
+  initialType?: 'PRICE' | 'DATE';
   sourceId?: number;
   onClose: () => void;
 }
@@ -11,11 +12,13 @@ interface XPathTesterModalProps {
 export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
   initialUrl,
   initialXPath = '',
+  initialType = 'PRICE',
   sourceId,
   onClose
 }) => {
   const [url, setUrl] = useState(initialUrl);
   const [xpath, setXpath] = useState(initialXPath);
+  const [testType, setTestType] = useState<'PRICE' | 'DATE'>(initialType);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any | null>(null);
 
@@ -28,7 +31,7 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
       const response = await fetch('/api/selectors/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, xpath, source_id: sourceId })
+        body: JSON.stringify({ url, xpath, source_id: sourceId, type: testType })
       });
       const data = await response.json();
       setResult(data);
@@ -58,6 +61,32 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
 
         {/* Inputs */}
         <div className="space-y-3 text-xs">
+          <div className="flex items-center gap-2 pb-1 border-b border-gray-100">
+            <span className="text-gray-600 font-medium">نوع تست:</span>
+            <button
+              type="button"
+              onClick={() => setTestType('PRICE')}
+              className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                testType === 'PRICE'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              استخراج قیمت محصول
+            </button>
+            <button
+              type="button"
+              onClick={() => setTestType('DATE')}
+              className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                testType === 'DATE'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              ارزیابی تاریخ و زمان بروزرسانی
+            </button>
+          </div>
+
           <div>
             <label className="block text-gray-700 font-medium mb-1">آدرس اینترنتی صفحه هدف (URL)</label>
             <input
@@ -75,7 +104,7 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
               type="text"
               value={xpath}
               onChange={(e) => setXpath(e.target.value)}
-              placeholder="//table[@id='prices']//tr[1]/td[3]"
+              placeholder={testType === 'PRICE' ? "//table[@id='prices']//tr[1]/td[3]" : "//div[@class='update-date']"}
               className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 dir-ltr text-right font-mono"
             />
           </div>
@@ -94,7 +123,7 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5" />
-                  <span>اجرای تست زنده</span>
+                  <span>اجرای تست زنده ({testType === 'PRICE' ? 'قیمت' : 'تاریخ'})</span>
                 </>
               )}
             </button>
@@ -108,14 +137,14 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
               <span className="font-bold text-gray-700">نتیجه ارزیابی:</span>
               <span
                 className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                  result.success && result.count > 0
+                  result.success
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-rose-100 text-rose-800'
                 }`}
               >
-                {result.success && result.count > 0
-                  ? `موفق (${result.count} المان یافت شد)`
-                  : 'ناموفق / المانی یافت نشد'}
+                {result.success
+                  ? `موفق (${result.count || 1} المان یافت شد)`
+                  : 'ناموفق / مقدار نامعتبر'}
               </span>
             </div>
 
@@ -135,42 +164,42 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
                 </div>
 
                 {/* Parsed Price */}
-                {result.parsed_price && (
+                {testType === 'PRICE' && result.parsed_price !== undefined && (
                   <div className="bg-white p-2.5 rounded border border-gray-200">
                     <span className="text-[11px] text-gray-500 block mb-1">ارزیابی به عنوان قیمت:</span>
                     <div className="flex items-center gap-3">
                       <span className="text-base font-bold text-gray-900">
-                        {result.parsed_price.price.toLocaleString('fa-IR')} تومان
+                        {Number(result.parsed_price).toLocaleString('fa-IR')} تومان
                       </span>
                       <span
                         className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                          result.parsed_price.valid ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                          result.valid ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
                         }`}
                       >
-                        {result.parsed_price.valid ? 'عدد معتبر' : 'نامعتبر'}
+                        {result.valid ? 'عدد معتبر' : 'نامعتبر'}
                       </span>
                     </div>
                   </div>
                 )}
 
                 {/* Parsed Freshness */}
-                {result.freshness && (
+                {testType === 'DATE' && (
                   <div className="bg-white p-2.5 rounded border border-gray-200">
                     <span className="text-[11px] text-gray-500 block mb-1">ارزیابی به عنوان تاریخ و زمان:</span>
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="font-bold text-gray-900">
-                          {result.freshness.normalized_date || '—'}{' '}
-                          {result.freshness.normalized_time ? `(ساعت: ${result.freshness.normalized_time})` : ''}
+                          {result.normalized_date || '—'}{' '}
+                          {result.normalized_time ? `(ساعت: ${result.normalized_time})` : ''}
                         </span>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{result.freshness.reason}</p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">{result.reason}</p>
                       </div>
                       <span
                         className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                          result.freshness.fresh ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          result.fresh ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {result.freshness.fresh ? 'متعلق به امروز' : 'قدیمی'}
+                        {result.fresh ? 'متعلق به امروز (تازه)' : 'قدیمی یا نامشخص'}
                       </span>
                     </div>
                   </div>

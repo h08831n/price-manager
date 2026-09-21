@@ -62,8 +62,8 @@ export default function App() {
 
   // Global Modals State
   const [importModal, setImportModal] = useState<{ isOpen: boolean; entityType: string; title: string } | null>(null);
-  const [pickerModal, setPickerModal] = useState<{ isOpen: boolean; url: string } | null>(null);
-  const [testerModal, setTesterModal] = useState<{ isOpen: boolean; url: string; xpath?: string; sourceId?: number } | null>(null);
+  const [pickerModal, setPickerModal] = useState<{ isOpen: boolean; url: string; onSelect?: (xpath: string) => void } | null>(null);
+  const [testerModal, setTesterModal] = useState<{ isOpen: boolean; url: string; xpath?: string; sourceId?: number; type?: 'PRICE' | 'DATE' } | null>(null);
 
   // Toast Notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -297,6 +297,26 @@ export default function App() {
     }
   };
 
+  const handleSaveSelector = async (
+    tableSourceId: number,
+    productId: number,
+    data: { price_xpath?: string; update_time_xpath?: string; active?: boolean }
+  ) => {
+    try {
+      const res = await fetch(`/api/table-sources/${tableSourceId}/products/${productId}/selector`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'خطا در ذخیره سلکتور');
+      showToast('سلکتور با موفقیت بروزرسانی شد');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
   const handleResolveError = async (id: number) => {
     try {
       const res = await fetch(`/api/errors/${id}/resolve`, { method: 'POST' });
@@ -423,14 +443,16 @@ export default function App() {
             table={selectedTable}
             sources={tableSources}
             products={products}
+            selectors={selectors}
             revisions={tableRevisions}
             revisionItems={tableRevisionItems}
             onBack={() => setSelectedTable(null)}
             onRunTable={handleRunTable}
             onRunSource={handleRunSource}
-            onOpenPicker={(url) => setPickerModal({ isOpen: true, url })}
-            onOpenTester={(sourceId, url, xpath) =>
-              setTesterModal({ isOpen: true, sourceId, url, xpath })
+            onSaveSelector={handleSaveSelector}
+            onOpenPicker={(url, onSelect) => setPickerModal({ isOpen: true, url, onSelect })}
+            onOpenTester={(sourceId, url, xpath, type) =>
+              setTesterModal({ isOpen: true, sourceId, url, xpath, type })
             }
             onRetryPublish={handleRetryPublish}
           />
@@ -550,6 +572,9 @@ export default function App() {
         <XPathPickerModal
           url={pickerModal.url}
           onSelectXPath={(xpath) => {
+            if (pickerModal.onSelect) {
+              pickerModal.onSelect(xpath);
+            }
             showToast(`XPath انتخاب شد: ${xpath}`);
             setPickerModal(null);
           }}
@@ -562,6 +587,7 @@ export default function App() {
         <XPathTesterModal
           initialUrl={testerModal.url}
           initialXPath={testerModal.xpath}
+          initialType={testerModal.type || 'PRICE'}
           sourceId={testerModal.sourceId}
           onClose={() => setTesterModal(null)}
         />

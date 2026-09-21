@@ -13,7 +13,8 @@ import { injectPickerScript } from '../scraper/picker';
 import { excelService } from '../excel/excelService';
 import { publishTableToWordPress } from '../wordpress/client';
 import { FIXTURE_PAGES } from '../fixtures/fixtures';
-import { DashboardData } from '../../src/types';
+import { loadSourcePage } from '../scraper/pageLoader';
+import { DashboardData, Site } from '../../src/types';
 
 export const apiRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -337,14 +338,15 @@ apiRouter.get('/sites', (req: Request, res: Response) => {
 
 apiRouter.post('/sites', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { name, base_url, timeout, wait_after_load, active } = req.body;
+  const { name, base_url, scrape_method, browser, timeout, wait_after_load, active } = req.body;
   if (!name || !base_url) return res.status(400).json({ error: 'نام و آدرس پایه سایت الزامی است.' });
 
   const newSite = {
     id: db.getNextId('sites'),
     name: name.trim(),
     base_url: base_url.trim(),
-    browser: 'Chromium',
+    scrape_method: (scrape_method === 'PLAYWRIGHT' ? 'PLAYWRIGHT' : 'FETCH') as any,
+    browser: (browser || 'Chromium') as any,
     timeout: parseInt(timeout, 10) || 30,
     wait_after_load: parseInt(wait_after_load, 10) || 1000,
     active: active !== undefined ? Boolean(active) : true,
@@ -366,6 +368,8 @@ apiRouter.put('/sites/:id', (req: Request, res: Response) => {
 
   if (req.body.name !== undefined) site.name = req.body.name.trim();
   if (req.body.base_url !== undefined) site.base_url = req.body.base_url.trim();
+  if (req.body.scrape_method !== undefined) site.scrape_method = req.body.scrape_method === 'PLAYWRIGHT' ? 'PLAYWRIGHT' : 'FETCH';
+  if (req.body.browser !== undefined) site.browser = req.body.browser || 'Chromium';
   if (req.body.timeout !== undefined) site.timeout = parseInt(req.body.timeout, 10);
   if (req.body.wait_after_load !== undefined) site.wait_after_load = parseInt(req.body.wait_after_load, 10);
   if (req.body.active !== undefined) site.active = Boolean(req.body.active);
@@ -531,7 +535,7 @@ apiRouter.get('/selectors', (req: Request, res: Response) => {
 
 apiRouter.post('/selectors', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { product_id, post_id, table_source_id, price_xpath, active } = req.body;
+  const { product_id, post_id, table_source_id, price_xpath, update_time_xpath, active } = req.body;
 
   if (!table_source_id || !price_xpath) {
     return res.status(400).json({ error: 'شناسه منبع و XPath قیمت الزامی است.' });
@@ -543,6 +547,7 @@ apiRouter.post('/selectors', (req: Request, res: Response) => {
     post_id: parseInt(post_id, 10),
     table_source_id: parseInt(table_source_id, 10),
     price_xpath: price_xpath.trim(),
+    update_time_xpath: update_time_xpath ? update_time_xpath.trim() : null,
     active: active !== undefined ? Boolean(active) : true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -561,6 +566,7 @@ apiRouter.put('/selectors/:id', (req: Request, res: Response) => {
   if (!sel) return res.status(404).json({ error: 'سلکتور یافت نشد.' });
 
   if (req.body.price_xpath !== undefined) sel.price_xpath = req.body.price_xpath.trim();
+  if (req.body.update_time_xpath !== undefined) sel.update_time_xpath = req.body.update_time_xpath ? req.body.update_time_xpath.trim() : null;
   if (req.body.active !== undefined) sel.active = Boolean(req.body.active);
   sel.updated_at = new Date().toISOString();
 
@@ -569,39 +575,118 @@ apiRouter.put('/selectors/:id', (req: Request, res: Response) => {
   res.json(sel);
 });
 
-// Immediate XPath Test without full job (Requirement #14)
+// Upsert Product Selector for a specific Table Source + Product
+apiRouter.put('/table-sources/:tableSourceId/products/:productId/selector', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const tableSourceId = parseInt(req.params.tableSourceId, 10);
+  const productId = parseInt(req.params.productId, 10);
+  const { price_xpath, update_time_xpath, active } = req.body;
+
+  const product = schema.products.find((p) => p.id === productId);
+  if (!product) return res.status(404).json({ error: 'محصول یافت نشد.' });
+
+  let sel = schema.product_selectors.find(
+    (s) => s.table_source_id === tableSourceId && s.product_id === productId
+  );
+
+  if (sel) {
+    if (price_xpath !== undefined) sel.price_xpath = (price_xpath || '').trim();
+    if (update_time_xpath !== undefined) sel.update_time_xpath = update_time_xpath ? update_time_xpath.trim() : null;
+    if (active !== undefined) sel.active = Boolean(active);
+    sel.updated_at = new Date().toISOString();
+    db.logConfigChange('selector', sel.id, 'update', null, `Selector for product ${productId}`);
+  } else {
+    sel = {
+      id: db.getNextId('product_selectors'),
+      product_id: productId,
+      post_id: product.post_id,
+      table_source_id: tableSourceId,
+      price_xpath: (price_xpath || '').trim(),
+      update_time_xpath: update_time_xpath ? update_time_xpath.trim() : null,
+      active: active !== undefined ? Boolean(active) : true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    schema.product_selectors.push(sel);
+    db.logConfigChange('selector', sel.id, 'create', null, `Selector for product ${productId}`);
+  }
+
+  db.save();
+  res.json(sel);
+});
+
+// Immediate XPath Test (supports both PRICE and DATE test types, respecting site scrape_method)
 apiRouter.post('/selectors/test', async (req: Request, res: Response) => {
-  const { url, xpath, source_id } = req.body;
+  const { url, xpath, source_id, type = 'PRICE' } = req.body;
   const schema = db.getSchema();
 
   let targetUrl = url;
-  if (!targetUrl && source_id) {
+  let site: Site | undefined = undefined;
+
+  if (source_id) {
     const ts = schema.table_sources.find((s) => s.id === parseInt(source_id, 10));
-    const sp = schema.source_pages.find((p) => p.id === ts?.source_page_id);
-    targetUrl = sp?.url;
+    if (ts) {
+      site = schema.sites.find((s) => s.id === ts.site_id);
+      const sp = schema.source_pages.find((p) => p.id === ts.source_page_id);
+      if (!targetUrl) targetUrl = sp?.url || site?.base_url;
+    }
   }
 
   if (!targetUrl || !xpath) {
     return res.status(400).json({ error: 'آدرس URL و عبارت XPath الزامی هستند.' });
   }
 
-  try {
-    const html = await fetchHtmlForUrl(targetUrl, 20000);
-    const extraction = extractXPathFromHtml(html, xpath);
-    const parsedPrice = extraction.firstValue ? parseProductPrice(extraction.firstValue) : null;
-    const freshness = extraction.firstValue ? evaluateFreshness(extraction.firstValue) : null;
+  const effectiveSite: Site = site || {
+    id: 0,
+    name: 'تست',
+    base_url: targetUrl,
+    scrape_method: 'FETCH',
+    browser: 'Chromium',
+    timeout: 20,
+    wait_after_load: 1000,
+    active: true,
+    created_at: '',
+    updated_at: ''
+  };
 
-    res.json({
-      success: extraction.success,
-      count: extraction.count,
-      raw_values: extraction.values,
-      first_value: extraction.firstValue,
-      parsed_price: parsedPrice,
-      freshness,
-      error: extraction.error
-    });
+  let loadedPage = null;
+  try {
+    loadedPage = await loadSourcePage(targetUrl, effectiveSite, [], 25000);
+    const extraction = await loadedPage.evaluateXPath(xpath.trim());
+
+    if (type === 'DATE') {
+      const freshness = extraction.firstValue ? evaluateFreshness(extraction.firstValue) : null;
+      return res.json({
+        success: extraction.success && Boolean(extraction.firstValue),
+        count: extraction.count,
+        raw_values: extraction.values,
+        first_value: extraction.firstValue,
+        normalized_date: freshness?.normalized_date || null,
+        normalized_time: freshness?.normalized_time || null,
+        fresh: freshness?.fresh || false,
+        reason: freshness?.reason || 'نامشخص',
+        error: extraction.error
+      });
+    } else {
+      // PRICE type
+      const parsedPrice = extraction.firstValue ? parseProductPrice(extraction.firstValue) : null;
+      return res.json({
+        success: extraction.success && Boolean(parsedPrice?.valid),
+        count: extraction.count,
+        raw_values: extraction.values,
+        first_value: extraction.firstValue,
+        raw_value: parsedPrice?.raw || extraction.firstValue || '',
+        parsed_price: parsedPrice?.price || 0,
+        valid: parsedPrice?.valid || false,
+        error: parsedPrice?.error || extraction.error
+      });
+    }
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
+  } finally {
+    if (loadedPage) {
+      await loadedPage.close().catch(() => {});
+    }
   }
 });
 
@@ -649,15 +734,38 @@ apiRouter.delete('/page-actions/:id', (req: Request, res: Response) => {
 // ==========================================
 apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
   const targetUrl = String(req.query.url || '');
+  const siteId = req.query.site_id ? parseInt(String(req.query.site_id), 10) : null;
   if (!targetUrl) return res.status(400).send('URL is required');
 
+  const schema = db.getSchema();
+  const site = siteId ? schema.sites.find((s) => s.id === siteId) : schema.sites.find((s) => targetUrl.startsWith(s.base_url));
+
+  const effectiveSite: Site = site || {
+    id: 0,
+    name: 'Picker',
+    base_url: targetUrl,
+    scrape_method: 'FETCH',
+    browser: 'Chromium',
+    timeout: 30,
+    wait_after_load: 1000,
+    active: true,
+    created_at: '',
+    updated_at: ''
+  };
+
+  let loadedPage = null;
   try {
-    const rawHtml = await fetchHtmlForUrl(targetUrl, 20000);
+    loadedPage = await loadSourcePage(targetUrl, effectiveSite, [], 30000);
+    const rawHtml = loadedPage.content;
     const injected = injectPickerScript(rawHtml);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(injected);
   } catch (err: any) {
     res.status(500).send(`Error loading page: ${err.message}`);
+  } finally {
+    if (loadedPage) {
+      await loadedPage.close().catch(() => {});
+    }
   }
 });
 

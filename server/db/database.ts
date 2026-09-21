@@ -119,14 +119,27 @@ class DatabaseManager {
       try {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
+        const sites = (parsed.sites || []).map((s: any) => ({
+          ...s,
+          scrape_method: s.scrape_method === 'PLAYWRIGHT' ? 'PLAYWRIGHT' : 'FETCH',
+          browser: 'Chromium'
+        }));
+        const table_sources = (parsed.table_sources || []).map((ts: any) => ({
+          ...ts,
+          update_time_xpath: ts.update_time_xpath ?? null
+        }));
+        const product_selectors = (parsed.product_selectors || []).map((ps: any) => ({
+          ...ps,
+          update_time_xpath: ps.update_time_xpath ?? null
+        }));
         return {
           factories: parsed.factories || [],
           price_tables: parsed.price_tables || [],
           products: parsed.products || [],
-          sites: parsed.sites || [],
+          sites,
           source_pages: parsed.source_pages || [],
-          table_sources: parsed.table_sources || [],
-          product_selectors: parsed.product_selectors || [],
+          table_sources,
+          product_selectors,
           page_actions: parsed.page_actions || [],
           global_settings: parsed.global_settings || this.getDefaultSettings(),
           runs: parsed.runs || [],
