@@ -3,8 +3,6 @@ import {
   Globe,
   Plus,
   Edit2,
-  Play,
-  Code,
   MousePointerClick,
   ExternalLink,
   ChevronDown,
@@ -13,40 +11,28 @@ import {
   CheckCircle2,
   Trash2
 } from 'lucide-react';
-import { Site, SourcePage, TableSource, ProductSelector, PageAction, PriceTable } from '../types';
+import { Site, SourcePage, PageAction } from '../types';
 
 interface SitesViewProps {
   sites: Site[];
   sourcePages: SourcePage[];
-  tableSources: TableSource[];
-  selectors: ProductSelector[];
   pageActions: PageAction[];
-  priceTables: PriceTable[];
   onSaveSite: (site: Partial<Site>) => Promise<void>;
   onSaveSourcePage: (page: Partial<SourcePage>) => Promise<void>;
-  onSaveTableSource: (ts: Partial<TableSource>) => Promise<void>;
   onSavePageAction: (action: Partial<PageAction>) => Promise<void>;
   onDeletePageAction: (id: number) => Promise<void>;
   onOpenPicker: (url: string) => void;
-  onOpenTester: (sourceId: number, url: string, xpath?: string) => void;
-  onRunSource: (sourceId: number) => Promise<void>;
 }
 
 export const SitesView: React.FC<SitesViewProps> = ({
   sites,
   sourcePages,
-  tableSources,
-  selectors,
   pageActions,
-  priceTables,
   onSaveSite,
   onSaveSourcePage,
-  onSaveTableSource,
   onSavePageAction,
   onDeletePageAction,
-  onOpenPicker,
-  onOpenTester,
-  onRunSource
+  onOpenPicker
 }) => {
   const [selectedSiteId, setSelectedSiteId] = useState<number>(sites[0]?.id || 1);
   const [isSiteModalOpen, setIsSiteModalOpen] = useState(false);
@@ -64,7 +50,6 @@ export const SitesView: React.FC<SitesViewProps> = ({
 
   const currentSite = sites.find((s) => s.id === selectedSiteId) || sites[0];
   const sitePages = sourcePages.filter((p) => p.site_id === currentSite?.id);
-  const siteTableSources = tableSources.filter((ts) => ts.site_id === currentSite?.id);
 
   const handleOpenAddSite = () => {
     setEditingSite({
@@ -345,73 +330,6 @@ export const SitesView: React.FC<SitesViewProps> = ({
                             </div>
                           </div>
                         )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Mapped Table Sources & Date XPaths */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900">اتصال به جداول قیمت و تنظیمات استخراج تاریخ</h3>
-              </div>
-
-              <div className="divide-y divide-gray-100 text-xs">
-                {siteTableSources.length === 0 ? (
-                  <div className="p-6 text-center text-gray-400">
-                    این سایت به هیچ جدول قیمتی اختصاص داده نشده است.
-                  </div>
-                ) : (
-                  siteTableSources.map((ts) => {
-                    const pt = priceTables.find((t) => t.id === ts.price_table_id);
-                    const sp = sourcePages.find((p) => p.id === ts.source_page_id);
-                    const sourceSelectors = selectors.filter((s) => s.table_source_id === ts.id);
-
-                    return (
-                      <div key={ts.id} className="p-4 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-gray-900 text-sm">جدول قیمت: {pt?.name}</span>
-                            <span className="text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                              {sourceSelectors.length} کالا متصل
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => onRunSource(ts.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 text-white rounded text-xs hover:bg-slate-800"
-                            >
-                              <Play className="w-3 h-3" />
-                              <span>اجرای این منبع</span>
-                            </button>
-                            <button
-                              onClick={() => onOpenTester(ts.id, sp?.url || '', ts.update_time_xpath || undefined)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 border border-gray-300"
-                            >
-                              <Code className="w-3 h-3" />
-                              <span>تست XPath تاریخ</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="bg-gray-50 p-2.5 rounded border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div>
-                            <span className="text-gray-500 block text-[11px]">XPath استخراج زمان و تاریخ بروزرسانی:</span>
-                            <span className="font-mono text-slate-800 dir-ltr text-right block mt-0.5 font-semibold">
-                              {ts.update_time_xpath || '(تعریف نشده - استخراج خودکار)'}
-                            </span>
-                          </div>
-
-                          <span className="text-[11px] text-gray-500">
-                            بررسی مجدد (Recheck):{' '}
-                            <strong className={ts.recheck_enabled ? 'text-blue-600' : 'text-gray-600'}>
-                              {ts.recheck_enabled ? 'فعال' : 'غیرفعال'}
-                            </strong>
-                          </span>
-                        </div>
                       </div>
                     );
                   })

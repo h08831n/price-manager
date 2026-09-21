@@ -205,5 +205,93 @@ export const FIXTURE_PAGES: Record<string, string> = {
     </table>
   </div>
 </body>
+</html>`,
+
+  // Dynamic Delayed page: Injects prices via setTimeout (Simulates client-side AJAX/SPA load)
+  'dynamic-delayed.html': `<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>صفحه با بارگذاری تاخیری (AJAX/SPA)</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .loading { color: #f59e0b; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>سامانه قیمت با بارگذاری ای‌جکس</h2>
+  <div id="ajax-update">امروز ۱۱:۴۵</div>
+  <div id="loading-indicator" class="loading">در حال بارگذاری اطلاعات از سرور...</div>
+  <div id="async-table-container"></div>
+
+  <script>
+    setTimeout(function() {
+      var container = document.getElementById('async-table-container');
+      var indicator = document.getElementById('loading-indicator');
+      if (indicator) indicator.style.display = 'none';
+      container.innerHTML = '<table id="async-prices" border="1">' +
+        '<thead><tr><th>نام</th><th>قیمت</th></tr></thead>' +
+        '<tbody>' +
+        '<tr><td>میلگرد 12 ذوب آهن</td><td class="async-val">58,050</td></tr>' +
+        '<tr><td>میلگرد 14 ذوب آهن</td><td class="async-val">58,350</td></tr>' +
+        '</tbody></table>';
+    }, 400);
+  </script>
+</body>
+</html>`,
+
+  // Dynamic Tabs page: Requires clicking a tab to activate and render the table
+  'dynamic-tabs.html': `<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>صفحه دارای تب‌های قیمتی</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .tab-btn { padding: 8px 16px; margin-right: 4px; cursor: pointer; }
+    .tab-content { display: none; padding: 16px; border: 1px solid #ccc; margin-top: 8px; }
+    .active-tab { display: block; }
+  </style>
+</head>
+<body>
+  <h2>لیست قیمت‌ها در تب‌های مختلف</h2>
+  <div id="tabs-date">امروز ۱۲:۱۰</div>
+  <div class="tabs-nav">
+    <button id="tab-btn-pipe" class="tab-btn" onclick="openTab('pipe')">لوله و پروفیل</button>
+    <button id="tab-btn-rebar" class="tab-btn" onclick="openTab('rebar')">میلگرد آجدار</button>
+  </div>
+
+  <div id="tab-content-pipe" class="tab-content">
+    <p>قیمت لوله‌ها...</p>
+  </div>
+
+  <div id="tab-content-rebar" class="tab-content">
+    <table id="rebar-tab-table" border="1">
+      <tr><td>میلگرد 12 ذوب</td><td class="tab-val">57,950</td></tr>
+      <tr><td>میلگرد 14 ذوب</td><td class="tab-val">58,250</td></tr>
+    </table>
+  </div>
+
+  <script>
+    function openTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active-tab'); });
+      var target = document.getElementById('tab-content-' + tabName);
+      if (target) target.classList.add('active-tab');
+    }
+  </script>
+</body>
+</html>`,
+
+  // Error page: Used for testing missing selector captures and snapshotting
+  'error-page.html': `<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>صفحه خطا</title>
+</head>
+<body>
+  <h2>صفحه با ساختار نامتعارف</h2>
+  <div class="notice">هیچ جدولی در این صفحه وجود ندارد</div>
+</body>
 </html>`
 };

@@ -3,12 +3,16 @@ import { X, MousePointerClick, Copy, Check, Code, Play } from 'lucide-react';
 
 interface XPathPickerModalProps {
   url: string;
+  sourceId?: number;
+  target?: 'TABLE_UPDATE' | 'PRODUCT_UPDATE' | 'PRODUCT_PRICE';
   onSelectXPath: (xpath: string) => void;
   onClose: () => void;
 }
 
 export const XPathPickerModal: React.FC<XPathPickerModalProps> = ({
   url,
+  sourceId,
+  target,
   onSelectXPath,
   onClose
 }) => {
@@ -49,6 +53,19 @@ export const XPathPickerModal: React.FC<XPathPickerModalProps> = ({
           <div className="flex items-center gap-2">
             <MousePointerClick className="w-5 h-5 text-emerald-400" />
             <h2 className="text-sm font-bold">انتخابگر تعاملی XPath (Interactive Visual Picker)</h2>
+            {target && (
+              <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+                target === 'TABLE_UPDATE'
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-400/30'
+                  : target === 'PRODUCT_UPDATE'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+              }`}>
+                {target === 'TABLE_UPDATE' && 'هدف: استخراج تاریخ کل جدول'}
+                {target === 'PRODUCT_UPDATE' && 'هدف: استخراج تاریخ کالا'}
+                {target === 'PRODUCT_PRICE' && 'هدف: استخراج قیمت کالا'}
+              </span>
+            )}
             <span className="text-xs text-slate-400 mr-2 max-w-md truncate dir-ltr">
               {url}
             </span>
@@ -65,7 +82,7 @@ export const XPathPickerModal: React.FC<XPathPickerModalProps> = ({
         {/* Live Inspection Webview Frame */}
         <div className="flex-1 bg-gray-100 relative overflow-hidden">
           <iframe
-            src={`/api/picker/inspect?url=${encodeURIComponent(url)}`}
+            src={`/api/picker/inspect?url=${encodeURIComponent(url)}${sourceId ? `&table_source_id=${sourceId}` : ''}`}
             className="w-full h-full border-none"
             title="Interactive Element Inspector"
           />

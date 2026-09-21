@@ -62,7 +62,13 @@ export default function App() {
 
   // Global Modals State
   const [importModal, setImportModal] = useState<{ isOpen: boolean; entityType: string; title: string } | null>(null);
-  const [pickerModal, setPickerModal] = useState<{ isOpen: boolean; url: string; onSelect?: (xpath: string) => void } | null>(null);
+  const [pickerModal, setPickerModal] = useState<{
+    isOpen: boolean;
+    url: string;
+    sourceId?: number;
+    target?: 'TABLE_UPDATE' | 'PRODUCT_UPDATE' | 'PRODUCT_PRICE';
+    onSelect?: (xpath: string) => void;
+  } | null>(null);
   const [testerModal, setTesterModal] = useState<{ isOpen: boolean; url: string; xpath?: string; sourceId?: number; type?: 'PRICE' | 'DATE' } | null>(null);
 
   // Toast Notification
@@ -317,6 +323,36 @@ export default function App() {
     }
   };
 
+  const handleSaveTableSource = async (ts: Partial<TableSource>) => {
+    try {
+      const method = ts.id ? 'PUT' : 'POST';
+      const url = ts.id ? `/api/table-sources/${ts.id}` : '/api/table-sources';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ts)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'خطا در ثبت منبع جدول');
+      showToast('اطلاعات منبع با موفقیت ذخیره شد');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleDeleteTableSource = async (id: number) => {
+    try {
+      const res = await fetch(`/api/table-sources/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'خطا در حذف منبع جدول');
+      showToast('منبع جدول با موفقیت حذف گردید');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
   const handleResolveError = async (id: number) => {
     try {
       const res = await fetch(`/api/errors/${id}/resolve`, { method: 'POST' });
@@ -446,11 +482,17 @@ export default function App() {
             selectors={selectors}
             revisions={tableRevisions}
             revisionItems={tableRevisionItems}
+            sites={sites}
+            sourcePages={sourcePages}
             onBack={() => setSelectedTable(null)}
             onRunTable={handleRunTable}
             onRunSource={handleRunSource}
+            onSaveTableSource={handleSaveTableSource}
+            onDeleteTableSource={handleDeleteTableSource}
             onSaveSelector={handleSaveSelector}
-            onOpenPicker={(url, onSelect) => setPickerModal({ isOpen: true, url, onSelect })}
+            onOpenPicker={(url, sourceId, onSelect, target) =>
+              setPickerModal({ isOpen: true, url, sourceId, onSelect, target })
+            }
             onOpenTester={(sourceId, url, xpath, type) =>
               setTesterModal({ isOpen: true, sourceId, url, xpath, type })
             }
@@ -508,20 +550,12 @@ export default function App() {
               <SitesView
                 sites={sites}
                 sourcePages={sourcePages}
-                tableSources={tableSources}
-                selectors={selectors}
                 pageActions={pageActions}
-                priceTables={priceTables}
                 onSaveSite={handleSaveSite}
                 onSaveSourcePage={handleSaveSourcePage}
-                onSaveTableSource={async () => {}}
                 onSavePageAction={handleSavePageAction}
                 onDeletePageAction={handleDeletePageAction}
                 onOpenPicker={(url) => setPickerModal({ isOpen: true, url })}
-                onOpenTester={(sourceId, url, xpath) =>
-                  setTesterModal({ isOpen: true, sourceId, url, xpath })
-                }
-                onRunSource={handleRunSource}
               />
             )}
 
@@ -571,6 +605,8 @@ export default function App() {
       {pickerModal?.isOpen && (
         <XPathPickerModal
           url={pickerModal.url}
+          sourceId={pickerModal.sourceId}
+          target={pickerModal.target}
           onSelectXPath={(xpath) => {
             if (pickerModal.onSelect) {
               pickerModal.onSelect(xpath);

@@ -148,31 +148,54 @@ export async function executePriceTable(
       dailySource.normalized_update_date = res.updateResult.normalized_date || undefined;
       dailySource.fresh = res.fresh;
 
-      if (!res.success && res.errors.length > 0) {
+      if (!res.success && (res.errors.length > 0 || res.structuredErrors?.length > 0)) {
         dailySource.status = 'FAILED';
-        // Create error in error center
-        for (const errMsg of res.errors) {
-          const errType = errMsg.includes('المان تاریخ محصول')
-            ? 'PRODUCT_UPDATE_XPATH_NOT_FOUND'
-            : errMsg.includes('المان تاریخ و زمان بروزرسانی جدول')
-            ? 'UPDATE_XPATH_NOT_FOUND'
-            : errMsg.includes('قیمت محصول')
-            ? 'PRICE_XPATH_NOT_FOUND'
-            : errMsg.includes('مهلت بارگذاری')
-            ? 'PAGE_TIMEOUT'
-            : 'PAGE_LOAD_FAILED';
+        // Create error in error center with rich structured details
+        if (res.structuredErrors && res.structuredErrors.length > 0) {
+          for (const sErr of res.structuredErrors) {
+            createErrorRecord({
+              run_id: runId,
+              price_table_id: priceTableId,
+              site_id: sErr.site_id || source.site_id,
+              source_page_id: sErr.source_page_id || source.source_page_id,
+              product_id: sErr.product_id,
+              post_id: sErr.post_id,
+              error_type: sErr.type as any,
+              error_message: sErr.message,
+              xpath: sErr.xpath,
+              attempt_number: dailySource.attempt_count,
+              execution_stage: 'SCRAPING',
+              screenshot_path: res.screenshotPath,
+              html_snapshot_path: res.htmlSnapshotPath
+            });
+          }
+        } else {
+          for (const errMsg of res.errors) {
+            const errType = errMsg.includes('المان تاریخ محصول')
+              ? 'PRODUCT_UPDATE_XPATH_NOT_FOUND'
+              : errMsg.includes('المان تاریخ و زمان بروزرسانی جدول')
+              ? 'UPDATE_XPATH_NOT_FOUND'
+              : errMsg.includes('قیمت محصول')
+              ? 'PRICE_XPATH_NOT_FOUND'
+              : errMsg.includes('دستور صفحه')
+              ? 'PAGE_ACTION_FAILED'
+              : errMsg.includes('مهلت بارگذاری')
+              ? 'PAGE_TIMEOUT'
+              : 'PAGE_LOAD_FAILED';
 
-          createErrorRecord({
-            run_id: runId,
-            price_table_id: priceTableId,
-            site_id: source.site_id,
-            source_page_id: source.source_page_id,
-            error_type: errType as any,
-            error_message: errMsg,
-            execution_stage: 'SCRAPING',
-            screenshot_path: res.screenshotPath,
-            html_snapshot_path: res.htmlSnapshotPath
-          });
+            createErrorRecord({
+              run_id: runId,
+              price_table_id: priceTableId,
+              site_id: source.site_id,
+              source_page_id: source.source_page_id,
+              error_type: errType as any,
+              error_message: errMsg,
+              attempt_number: dailySource.attempt_count,
+              execution_stage: 'SCRAPING',
+              screenshot_path: res.screenshotPath,
+              html_snapshot_path: res.htmlSnapshotPath
+            });
+          }
         }
       } else if (!res.fresh) {
         dailySource.status = 'NOT_UPDATED';

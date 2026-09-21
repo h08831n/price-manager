@@ -84,12 +84,14 @@ export class ExcelService {
         sheet.columns = [
           { header: 'نام سایت/رقیب (الزامی)', key: 'name', width: 25 },
           { header: 'آدرس پایه URL (الزامی)', key: 'base_url', width: 35 },
+          { header: 'روش استخراج (FETCH / PLAYWRIGHT)', key: 'scrape_method', width: 30 },
           { header: 'مهلت بارگذاری (ثانیه)', key: 'timeout', width: 18 },
           { header: 'فعال (بله/خیر)', key: 'active', width: 12 }
         ];
         sheet.addRow({
           name: 'منبع الف',
           base_url: 'http://localhost:3000/fixtures/source-a.html',
+          scrape_method: 'PLAYWRIGHT',
           timeout: 30,
           active: 'بله'
         });
@@ -122,6 +124,7 @@ export class ExcelService {
           { header: 'سایت منبع', key: 'site', width: 20 },
           { header: 'آدرس صفحه URL', key: 'url', width: 30 },
           { header: 'XPath قیمت (الزامی)', key: 'price_xpath', width: 35 },
+          { header: 'XPath تاریخ محصول (اختیاری)', key: 'product_update_time_xpath', width: 35 },
           { header: 'فعال (بله/خیر)', key: 'active', width: 12 }
         ];
         sheet.addRow({
@@ -131,6 +134,7 @@ export class ExcelService {
           site: 'منبع الف',
           url: 'http://localhost:3000/fixtures/source-a.html',
           price_xpath: '//table[@id="zobahan-table"]//tr[1]/td[5]',
+          product_update_time_xpath: '//table[@id="zobahan-table"]//tr[1]/td[6]',
           active: 'بله'
         });
         break;
@@ -237,6 +241,7 @@ export class ExcelService {
           { header: 'شناسه', key: 'id', width: 10 },
           { header: 'نام سایت', key: 'name', width: 25 },
           { header: 'آدرس پایه URL', key: 'base_url', width: 35 },
+          { header: 'روش استخراج', key: 'scrape_method', width: 20 },
           { header: 'مهلت انتظار (ثانیه)', key: 'timeout', width: 18 },
           { header: 'وضعیت', key: 'active', width: 12 }
         ];
@@ -245,8 +250,38 @@ export class ExcelService {
             id: s.id,
             name: s.name,
             base_url: s.base_url,
+            scrape_method: s.scrape_method || 'FETCH',
             timeout: s.timeout,
             active: s.active ? 'فعال' : 'غیرفعال'
+          });
+        });
+        break;
+
+      case 'product_selectors':
+        sheet.columns = [
+          { header: 'شناسه', key: 'id', width: 10 },
+          { header: 'post_id محصول', key: 'post_id', width: 15 },
+          { header: 'نام محصول', key: 'product_name', width: 25 },
+          { header: 'جدول قیمت', key: 'price_table', width: 20 },
+          { header: 'سایت منبع', key: 'site', width: 20 },
+          { header: 'XPath قیمت', key: 'price_xpath', width: 35 },
+          { header: 'XPath تاریخ محصول', key: 'product_update_time_xpath', width: 35 },
+          { header: 'وضعیت', key: 'active', width: 12 }
+        ];
+        schema.product_selectors.forEach((sel) => {
+          const prod = schema.products.find((p) => p.id === sel.product_id);
+          const ts = schema.table_sources.find((t) => t.id === sel.table_source_id);
+          const table = ts ? schema.price_tables.find((pt) => pt.id === ts.price_table_id) : undefined;
+          const site = ts ? schema.sites.find((s) => s.id === ts.site_id) : undefined;
+          sheet.addRow({
+            id: sel.id,
+            post_id: sel.post_id || prod?.post_id || '',
+            product_name: prod?.name || '',
+            price_table: table?.name || '',
+            site: site?.name || '',
+            price_xpath: sel.price_xpath,
+            product_update_time_xpath: sel.update_time_xpath || '',
+            active: sel.active ? 'فعال' : 'غیرفعال'
           });
         });
         break;
@@ -511,6 +546,86 @@ export class ExcelService {
             rowsNew++;
           }
           validRows.push({ name, active });
+        } else if (entityType === 'sites') {
+          const name = String(rowData['نام سایت/رقیب (الزامی)'] ?? rowData['نام سایت'] ?? rowData['name'] ?? '').trim();
+          const baseUrl = String(rowData['آدرس پایه URL (الزامی)'] ?? rowData['آدرس پایه URL'] ?? rowData['base_url'] ?? '').trim();
+          if (!name || !baseUrl) {
+            rowsFailed++;
+            errors.push({ row: rowIdx, error: 'نام سایت و آدرس پایه URL نمی‌توانند خالی باشند', data: rowData });
+            continue;
+          }
+          const rawMethod = String(rowData['روش استخراج (FETCH / PLAYWRIGHT)'] ?? rowData['روش استخراج'] ?? rowData['scrape_method'] ?? 'FETCH').trim().toUpperCase();
+          const scrape_method: 'FETCH' | 'PLAYWRIGHT' = rawMethod === 'PLAYWRIGHT' ? 'PLAYWRIGHT' : 'FETCH';
+          const timeout = parseInt(String(rowData['مهلت بارگذاری (ثانیه)'] ?? rowData['مهلت انتظار (ثانیه)'] ?? rowData['timeout'] ?? 30), 10) || 30;
+          const activeStr = String(rowData['فعال (بله/خیر)'] ?? rowData['وضعیت'] ?? 'بله');
+          const active = !/خیر|غیر|false|no|0/i.test(activeStr);
+
+          const existing = schema.sites.find((s) => s.name.toLowerCase() === name.toLowerCase() || s.base_url.toLowerCase() === baseUrl.toLowerCase());
+          const parsedRow = { name, base_url: baseUrl, scrape_method, timeout, active };
+
+          if (existing) {
+            if (existing.scrape_method === scrape_method && existing.timeout === timeout && existing.active === active) {
+              rowsUnchanged++;
+            } else {
+              rowsUpdated++;
+            }
+          } else {
+            rowsNew++;
+          }
+          validRows.push(parsedRow);
+        } else if (entityType === 'product_selectors') {
+          const postIdRaw = rowData['post_id محصول (الزامی)'] ?? rowData['post_id'] ?? rowData['post_id محصول'];
+          const priceXpath = String(rowData['XPath قیمت (الزامی)'] ?? rowData['XPath قیمت'] ?? rowData['price_xpath'] ?? '').trim();
+          if (!postIdRaw || !priceXpath) {
+            rowsFailed++;
+            errors.push({ row: rowIdx, error: 'post_id و XPath قیمت الزامی هستند', data: rowData });
+            continue;
+          }
+          const postId = parseInt(String(postIdRaw), 10);
+          const updateTimeXpath = String(rowData['XPath تاریخ محصول (اختیاری)'] ?? rowData['XPath تاریخ محصول'] ?? rowData['product_update_time_xpath'] ?? rowData['update_time_xpath'] ?? '').trim();
+          const activeStr = String(rowData['فعال (بله/خیر)'] ?? rowData['وضعیت'] ?? 'بله');
+          const active = !/خیر|غیر|false|no|0/i.test(activeStr);
+
+          const product = schema.products.find(p => p.post_id === postId);
+          const siteName = String(rowData['سایت منبع'] ?? rowData['site'] ?? '').trim();
+          const tableName = String(rowData['جدول قیمت'] ?? rowData['price_table'] ?? '').trim();
+
+          let tableSource = schema.table_sources.find(ts => {
+            if (siteName) {
+              const s = schema.sites.find(site => site.name === siteName);
+              if (s && ts.site_id === s.id) return true;
+            }
+            if (tableName) {
+              const pt = schema.price_tables.find(t => t.name === tableName);
+              if (pt && ts.price_table_id === pt.id) return true;
+            }
+            return false;
+          });
+
+          const parsedRow = {
+            post_id: postId,
+            product_id: product?.id,
+            table_source_id: tableSource?.id,
+            price_xpath: priceXpath,
+            update_time_xpath: updateTimeXpath || null,
+            active
+          };
+
+          const existing = schema.product_selectors.find(ps => 
+            (parsedRow.product_id ? ps.product_id === parsedRow.product_id : ps.post_id === postId) &&
+            (parsedRow.table_source_id ? ps.table_source_id === parsedRow.table_source_id : true)
+          );
+
+          if (existing) {
+            if (existing.price_xpath === priceXpath && existing.update_time_xpath === (updateTimeXpath || null) && existing.active === active) {
+              rowsUnchanged++;
+            } else {
+              rowsUpdated++;
+            }
+          } else {
+            rowsNew++;
+          }
+          validRows.push(parsedRow);
         } else {
           // Generic valid row
           rowsNew++;
@@ -578,6 +693,63 @@ export class ExcelService {
           schema.factories.push({
             id: db.getNextId('factories'),
             name: row.name,
+            active: row.active,
+            created_at: now,
+            updated_at: now
+          });
+        }
+      }
+    } else if (preview.entity_type === 'sites') {
+      for (const row of preview.valid_rows) {
+        const existing = schema.sites.find((s) => s.name.toLowerCase() === row.name.toLowerCase() || s.base_url.toLowerCase() === row.base_url.toLowerCase());
+        if (existing) {
+          existing.name = row.name;
+          existing.base_url = row.base_url;
+          existing.scrape_method = row.scrape_method;
+          existing.timeout = row.timeout;
+          existing.active = row.active;
+          existing.updated_at = now;
+        } else {
+          schema.sites.push({
+            id: db.getNextId('sites'),
+            name: row.name,
+            base_url: row.base_url,
+            scrape_method: row.scrape_method,
+            browser: 'Chromium',
+            timeout: row.timeout,
+            wait_after_load: 1000,
+            active: row.active,
+            created_at: now,
+            updated_at: now
+          });
+        }
+      }
+    } else if (preview.entity_type === 'product_selectors') {
+      for (const row of preview.valid_rows) {
+        let productId = row.product_id;
+        if (!productId) {
+          const p = schema.products.find(prod => prod.post_id === row.post_id);
+          productId = p ? p.id : 1;
+        }
+        let tableSourceId = row.table_source_id;
+        if (!tableSourceId) {
+          tableSourceId = schema.table_sources[0]?.id || 1;
+        }
+        const existing = schema.product_selectors.find(ps => ps.product_id === productId && ps.table_source_id === tableSourceId);
+        const now = new Date().toISOString();
+        if (existing) {
+          existing.price_xpath = row.price_xpath;
+          existing.update_time_xpath = row.update_time_xpath;
+          existing.active = row.active;
+          existing.updated_at = now;
+        } else {
+          schema.product_selectors.push({
+            id: db.getNextId('product_selectors'),
+            product_id: productId,
+            post_id: row.post_id,
+            table_source_id: tableSourceId,
+            price_xpath: row.price_xpath,
+            update_time_xpath: row.update_time_xpath,
             active: row.active,
             created_at: now,
             updated_at: now

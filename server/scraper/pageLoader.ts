@@ -193,8 +193,17 @@ export class PlaywrightLoadedPage implements LoadedPage {
   }
 }
 
+export class PageActionError extends Error {
+  action: PageAction;
+  constructor(message: string, action: PageAction) {
+    super(message);
+    this.name = 'PageActionError';
+    this.action = action;
+  }
+}
+
 // Execute Page Actions on a live Playwright Page
-async function executePlaywrightActions(page: Page, actions: PageAction[]): Promise<void> {
+export async function executePlaywrightActions(page: Page, actions: PageAction[]): Promise<void> {
   const sorted = [...actions].filter((a) => a.active).sort((a, b) => a.order - b.order);
 
   for (const act of sorted) {
@@ -244,8 +253,10 @@ async function executePlaywrightActions(page: Page, actions: PageAction[]): Prom
         }
       }
     } catch (err: any) {
-      console.warn(`Warning: Playwright page action ${act.action_type} failed:`, err.message);
-      // Let subsequent actions attempt unless fatal
+      throw new PageActionError(
+        `دستور صفحه (${act.action_type}) با ترتیب ${act.order} و سلکتور «${act.selector || ''}» ناموفق بود: ${err.message}`,
+        act
+      );
     }
   }
 }
@@ -287,25 +298,36 @@ export async function loadSourcePage(
       const renderedHtml = await page.content();
       return new PlaywrightLoadedPage(url, renderedHtml, page, context);
     } catch (err: any) {
-      // Clean up in case of error during page setup
-      if (page) await page.close().catch(() => {});
-      if (context) await context.close().catch(() => {});
-      throw new Error(`خطای بارگذاری مرورگر Playwright: ${err.message}`);
+      if (err instanceof PageActionError && page && context) {
+        let currentHtml = '';
+        try {
+          currentHtml = await page.content();
+        } catch {
+          currentHtml = '<html><body>خطای تعامل صفحه</body></html>';
+        }
+        const loaded = new PlaywrightLoadedPage(url, currentHtml, page, context);
+        (err as any).loadedPage = loaded;
+      } else {
+        // Clean up in case of error during page setup
+        if (page) await page.close().catch(() => {});
+        if (context) await context.close().catch(() => {});
+      }
+      throw err;
     }
   } else {
     // FETCH method
-    const html = preloadedHtml || (await fetchHtmlForUrl(url, timeoutMs));
-
-    // Warn if interactive actions were defined on a FETCH site
-    const hasInteractive = actions.some(
+    const interactiveActions = actions.filter(
       (a) => a.active && ['CLICK', 'SCROLL', 'SCROLL_TO', 'WAIT_FOR_ELEMENT'].includes(a.action_type)
     );
-    if (hasInteractive) {
-      console.warn(
-        `[Notice] Site "${site.name}" uses FETCH scrape method but page "${url}" has interactive Page Actions. For interactive clicks/scrolls, switch site scrape_method to PLAYWRIGHT.`
+    if (interactiveActions.length > 0) {
+      throw new Error(
+        `سایت «${site.name}» با روش استخراج FETCH تنظیم شده است، اما دارای دستورات تعاملی (${interactiveActions
+          .map((a) => a.action_type)
+          .join('، ')}) می‌باشد. جهت اجرای دستورات تعاملی، روش استخراج سایت را به PLAYWRIGHT تغییر دهید.`
       );
     }
 
+    const html = preloadedHtml || (await fetchHtmlForUrl(url, timeoutMs));
     return new FetchLoadedPage(url, html);
   }
 }

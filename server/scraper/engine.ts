@@ -7,13 +7,35 @@ import { extractXPathFromHtml, XPathResult } from './xpathExtractor';
 import { evaluateFreshness, FreshnessResult } from './freshness';
 import { parseProductPrice } from './priceParser';
 import { TableSource, SourcePage, ProductSelector, PageAction, Site } from '../../src/types';
-import { loadSourcePage, LoadedPage } from './pageLoader';
+import { loadSourcePage, LoadedPage, PageActionError } from './pageLoader';
 
 const SNAPSHOTS_DIR = path.join(process.cwd(), 'data', 'snapshots');
 const SCREENSHOTS_DIR = path.join(process.cwd(), 'data', 'screenshots');
 
 if (!fs.existsSync(SNAPSHOTS_DIR)) fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
 if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+
+export interface StructuredScraperError {
+  type:
+    | 'UPDATE_XPATH_NOT_FOUND'
+    | 'PRODUCT_UPDATE_XPATH_NOT_FOUND'
+    | 'PRICE_XPATH_NOT_FOUND'
+    | 'INVALID_PRICE'
+    | 'PAGE_ACTION_FAILED'
+    | 'PAGE_LOAD_FAILED'
+    | 'PAGE_TIMEOUT';
+  message: string;
+  table_source_id: number;
+  site_id: number;
+  source_page_id: number;
+  product_id?: number;
+  post_id?: number;
+  selector_id?: number;
+  xpath?: string;
+  action_id?: number;
+  action_order?: number;
+  action_type?: string;
+}
 
 export interface ScrapedProductResult {
   product_id: number;
@@ -39,6 +61,7 @@ export interface SourceScrapeResult {
   updateResult: FreshnessResult;
   products: ScrapedProductResult[];
   errors: string[];
+  structuredErrors: StructuredScraperError[];
   htmlSnapshotPath?: string;
   screenshotPath?: string;
   duration_ms: number;
@@ -128,11 +151,20 @@ export async function scrapeTableSource(
     },
     products: [],
     errors: [],
+    structuredErrors: [],
     duration_ms: 0
   };
 
   if (!url) {
-    result.errors.push('آدرس صفحه مبدا (URL) یافت نشد');
+    const noUrlMsg = 'آدرس صفحه مبدا (URL) یافت نشد';
+    result.errors.push(noUrlMsg);
+    result.structuredErrors.push({
+      type: 'PAGE_LOAD_FAILED',
+      message: noUrlMsg,
+      table_source_id: tableSource.id,
+      site_id: tableSource.site_id,
+      source_page_id: tableSource.source_page_id
+    });
     result.duration_ms = Date.now() - startTime;
     return result;
   }
@@ -157,7 +189,16 @@ export async function scrapeTableSource(
         const snapshot = await loadedPage.captureSnapshot(`update_xpath_fail_${tableSource.id}`);
         result.htmlSnapshotPath = snapshot.htmlPath;
         result.screenshotPath = snapshot.screenshotPath;
-        throw new Error(`المان تاریخ و زمان بروزرسانی جدول با XPath (${tableSource.update_time_xpath}) یافت نشد`);
+        const msg = `المان تاریخ و زمان بروزرسانی جدول با XPath (${tableSource.update_time_xpath}) یافت نشد`;
+        result.structuredErrors.push({
+          type: 'UPDATE_XPATH_NOT_FOUND',
+          message: msg,
+          table_source_id: tableSource.id,
+          site_id: tableSource.site_id,
+          source_page_id: tableSource.source_page_id,
+          xpath: tableSource.update_time_xpath
+        });
+        throw new Error(msg);
       }
 
       result.updateResult = evaluateFreshness(updateExtraction.firstValue);
@@ -202,6 +243,17 @@ export async function scrapeTableSource(
         if (!prodDateExt.success || !prodDateExt.firstValue) {
           const errMsg = `المان تاریخ محصول با XPath (${selector.update_time_xpath}) یافت نشد`;
           result.errors.push(errMsg);
+          result.structuredErrors.push({
+            type: 'PRODUCT_UPDATE_XPATH_NOT_FOUND',
+            message: errMsg,
+            table_source_id: tableSource.id,
+            site_id: tableSource.site_id,
+            source_page_id: tableSource.source_page_id,
+            product_id: selector.product_id,
+            post_id: selector.post_id,
+            selector_id: selector.id,
+            xpath: selector.update_time_xpath || ''
+          });
           selector.last_status = 'NOT_FOUND';
           selector.last_extracted_value = null;
           selector.last_extracted_at = new Date().toISOString();
@@ -266,6 +318,17 @@ export async function scrapeTableSource(
           error: errorMsg
         });
         result.errors.push(errorMsg);
+        result.structuredErrors.push({
+          type: 'PRICE_XPATH_NOT_FOUND',
+          message: errorMsg,
+          table_source_id: tableSource.id,
+          site_id: tableSource.site_id,
+          source_page_id: tableSource.source_page_id,
+          product_id: selector.product_id,
+          post_id: selector.post_id,
+          selector_id: selector.id,
+          xpath: selector.price_xpath
+        });
 
         selector.last_extracted_value = null;
         selector.last_status = 'NOT_FOUND';
@@ -289,7 +352,19 @@ export async function scrapeTableSource(
       });
 
       if (!parsed.valid) {
-        result.errors.push(`قیمت نامعتبر برای محصول ${selector.product_id}: ${parsed.error}`);
+        const invMsg = `قیمت نامعتبر برای محصول ${selector.product_id}: ${parsed.error}`;
+        result.errors.push(invMsg);
+        result.structuredErrors.push({
+          type: 'INVALID_PRICE',
+          message: invMsg,
+          table_source_id: tableSource.id,
+          site_id: tableSource.site_id,
+          source_page_id: tableSource.source_page_id,
+          product_id: selector.product_id,
+          post_id: selector.post_id,
+          selector_id: selector.id,
+          xpath: selector.price_xpath
+        });
       } else {
         freshProductCount++;
       }
@@ -316,14 +391,45 @@ export async function scrapeTableSource(
     result.errors.push(err.message);
     result.success = false;
 
-    if (loadedPage && !result.htmlSnapshotPath) {
+    const errorLoadedPage = loadedPage || (err.loadedPage as LoadedPage | undefined);
+
+    if (err instanceof PageActionError) {
+      result.structuredErrors.push({
+        type: 'PAGE_ACTION_FAILED',
+        message: err.message,
+        table_source_id: tableSource.id,
+        site_id: tableSource.site_id,
+        source_page_id: tableSource.source_page_id,
+        action_id: err.action?.id,
+        action_order: err.action?.order,
+        action_type: err.action?.action_type,
+        xpath: err.action?.selector
+      });
+    } else if (result.structuredErrors.length === 0) {
+      const errType = err.message.includes('مهلت بارگذاری')
+        ? 'PAGE_TIMEOUT'
+        : 'PAGE_LOAD_FAILED';
+      result.structuredErrors.push({
+        type: errType,
+        message: err.message,
+        table_source_id: tableSource.id,
+        site_id: tableSource.site_id,
+        source_page_id: tableSource.source_page_id
+      });
+    }
+
+    if (errorLoadedPage && !result.htmlSnapshotPath) {
       try {
-        const snapshot = await loadedPage.captureSnapshot(`error_${tableSource.id}`);
+        const snapshot = await errorLoadedPage.captureSnapshot(`error_${tableSource.id}`);
         result.htmlSnapshotPath = snapshot.htmlPath;
         result.screenshotPath = snapshot.screenshotPath;
       } catch {
         // Snapshot failed
       }
+    }
+
+    if (err.loadedPage) {
+      await err.loadedPage.close().catch(() => {});
     }
   } finally {
     if (loadedPage) {

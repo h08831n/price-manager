@@ -14,7 +14,7 @@ import { excelService } from '../excel/excelService';
 import { publishTableToWordPress } from '../wordpress/client';
 import { FIXTURE_PAGES } from '../fixtures/fixtures';
 import { loadSourcePage } from '../scraper/pageLoader';
-import { DashboardData, Site } from '../../src/types';
+import { DashboardData, Site, PageAction } from '../../src/types';
 
 export const apiRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -476,6 +476,9 @@ apiRouter.put('/table-sources/:id', (req: Request, res: Response) => {
   const ts = schema.table_sources.find((s) => s.id === id);
   if (!ts) return res.status(404).json({ error: 'منبع جدول یافت نشد.' });
 
+  if (req.body.source_page_id !== undefined) ts.source_page_id = parseInt(req.body.source_page_id, 10);
+  if (req.body.price_table_id !== undefined) ts.price_table_id = parseInt(req.body.price_table_id, 10);
+  if (req.body.site_id !== undefined) ts.site_id = parseInt(req.body.site_id, 10);
   if (req.body.update_time_xpath !== undefined) ts.update_time_xpath = req.body.update_time_xpath;
   if (req.body.recheck_enabled !== undefined) ts.recheck_enabled = Boolean(req.body.recheck_enabled);
   if (req.body.active !== undefined) ts.active = Boolean(req.body.active);
@@ -488,6 +491,19 @@ apiRouter.put('/table-sources/:id', (req: Request, res: Response) => {
   db.logConfigChange('table_source', ts.id, 'update', null, ts.update_time_xpath);
   db.save();
   res.json(ts);
+});
+
+apiRouter.delete('/table-sources/:id', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const id = parseInt(req.params.id, 10);
+  const index = schema.table_sources.findIndex((s) => s.id === id);
+  if (index === -1) return res.status(404).json({ error: 'منبع جدول یافت نشد.' });
+  const [removed] = schema.table_sources.splice(index, 1);
+  // Also clean up selectors for this table source
+  schema.product_selectors = schema.product_selectors.filter((s) => s.table_source_id !== id);
+  db.logConfigChange('table_source', id, 'delete', `Table ${removed.price_table_id} -> Site ${removed.site_id}`, null);
+  db.save();
+  res.json({ success: true, removed });
 });
 
 // Manual Run of Single Source (Requirement #30, #50)
@@ -622,6 +638,7 @@ apiRouter.post('/selectors/test', async (req: Request, res: Response) => {
 
   let targetUrl = url;
   let site: Site | undefined = undefined;
+  let actions: PageAction[] = [];
 
   if (source_id) {
     const ts = schema.table_sources.find((s) => s.id === parseInt(source_id, 10));
@@ -629,6 +646,21 @@ apiRouter.post('/selectors/test', async (req: Request, res: Response) => {
       site = schema.sites.find((s) => s.id === ts.site_id);
       const sp = schema.source_pages.find((p) => p.id === ts.source_page_id);
       if (!targetUrl) targetUrl = sp?.url || site?.base_url;
+      if (ts.source_page_id) {
+        actions = schema.page_actions
+          .filter((a) => a.source_page_id === ts.source_page_id && a.active)
+          .sort((a, b) => a.order - b.order);
+      }
+    }
+  }
+
+  if (!actions.length && targetUrl) {
+    const sp = schema.source_pages.find((p) => p.url === targetUrl);
+    if (sp) {
+      if (!site) site = schema.sites.find((s) => s.id === sp.site_id);
+      actions = schema.page_actions
+        .filter((a) => a.source_page_id === sp.id && a.active)
+        .sort((a, b) => a.order - b.order);
     }
   }
 
@@ -651,7 +683,7 @@ apiRouter.post('/selectors/test', async (req: Request, res: Response) => {
 
   let loadedPage = null;
   try {
-    loadedPage = await loadSourcePage(targetUrl, effectiveSite, [], 25000);
+    loadedPage = await loadSourcePage(targetUrl, effectiveSite, actions, 25000);
     const extraction = await loadedPage.evaluateXPath(xpath.trim());
 
     if (type === 'DATE') {
@@ -735,16 +767,47 @@ apiRouter.delete('/page-actions/:id', (req: Request, res: Response) => {
 apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
   const targetUrl = String(req.query.url || '');
   const siteId = req.query.site_id ? parseInt(String(req.query.site_id), 10) : null;
+  const tableSourceId = req.query.table_source_id ? parseInt(String(req.query.table_source_id), 10) : null;
   if (!targetUrl) return res.status(400).send('URL is required');
 
   const schema = db.getSchema();
-  const site = siteId ? schema.sites.find((s) => s.id === siteId) : schema.sites.find((s) => targetUrl.startsWith(s.base_url));
+  let site: Site | undefined = undefined;
+  let actions: PageAction[] = [];
+
+  if (tableSourceId) {
+    const ts = schema.table_sources.find((s) => s.id === tableSourceId);
+    if (ts) {
+      site = schema.sites.find((s) => s.id === ts.site_id);
+      if (ts.source_page_id) {
+        actions = schema.page_actions
+          .filter((a) => a.source_page_id === ts.source_page_id && a.active)
+          .sort((a, b) => a.order - b.order);
+      }
+    }
+  }
+
+  if (!site && siteId) {
+    site = schema.sites.find((s) => s.id === siteId);
+  }
+  if (!site) {
+    site = schema.sites.find((s) => targetUrl.startsWith(s.base_url));
+  }
+
+  if (!actions.length) {
+    const sp = schema.source_pages.find((p) => p.url === targetUrl);
+    if (sp) {
+      if (!site) site = schema.sites.find((s) => s.id === sp.site_id);
+      actions = schema.page_actions
+        .filter((a) => a.source_page_id === sp.id && a.active)
+        .sort((a, b) => a.order - b.order);
+    }
+  }
 
   const effectiveSite: Site = site || {
     id: 0,
     name: 'Picker',
     base_url: targetUrl,
-    scrape_method: 'FETCH',
+    scrape_method: 'PLAYWRIGHT',
     browser: 'Chromium',
     timeout: 30,
     wait_after_load: 1000,
@@ -755,7 +818,7 @@ apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
 
   let loadedPage = null;
   try {
-    loadedPage = await loadSourcePage(targetUrl, effectiveSite, [], 30000);
+    loadedPage = await loadSourcePage(targetUrl, effectiveSite, actions, 30000);
     const rawHtml = loadedPage.content;
     const injected = injectPickerScript(rawHtml);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
