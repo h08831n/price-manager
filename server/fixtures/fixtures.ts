@@ -293,5 +293,38 @@ export const FIXTURE_PAGES: Record<string, string> = {
   <h2>صفحه با ساختار نامتعارف</h2>
   <div class="notice">هیچ جدولی در این صفحه وجود ندارد</div>
 </body>
+</html>`,
+
+  // Integration Test Fixture: Multi-Product Freshness Evaluation
+  'multi-product-freshness.html': `<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>تست چند محصولی با تاریخ‌های متفاوت</title>
+</head>
+<body>
+  <h2>جدول قیمت تست چند محصولی</h2>
+  <div id="table-date">امروز ۱۰:۳۰</div>
+  <table id="products-table" border="1">
+    <tr id="row-a">
+      <td class="name">Product A</td>
+      <td class="date">امروز ۱۰:۳۰</td>
+      <td class="price">55,000</td>
+    </tr>
+    <tr id="row-b">
+      <td class="name">Product B</td>
+      <td class="date">دیروز ۱۶:۰۰</td>
+      <td class="price">56,000</td>
+    </tr>
+    <tr id="row-c">
+      <td class="name">Product C</td>
+      <td class="price">57,000</td>
+    </tr>
+    <tr id="row-d">
+      <td class="name">Product D</td>
+      <td class="price">58,000</td>
+    </tr>
+  </table>
+</body>
 </html>`
 };

@@ -26,7 +26,8 @@ function assert(condition: boolean, testName: string) {
 }
 
 async function runTests() {
-  console.log('🧪 Running Price Collector System Automated Tests (18 Scenarios)...\n');
+  console.log('🧪 Running Price Collector System Automated Tests (20 Scenarios)...\n');
+  const schema = db.getSchema();
 
   // ==========================================
   // Scenario 1: Persian & Arabic Digits Normalization
@@ -321,23 +322,145 @@ async function runTests() {
   await sharedLoaded2.close();
 
   // ==========================================
-  // Scenario 13: Product-Level Update Time XPath Evaluation
+  // Scenario 13: Real Multi-Product Freshness Integration Test (scrapeTableSource)
   // ==========================================
-  console.log('\n--- 13. Product-Level Update Time XPath Evaluation ---');
-  const prodDateExtraction = evaluateFreshness('امروز ساعت ۱۰:۵۵', now);
-  assert(prodDateExtraction.fresh === true && prodDateExtraction.normalized_time === '10:55', 'Product-level date evaluated as fresh today');
+  console.log('\n--- 13. Real Multi-Product Freshness Integration Test (scrapeTableSource) ---');
+  // Register SourcePage and TableSource for multi-product test
+  const multiPageId = db.getNextId('source_pages');
+  const multiPageUrl = 'http://localhost:3000/fixtures/multi-product-freshness.html';
+  schema.source_pages.push({
+    id: multiPageId,
+    site_id: 1,
+    url: multiPageUrl,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
 
-  const staleProdDateExtraction = evaluateFreshness('1402/08/15', now);
-  assert(staleProdDateExtraction.fresh === false, 'Product-level stale date evaluated as not fresh');
+  const multiSourceId = db.getNextId('table_sources');
+  const multiTableSource: TableSource = {
+    id: multiSourceId,
+    price_table_id: 1,
+    site_id: 1,
+    source_page_id: multiPageId,
+    source_page_url: multiPageUrl,
+    update_time_xpath: '//div[@id="table-date"]', // Table date: "امروز ۱۰:۳۰"
+    recheck_enabled: true,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  schema.table_sources.push(multiTableSource);
+
+  // Product A: date today -> price accepted
+  schema.product_selectors.push({
+    id: db.getNextId('product_selectors'),
+    product_id: 1,
+    post_id: 9101,
+    table_source_id: multiSourceId,
+    price_xpath: '//tr[@id="row-a"]/td[@class="price"]',
+    update_time_xpath: '//tr[@id="row-a"]/td[@class="date"]', // "امروز ۱۰:۳۰"
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
+  // Product B: date yesterday -> price rejected
+  schema.product_selectors.push({
+    id: db.getNextId('product_selectors'),
+    product_id: 2,
+    post_id: 9102,
+    table_source_id: multiSourceId,
+    price_xpath: '//tr[@id="row-b"]/td[@class="price"]',
+    update_time_xpath: '//tr[@id="row-b"]/td[@class="date"]', // "دیروز ۱۶:۰۰"
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
+  // Product C: no date XPath -> inherits table freshness (today) and price accepted
+  schema.product_selectors.push({
+    id: db.getNextId('product_selectors'),
+    product_id: 3,
+    post_id: 9103,
+    table_source_id: multiSourceId,
+    price_xpath: '//tr[@id="row-c"]/td[@class="price"]',
+    update_time_xpath: undefined,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
+  // Product D: price XPath broken -> only D fails
+  schema.product_selectors.push({
+    id: db.getNextId('product_selectors'),
+    product_id: 4,
+    post_id: 9104,
+    table_source_id: multiSourceId,
+    price_xpath: '//tr[@id="row-d"]/td[@class="nonexistent_price_xpath"]',
+    update_time_xpath: undefined,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
+  const multiScrapeResult = await scrapeTableSource(multiTableSource, 8801, FIXTURE_PAGES['multi-product-freshness.html']);
+  const prodA = multiScrapeResult.products.find(p => p.post_id === 9101);
+  const prodB = multiScrapeResult.products.find(p => p.post_id === 9102);
+  const prodC = multiScrapeResult.products.find(p => p.post_id === 9103);
+  const prodD = multiScrapeResult.products.find(p => p.post_id === 9104);
+
+  assert(multiScrapeResult.fresh === true, 'Table date today recognized as fresh');
+  assert(prodA !== undefined && prodA.valid === true && prodA.parsed_price === 55000, 'Product A (date today) accepted with parsed price 55,000');
+  assert(prodB !== undefined && prodB.valid === false && prodB.product_fresh === false, 'Product B (date yesterday) rejected due to stale product date');
+  assert(prodC !== undefined && prodC.valid === true && prodC.parsed_price === 57000, 'Product C (no date XPath) inherits table freshness and accepted');
+  assert(prodD !== undefined && prodD.valid === false, 'Product D (broken price XPath) fails extraction');
+  assert(prodA?.valid === true && prodC?.valid === true && !prodB?.valid && !prodD?.valid, 'A and C remain valid while B and D are rejected');
 
   // ==========================================
-  // Scenario 14: Stale Table Date Skips Product Price Extraction
+  // Scenario 14: Real Stale Table Integration Test (scrapeTableSource)
   // ==========================================
-  console.log('\n--- 14. Stale Table Date Skips Product Price Extraction ---');
-  const staleHtml = FIXTURE_PAGES['source-c.html'];
-  const updateDateExtract = extractXPathFromHtml(staleHtml, '//*[@id="update-date-c"]');
-  const evaluatedStale = evaluateFreshness(updateDateExtract.firstValue, now);
-  assert(evaluatedStale.fresh === false, 'Source C date "دیروز ۱۵:۳۰" detected as stale');
+  console.log('\n--- 14. Real Stale Table Integration Test (scrapeTableSource) ---');
+  const stalePageId = db.getNextId('source_pages');
+  const stalePageUrl = 'http://localhost:3000/fixtures/source-c.html';
+  schema.source_pages.push({
+    id: stalePageId,
+    site_id: 1,
+    url: stalePageUrl,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
+  const staleSourceId = db.getNextId('table_sources');
+  const staleTableSource: TableSource = {
+    id: staleSourceId,
+    price_table_id: 1,
+    site_id: 1,
+    source_page_id: stalePageId,
+    source_page_url: stalePageUrl,
+    update_time_xpath: '//*[@id="update-date-c"]', // "دیروز ۱۵:۳۰"
+    recheck_enabled: true,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  schema.table_sources.push(staleTableSource);
+
+  schema.product_selectors.push({
+    id: db.getNextId('product_selectors'),
+    product_id: 1,
+    post_id: 1840,
+    table_source_id: staleSourceId,
+    price_xpath: '//table[@id="tbl-c"]//tr[1]/td[2]',
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
+  const staleScrapeResult = await scrapeTableSource(staleTableSource, 8802, FIXTURE_PAGES['source-c.html']);
+  assert(staleScrapeResult.fresh === false, 'Stale table detected as not fresh (دیروز)');
+  assert(staleScrapeResult.products.length === 0, 'No product price extractions performed when table date is stale');
 
   // ==========================================
   // Scenario 15: Excel Import Processing
@@ -369,11 +492,56 @@ async function runTests() {
   assert(importedProd !== undefined && importedProd.name === 'محصول تستی اکسل', 'Excel import adds new product to schema');
 
   // ==========================================
-  // Scenario 16: Excel Export Workbook Generation
+  // Scenario 16: Excel Export/Import Round-Trip for scrape_method and update_time_xpath
   // ==========================================
-  console.log('\n--- 16. Excel Export Workbook Generation ---');
-  const exportBuffer = await excelService.exportData('products');
-  assert(exportBuffer && (exportBuffer as any).byteLength > 500, 'Generate valid Excel export buffer for products');
+  console.log('\n--- 16. Excel Export/Import Round-Trip for scrape_method and update_time_xpath ---');
+  // 1. Ensure a site with PLAYWRIGHT scrape_method exists
+  let pwSite = schema.sites.find(s => s.scrape_method === 'PLAYWRIGHT');
+  if (!pwSite) {
+    pwSite = {
+      id: db.getNextId('sites'),
+      name: 'سایت پلی‌رایت آزمایشی',
+      base_url: 'http://localhost:3000/fixtures/interactive-page.html',
+      scrape_method: 'PLAYWRIGHT',
+      browser: 'Chromium',
+      timeout: 30,
+      wait_after_load: 1000,
+      active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    schema.sites.push(pwSite);
+  }
+
+  // 2. Export Sites and preview import to verify PLAYWRIGHT survives round-trip
+  const siteExportBuffer = await excelService.exportData('sites');
+  const siteImportPreview = await excelService.previewImport(Buffer.from(siteExportBuffer as any), 'sites', 'sites_roundtrip.xlsx');
+  const reimportedPwSite = siteImportPreview.valid_rows.find(r => r.name === pwSite?.name || r.scrape_method === 'PLAYWRIGHT');
+  assert(reimportedPwSite !== undefined && reimportedPwSite.scrape_method === 'PLAYWRIGHT', 'Site scrape_method = PLAYWRIGHT preserved across Excel export/import');
+
+  // 3. Ensure a product selector with update_time_xpath exists
+  const testSelectorXpath = '//table//tr[1]/td[6]';
+  let dateSel = schema.product_selectors.find(s => s.update_time_xpath === testSelectorXpath);
+  if (!dateSel) {
+    dateSel = {
+      id: db.getNextId('product_selectors'),
+      product_id: 1,
+      post_id: 1840,
+      table_source_id: 1,
+      price_xpath: '//table//tr[1]/td[5]',
+      update_time_xpath: testSelectorXpath,
+      active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    schema.product_selectors.push(dateSel);
+  }
+
+  // 4. Export Product Selectors and preview import to verify update_time_xpath survives round-trip
+  const selectorExportBuffer = await excelService.exportData('product_selectors');
+  const selectorImportPreview = await excelService.previewImport(Buffer.from(selectorExportBuffer as any), 'product_selectors', 'selectors_roundtrip.xlsx');
+  const reimportedSel = selectorImportPreview.valid_rows.find(r => r.update_time_xpath === testSelectorXpath);
+  assert(reimportedSel !== undefined && reimportedSel.update_time_xpath === testSelectorXpath, 'ProductSelector update_time_xpath preserved across Excel export/import');
 
   // ==========================================
   // Scenario 17: WordPress Bulk Publish Payload & Error Handling
@@ -394,7 +562,6 @@ async function runTests() {
   // ==========================================
   console.log('\n--- 18. System Error Resolution & Ignore Workflow ---');
   const testErrorId = db.getNextId('errors');
-  const schema = db.getSchema();
   schema.errors.push({
     id: testErrorId,
     price_table_id: 1,
@@ -427,7 +594,6 @@ async function runTests() {
     id: newPageId,
     site_id: 1,
     url: newPageUrl,
-    page_type: 'HTML' as const,
     active: true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()

@@ -55,7 +55,7 @@
         "unit": "کیلوگرم"
       },
       "created_at": "2026-09-21T08:19:39.381Z",
-      "updated_at": "2026-09-21T08:25:28.011Z"
+      "updated_at": "2026-09-21T11:00:03.239Z"
     },
     {
       "id": 2,
@@ -75,7 +75,7 @@
         "unit": "کیلوگرم"
       },
       "created_at": "2026-09-21T08:19:39.381Z",
-      "updated_at": "2026-09-21T08:25:28.011Z"
+      "updated_at": "2026-09-21T11:00:03.239Z"
     },
     {
       "id": 3,
@@ -95,7 +95,7 @@
         "unit": "کیلوگرم"
       },
       "created_at": "2026-09-21T08:19:39.381Z",
-      "updated_at": "2026-09-21T08:25:28.011Z"
+      "updated_at": "2026-09-21T11:00:03.239Z"
     },
     {
       "id": 4,
@@ -115,7 +115,7 @@
         "unit": "کیلوگرم"
       },
       "created_at": "2026-09-21T08:19:39.381Z",
-      "updated_at": "2026-09-21T08:25:28.011Z"
+      "updated_at": "2026-09-21T11:00:03.239Z"
     },
     {
       "id": 5,
@@ -127,7 +127,7 @@
       "active": true,
       "attributes": {},
       "created_at": "2026-09-21T10:18:01.122Z",
-      "updated_at": "2026-09-21T10:44:16.970Z"
+      "updated_at": "2026-09-21T11:11:23.795Z"
     }
   ],
   "sites": [
@@ -190,6 +190,18 @@
       "created_at": "2026-09-21T08:19:39.381Z",
       "updated_at": "2026-09-21T08:19:39.381Z",
       "scrape_method": "FETCH"
+    },
+    {
+      "id": 6,
+      "name": "سایت پلی‌رایت آزمایشی",
+      "base_url": "http://localhost:3000/fixtures/interactive-page.html",
+      "scrape_method": "PLAYWRIGHT",
+      "browser": "Chromium",
+      "timeout": 30,
+      "wait_after_load": 1000,
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.590Z",
+      "updated_at": "2026-09-21T11:10:44.590Z"
     }
   ],
   "source_pages": [
@@ -232,6 +244,40 @@
       "active": true,
       "created_at": "2026-09-21T08:19:39.381Z",
       "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 6,
+      "site_id": 1,
+      "url": "http://localhost:3000/fixtures/multi-product-freshness.html",
+      "page_type": "HTML",
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.482Z",
+      "updated_at": "2026-09-21T11:10:44.482Z"
+    },
+    {
+      "id": 7,
+      "site_id": 1,
+      "url": "http://localhost:3000/fixtures/source-c.html",
+      "page_type": "HTML",
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.571Z",
+      "updated_at": "2026-09-21T11:10:44.571Z"
+    },
+    {
+      "id": 8,
+      "site_id": 1,
+      "url": "http://localhost:3000/fixtures/multi-product-freshness.html",
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.677Z",
+      "updated_at": "2026-09-21T11:11:23.677Z"
+    },
+    {
+      "id": 9,
+      "site_id": 1,
+      "url": "http://localhost:3000/fixtures/source-c.html",
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.766Z",
+      "updated_at": "2026-09-21T11:11:23.766Z"
     }
   ],
   "table_sources": [
@@ -289,6 +335,54 @@
       "recheck_enabled": false,
       "created_at": "2026-09-21T08:19:39.381Z",
       "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 6,
+      "price_table_id": 1,
+      "site_id": 1,
+      "source_page_id": 6,
+      "source_page_url": "http://localhost:3000/fixtures/multi-product-freshness.html",
+      "update_time_xpath": "//div[@id=\"table-date\"]",
+      "recheck_enabled": true,
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.482Z",
+      "updated_at": "2026-09-21T11:10:44.482Z"
+    },
+    {
+      "id": 7,
+      "price_table_id": 1,
+      "site_id": 1,
+      "source_page_id": 7,
+      "source_page_url": "http://localhost:3000/fixtures/source-c.html",
+      "update_time_xpath": "//*[@id=\"update-date-c\"]",
+      "recheck_enabled": true,
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.571Z",
+      "updated_at": "2026-09-21T11:10:44.571Z"
+    },
+    {
+      "id": 8,
+      "price_table_id": 1,
+      "site_id": 1,
+      "source_page_id": 8,
+      "source_page_url": "http://localhost:3000/fixtures/multi-product-freshness.html",
+      "update_time_xpath": "//div[@id=\"table-date\"]",
+      "recheck_enabled": true,
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.677Z",
+      "updated_at": "2026-09-21T11:11:23.677Z"
+    },
+    {
+      "id": 9,
+      "price_table_id": 1,
+      "site_id": 1,
+      "source_page_id": 9,
+      "source_page_url": "http://localhost:3000/fixtures/source-c.html",
+      "update_time_xpath": "//*[@id=\"update-date-c\"]",
+      "recheck_enabled": true,
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.766Z",
+      "updated_at": "2026-09-21T11:11:23.766Z"
     }
   ],
   "product_selectors": [
@@ -459,7 +553,7 @@
       "updated_at": "2026-09-21T08:19:39.381Z",
       "last_extracted_value": "58,100",
       "last_status": "VALID",
-      "last_extracted_at": "2026-09-21T08:25:27.925Z",
+      "last_extracted_at": "2026-09-21T11:00:03.102Z",
       "update_time_xpath": null
     },
     {
@@ -473,7 +567,7 @@
       "updated_at": "2026-09-21T08:19:39.381Z",
       "last_extracted_value": "58,600",
       "last_status": "VALID",
-      "last_extracted_at": "2026-09-21T08:25:27.938Z",
+      "last_extracted_at": "2026-09-21T11:00:03.121Z",
       "update_time_xpath": null
     },
     {
@@ -487,7 +581,7 @@
       "updated_at": "2026-09-21T08:19:39.381Z",
       "last_extracted_value": "58,950",
       "last_status": "VALID",
-      "last_extracted_at": "2026-09-21T08:25:27.951Z",
+      "last_extracted_at": "2026-09-21T11:00:03.180Z",
       "update_time_xpath": null
     },
     {
@@ -501,8 +595,164 @@
       "updated_at": "2026-09-21T08:19:39.381Z",
       "last_extracted_value": "60,000",
       "last_status": "VALID",
-      "last_extracted_at": "2026-09-21T08:25:27.969Z",
+      "last_extracted_at": "2026-09-21T11:00:03.194Z",
       "update_time_xpath": null
+    },
+    {
+      "id": 17,
+      "product_id": 1,
+      "post_id": 9101,
+      "table_source_id": 6,
+      "price_xpath": "//tr[@id=\"row-a\"]/td[@class=\"price\"]",
+      "update_time_xpath": "//tr[@id=\"row-a\"]/td[@class=\"date\"]",
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.482Z",
+      "updated_at": "2026-09-21T11:10:44.482Z",
+      "last_update_text": "امروز ۱۰:۳۰",
+      "last_update_date": "1405/06/30",
+      "last_update_time": "10:30",
+      "last_fresh": true,
+      "last_extracted_value": "55,000",
+      "last_status": "VALID",
+      "last_extracted_at": "2026-09-21T11:10:44.522Z"
+    },
+    {
+      "id": 18,
+      "product_id": 2,
+      "post_id": 9102,
+      "table_source_id": 6,
+      "price_xpath": "//tr[@id=\"row-b\"]/td[@class=\"price\"]",
+      "update_time_xpath": "//tr[@id=\"row-b\"]/td[@class=\"date\"]",
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.482Z",
+      "updated_at": "2026-09-21T11:10:44.482Z",
+      "last_update_text": "دیروز ۱۶:۰۰",
+      "last_update_date": "yesterday",
+      "last_update_time": "16:00",
+      "last_fresh": false,
+      "last_status": "NOT_UPDATED",
+      "last_extracted_at": "2026-09-21T11:10:44.533Z"
+    },
+    {
+      "id": 19,
+      "product_id": 3,
+      "post_id": 9103,
+      "table_source_id": 6,
+      "price_xpath": "//tr[@id=\"row-c\"]/td[@class=\"price\"]",
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.482Z",
+      "updated_at": "2026-09-21T11:10:44.482Z",
+      "last_extracted_value": "57,000",
+      "last_status": "VALID",
+      "last_extracted_at": "2026-09-21T11:10:44.559Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 20,
+      "product_id": 4,
+      "post_id": 9104,
+      "table_source_id": 6,
+      "price_xpath": "//tr[@id=\"row-d\"]/td[@class=\"nonexistent_price_xpath\"]",
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.482Z",
+      "updated_at": "2026-09-21T11:10:44.482Z",
+      "last_extracted_value": null,
+      "last_status": "NOT_FOUND",
+      "last_extracted_at": "2026-09-21T11:10:44.571Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 21,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 7,
+      "price_xpath": "//table[@id=\"tbl-c\"]//tr[1]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.571Z",
+      "updated_at": "2026-09-21T11:10:44.571Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 22,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 1,
+      "price_xpath": "//table//tr[1]/td[5]",
+      "update_time_xpath": "//table//tr[1]/td[6]",
+      "active": true,
+      "created_at": "2026-09-21T11:10:44.658Z",
+      "updated_at": "2026-09-21T11:10:44.658Z"
+    },
+    {
+      "id": 23,
+      "product_id": 1,
+      "post_id": 9101,
+      "table_source_id": 8,
+      "price_xpath": "//tr[@id=\"row-a\"]/td[@class=\"price\"]",
+      "update_time_xpath": "//tr[@id=\"row-a\"]/td[@class=\"date\"]",
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.677Z",
+      "updated_at": "2026-09-21T11:11:23.677Z",
+      "last_update_text": "امروز ۱۰:۳۰",
+      "last_update_date": "1405/06/30",
+      "last_update_time": "10:30",
+      "last_fresh": true,
+      "last_extracted_value": "55,000",
+      "last_status": "VALID",
+      "last_extracted_at": "2026-09-21T11:11:23.720Z"
+    },
+    {
+      "id": 24,
+      "product_id": 2,
+      "post_id": 9102,
+      "table_source_id": 8,
+      "price_xpath": "//tr[@id=\"row-b\"]/td[@class=\"price\"]",
+      "update_time_xpath": "//tr[@id=\"row-b\"]/td[@class=\"date\"]",
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.677Z",
+      "updated_at": "2026-09-21T11:11:23.677Z",
+      "last_update_text": "دیروز ۱۶:۰۰",
+      "last_update_date": "yesterday",
+      "last_update_time": "16:00",
+      "last_fresh": false,
+      "last_status": "NOT_UPDATED",
+      "last_extracted_at": "2026-09-21T11:11:23.731Z"
+    },
+    {
+      "id": 25,
+      "product_id": 3,
+      "post_id": 9103,
+      "table_source_id": 8,
+      "price_xpath": "//tr[@id=\"row-c\"]/td[@class=\"price\"]",
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.677Z",
+      "updated_at": "2026-09-21T11:11:23.677Z",
+      "last_extracted_value": "57,000",
+      "last_status": "VALID",
+      "last_extracted_at": "2026-09-21T11:11:23.752Z"
+    },
+    {
+      "id": 26,
+      "product_id": 4,
+      "post_id": 9104,
+      "table_source_id": 8,
+      "price_xpath": "//tr[@id=\"row-d\"]/td[@class=\"nonexistent_price_xpath\"]",
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.677Z",
+      "updated_at": "2026-09-21T11:11:23.677Z",
+      "last_extracted_value": null,
+      "last_status": "NOT_FOUND",
+      "last_extracted_at": "2026-09-21T11:11:23.765Z"
+    },
+    {
+      "id": 27,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 9,
+      "price_xpath": "//table[@id=\"tbl-c\"]//tr[1]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T11:11:23.766Z",
+      "updated_at": "2026-09-21T11:11:23.766Z"
     }
   ],
   "page_actions": [
@@ -543,6 +793,21 @@
   },
   "runs": [
     {
+      "id": 3,
+      "trigger_type": "SCHEDULED",
+      "status": "DONE",
+      "price_table_id": 1,
+      "price_table_name": "میلگرد ذوب آهن",
+      "attempt_number": 1,
+      "started_at": "2026-09-21T11:00:02.846Z",
+      "products_expected": 5,
+      "products_extracted": 4,
+      "products_failed": 0,
+      "error_count": 0,
+      "finished_at": "2026-09-21T11:00:03.239Z",
+      "duration_ms": 393
+    },
+    {
       "id": 2,
       "trigger_type": "MANUAL_TABLE",
       "status": "DONE",
@@ -580,7 +845,8 @@
       "price_table_id": 1,
       "run_date": "2026-09-21",
       "status": "PENDING",
-      "attempt_count": 0
+      "attempt_count": 1,
+      "last_attempt_at": "2026-09-21T11:00:02.844Z"
     },
     {
       "id": 2,
@@ -597,14 +863,13 @@
       "price_table_id": 1,
       "table_source_id": 1,
       "run_date": "2026-09-21",
-      "status": "UPDATED",
-      "attempt_count": 2,
-      "fresh": true,
-      "recheck_count": 1,
-      "last_check_at": "2026-09-21T08:25:27.519Z",
+      "status": "FAILED",
+      "attempt_count": 3,
+      "fresh": false,
+      "recheck_count": 2,
+      "last_check_at": "2026-09-21T11:00:02.848Z",
       "first_check_at": "2026-09-21T08:24:45.493Z",
-      "raw_update_text": "امروز ۱۰:۴۲",
-      "normalized_update_date": "1405/06/30",
+      "raw_update_text": "",
       "last_price_fetch_at": "2026-09-21T08:25:27.670Z"
     },
     {
@@ -628,10 +893,10 @@
       "table_source_id": 3,
       "run_date": "2026-09-21",
       "status": "NOT_UPDATED",
-      "attempt_count": 2,
+      "attempt_count": 3,
       "fresh": false,
       "recheck_count": 0,
-      "last_check_at": "2026-09-21T08:25:27.848Z",
+      "last_check_at": "2026-09-21T11:00:02.850Z",
       "first_check_at": "2026-09-21T08:24:46.065Z",
       "raw_update_text": "دیروز ۱۵:۳۰",
       "normalized_update_date": "yesterday"
@@ -642,14 +907,14 @@
       "table_source_id": 4,
       "run_date": "2026-09-21",
       "status": "UPDATED",
-      "attempt_count": 2,
+      "attempt_count": 3,
       "fresh": true,
-      "recheck_count": 1,
-      "last_check_at": "2026-09-21T08:25:27.889Z",
+      "recheck_count": 2,
+      "last_check_at": "2026-09-21T11:00:03.030Z",
       "first_check_at": "2026-09-21T08:24:46.110Z",
       "raw_update_text": "امروز ساعت ۱۰:۵۵",
       "normalized_update_date": "1405/06/30",
-      "last_price_fetch_at": "2026-09-21T08:25:27.970Z"
+      "last_price_fetch_at": "2026-09-21T11:00:03.194Z"
     },
     {
       "id": 5,
@@ -657,10 +922,10 @@
       "table_source_id": 5,
       "run_date": "2026-09-21",
       "status": "NOT_UPDATED",
-      "attempt_count": 2,
+      "attempt_count": 3,
       "fresh": false,
       "recheck_count": 0,
-      "last_check_at": "2026-09-21T08:25:27.970Z",
+      "last_check_at": "2026-09-21T11:00:03.194Z",
       "first_check_at": "2026-09-21T08:24:46.225Z",
       "raw_update_text": "1403/10/12",
       "normalized_update_date": "1403/10/12"
@@ -1074,6 +1339,74 @@
       "extracted_at": "2026-09-21T08:25:27.970Z",
       "status": "VALID",
       "run_id": 2
+    },
+    {
+      "id": 25,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 4,
+      "site_id": 4,
+      "price_table_id": 1,
+      "raw_value": "58,100",
+      "parsed_price": 58100,
+      "source_update_date": "1405/06/30",
+      "source_update_time": "10:55",
+      "attempt_number": 3,
+      "is_recheck": true,
+      "extracted_at": "2026-09-21T11:00:03.194Z",
+      "status": "VALID",
+      "run_id": 3
+    },
+    {
+      "id": 26,
+      "product_id": 2,
+      "post_id": 1841,
+      "table_source_id": 4,
+      "site_id": 4,
+      "price_table_id": 1,
+      "raw_value": "58,600",
+      "parsed_price": 58600,
+      "source_update_date": "1405/06/30",
+      "source_update_time": "10:55",
+      "attempt_number": 3,
+      "is_recheck": true,
+      "extracted_at": "2026-09-21T11:00:03.194Z",
+      "status": "VALID",
+      "run_id": 3
+    },
+    {
+      "id": 27,
+      "product_id": 3,
+      "post_id": 1842,
+      "table_source_id": 4,
+      "site_id": 4,
+      "price_table_id": 1,
+      "raw_value": "58,950",
+      "parsed_price": 58950,
+      "source_update_date": "1405/06/30",
+      "source_update_time": "10:55",
+      "attempt_number": 3,
+      "is_recheck": true,
+      "extracted_at": "2026-09-21T11:00:03.194Z",
+      "status": "VALID",
+      "run_id": 3
+    },
+    {
+      "id": 28,
+      "product_id": 4,
+      "post_id": 1843,
+      "table_source_id": 4,
+      "site_id": 4,
+      "price_table_id": 1,
+      "raw_value": "60,000",
+      "parsed_price": 60000,
+      "source_update_date": "1405/06/30",
+      "source_update_time": "10:55",
+      "attempt_number": 3,
+      "is_recheck": true,
+      "extracted_at": "2026-09-21T11:00:03.194Z",
+      "status": "VALID",
+      "run_id": 3
     }
   ],
   "price_changes": [
@@ -1131,6 +1464,93 @@
     }
   ],
   "table_revisions": [
+    {
+      "id": 3,
+      "price_table_id": 1,
+      "price_table_name": "میلگرد ذوب آهن",
+      "revision_number": 3,
+      "calculated_at": "2026-09-21T11:00:03.211Z",
+      "source_count_used": 3,
+      "pending_source_count": 2,
+      "failed_source_count": 0,
+      "wordpress_status": "SUCCESS",
+      "run_id": 3,
+      "items": [
+        {
+          "id": 9,
+          "table_revision_id": 3,
+          "product_id": 1,
+          "post_id": 1840,
+          "product_name": "میلگرد ۱۲ ذوب آهن",
+          "calculated_price": 57800,
+          "previous_price": 57800,
+          "is_blocked_by_price_guard": false,
+          "status": "PUBLISHED"
+        },
+        {
+          "id": 10,
+          "table_revision_id": 3,
+          "product_id": 2,
+          "post_id": 1841,
+          "product_name": "میلگرد ۱۴ ذوب آهن",
+          "calculated_price": 58200,
+          "previous_price": 58200,
+          "is_blocked_by_price_guard": false,
+          "status": "PUBLISHED"
+        },
+        {
+          "id": 11,
+          "table_revision_id": 3,
+          "product_id": 3,
+          "post_id": 1842,
+          "product_name": "میلگرد ۱۶ ذوب آهن",
+          "calculated_price": 58950,
+          "previous_price": 58950,
+          "is_blocked_by_price_guard": false,
+          "status": "PUBLISHED"
+        },
+        {
+          "id": 12,
+          "table_revision_id": 3,
+          "product_id": 4,
+          "post_id": 1843,
+          "product_name": "میلگرد ۱۸ ذوب آهن",
+          "calculated_price": 60000,
+          "previous_price": 60000,
+          "is_blocked_by_price_guard": false,
+          "status": "PUBLISHED"
+        }
+      ],
+      "wordpress_response": {
+        "success": true,
+        "price_table_id": 1,
+        "updated": 4,
+        "failed": 0,
+        "items": [
+          {
+            "post_id": 1840,
+            "new_price": 57800,
+            "success": true
+          },
+          {
+            "post_id": 1841,
+            "new_price": 58200,
+            "success": true
+          },
+          {
+            "post_id": 1842,
+            "new_price": 58950,
+            "success": true
+          },
+          {
+            "post_id": 1843,
+            "new_price": 60000,
+            "success": true
+          }
+        ]
+      },
+      "published_at": "2026-09-21T11:00:03.239Z"
+    },
     {
       "id": 2,
       "price_table_id": 1,
@@ -1394,10 +1814,422 @@
       "previous_price": 60000,
       "is_blocked_by_price_guard": false,
       "status": "PUBLISHED"
+    },
+    {
+      "id": 9,
+      "table_revision_id": 3,
+      "product_id": 1,
+      "post_id": 1840,
+      "product_name": "میلگرد ۱۲ ذوب آهن",
+      "calculated_price": 57800,
+      "previous_price": 57800,
+      "is_blocked_by_price_guard": false,
+      "status": "PUBLISHED"
+    },
+    {
+      "id": 10,
+      "table_revision_id": 3,
+      "product_id": 2,
+      "post_id": 1841,
+      "product_name": "میلگرد ۱۴ ذوب آهن",
+      "calculated_price": 58200,
+      "previous_price": 58200,
+      "is_blocked_by_price_guard": false,
+      "status": "PUBLISHED"
+    },
+    {
+      "id": 11,
+      "table_revision_id": 3,
+      "product_id": 3,
+      "post_id": 1842,
+      "product_name": "میلگرد ۱۶ ذوب آهن",
+      "calculated_price": 58950,
+      "previous_price": 58950,
+      "is_blocked_by_price_guard": false,
+      "status": "PUBLISHED"
+    },
+    {
+      "id": 12,
+      "table_revision_id": 3,
+      "product_id": 4,
+      "post_id": 1843,
+      "product_name": "میلگرد ۱۸ ذوب آهن",
+      "calculated_price": 60000,
+      "previous_price": 60000,
+      "is_blocked_by_price_guard": false,
+      "status": "PUBLISHED"
     }
   ],
-  "errors": [],
+  "errors": [
+    {
+      "id": 1,
+      "price_table_id": 1,
+      "site_id": 1,
+      "source_page_id": 1,
+      "error_type": "PAGE_LOAD_FAILED",
+      "error_message": "سایت «منبع الف (آهن‌نیوز)» با روش استخراج FETCH تنظیم شده است، اما دارای دستورات تعاملی (SCROLL) می‌باشد. جهت اجرای دستورات تعاملی، روش استخراج سایت را به PLAYWRIGHT تغییر دهید.",
+      "execution_stage": "SCRAPING",
+      "attempt_number": 3,
+      "run_id": 3,
+      "status": "OPEN",
+      "created_at": "2026-09-21T11:00:02.850Z"
+    }
+  ],
   "logs": [
+    {
+      "id": 68,
+      "level": "INFO",
+      "message": "نتیجه انتشار در وردپرس: 2 موفق، 0 ناموفق",
+      "metadata": {
+        "updated": 2,
+        "failed": 0
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:11:23.947Z"
+    },
+    {
+      "id": 67,
+      "level": "INFO",
+      "message": "ارسال به وب‌سایت وردپرس/ووکامرس (2 محصول)",
+      "metadata": {
+        "priceTableId": 1,
+        "count": 2,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:11:23.911Z"
+    },
+    {
+      "id": 66,
+      "level": "WARNING",
+      "message": "بررسی تازگی جدول منبع: دیروز ۱۵:۳۰ -> قدیمی (تاریخ متعلق به دیروز است)",
+      "metadata": {
+        "raw_text": "دیروز ۱۵:۳۰",
+        "normalized_date": "yesterday",
+        "normalized_time": "15:30",
+        "fresh": false,
+        "reason": "تاریخ متعلق به دیروز است"
+      },
+      "run_id": 8802,
+      "table_source_id": 9,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:11:23.793Z"
+    },
+    {
+      "id": 65,
+      "level": "INFO",
+      "message": "بارگذاری صفحه منبع: http://localhost:3000/fixtures/source-c.html (روش: FETCH)",
+      "metadata": {
+        "url": "http://localhost:3000/fixtures/source-c.html",
+        "table_source_id": 9,
+        "scrape_method": "FETCH"
+      },
+      "run_id": 8802,
+      "table_source_id": 9,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:11:23.766Z"
+    },
+    {
+      "id": 64,
+      "level": "INFO",
+      "message": "تاریخ محصول 2 قدیمی است (دیروز ۱۶:۰۰)؛ قیمت از این منبع استخراج نشد.",
+      "metadata": {
+        "selector_id": 24,
+        "raw_date": "دیروز ۱۶:۰۰"
+      },
+      "run_id": 8801,
+      "table_source_id": 8,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:11:23.731Z"
+    },
+    {
+      "id": 63,
+      "level": "INFO",
+      "message": "بررسی تازگی جدول منبع: امروز ۱۰:۳۰ -> بروز (امروز) (عبارت «امروز» در تاریخ منبع ثبت شده است)",
+      "metadata": {
+        "raw_text": "امروز ۱۰:۳۰",
+        "normalized_date": "1405/06/30",
+        "normalized_time": "10:30",
+        "fresh": true,
+        "reason": "عبارت «امروز» در تاریخ منبع ثبت شده است"
+      },
+      "run_id": 8801,
+      "table_source_id": 8,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:11:23.692Z"
+    },
+    {
+      "id": 62,
+      "level": "INFO",
+      "message": "بارگذاری صفحه منبع: http://localhost:3000/fixtures/multi-product-freshness.html (روش: FETCH)",
+      "metadata": {
+        "url": "http://localhost:3000/fixtures/multi-product-freshness.html",
+        "table_source_id": 8,
+        "scrape_method": "FETCH"
+      },
+      "run_id": 8801,
+      "table_source_id": 8,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:11:23.678Z"
+    },
+    {
+      "id": 61,
+      "level": "INFO",
+      "message": "نتیجه انتشار در وردپرس: 2 موفق، 0 ناموفق",
+      "metadata": {
+        "updated": 2,
+        "failed": 0
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:10:44.719Z"
+    },
+    {
+      "id": 60,
+      "level": "INFO",
+      "message": "ارسال به وب‌سایت وردپرس/ووکامرس (2 محصول)",
+      "metadata": {
+        "priceTableId": 1,
+        "count": 2,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:10:44.688Z"
+    },
+    {
+      "id": 59,
+      "level": "WARNING",
+      "message": "بررسی تازگی جدول منبع: دیروز ۱۵:۳۰ -> قدیمی (تاریخ متعلق به دیروز است)",
+      "metadata": {
+        "raw_text": "دیروز ۱۵:۳۰",
+        "normalized_date": "yesterday",
+        "normalized_time": "15:30",
+        "fresh": false,
+        "reason": "تاریخ متعلق به دیروز است"
+      },
+      "run_id": 8802,
+      "table_source_id": 7,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:10:44.587Z"
+    },
+    {
+      "id": 58,
+      "level": "INFO",
+      "message": "بارگذاری صفحه منبع: http://localhost:3000/fixtures/source-c.html (روش: FETCH)",
+      "metadata": {
+        "url": "http://localhost:3000/fixtures/source-c.html",
+        "table_source_id": 7,
+        "scrape_method": "FETCH"
+      },
+      "run_id": 8802,
+      "table_source_id": 7,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:10:44.571Z"
+    },
+    {
+      "id": 57,
+      "level": "INFO",
+      "message": "تاریخ محصول 2 قدیمی است (دیروز ۱۶:۰۰)؛ قیمت از این منبع استخراج نشد.",
+      "metadata": {
+        "selector_id": 18,
+        "raw_date": "دیروز ۱۶:۰۰"
+      },
+      "run_id": 8801,
+      "table_source_id": 6,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:10:44.533Z"
+    },
+    {
+      "id": 56,
+      "level": "INFO",
+      "message": "بررسی تازگی جدول منبع: امروز ۱۰:۳۰ -> بروز (امروز) (عبارت «امروز» در تاریخ منبع ثبت شده است)",
+      "metadata": {
+        "raw_text": "امروز ۱۰:۳۰",
+        "normalized_date": "1405/06/30",
+        "normalized_time": "10:30",
+        "fresh": true,
+        "reason": "عبارت «امروز» در تاریخ منبع ثبت شده است"
+      },
+      "run_id": 8801,
+      "table_source_id": 6,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:10:44.497Z"
+    },
+    {
+      "id": 55,
+      "level": "INFO",
+      "message": "بارگذاری صفحه منبع: http://localhost:3000/fixtures/multi-product-freshness.html (روش: FETCH)",
+      "metadata": {
+        "url": "http://localhost:3000/fixtures/multi-product-freshness.html",
+        "table_source_id": 6,
+        "scrape_method": "FETCH"
+      },
+      "run_id": 8801,
+      "table_source_id": 6,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:10:44.483Z"
+    },
+    {
+      "id": 54,
+      "level": "INFO",
+      "message": "نتیجه انتشار در وردپرس: 4 موفق، 0 ناموفق",
+      "metadata": {
+        "updated": 4,
+        "failed": 0
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:00:03.238Z"
+    },
+    {
+      "id": 53,
+      "level": "INFO",
+      "message": "ارسال به وب‌سایت وردپرس/ووکامرس (4 محصول)",
+      "metadata": {
+        "priceTableId": 1,
+        "count": 4,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:00:03.211Z"
+    },
+    {
+      "id": 52,
+      "level": "INFO",
+      "message": "تعداد 3 منبع بروز شده برای محاسبه حداقل قیمت یافت شد. محاسبه حداقل و Price Guard...",
+      "metadata": {
+        "updatedSourcesCount": 3
+      },
+      "run_id": 3,
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:00:03.210Z"
+    },
+    {
+      "id": 51,
+      "level": "WARNING",
+      "message": "بررسی تازگی جدول منبع: 1403/10/12 -> قدیمی (تاریخ منبع (1403/10/12) متعلق به گذشته است)",
+      "metadata": {
+        "raw_text": "1403/10/12",
+        "normalized_date": "1403/10/12",
+        "normalized_time": null,
+        "fresh": false,
+        "reason": "تاریخ منبع (1403/10/12) متعلق به گذشته است"
+      },
+      "run_id": 3,
+      "table_source_id": 5,
+      "site_id": 5,
+      "created_at": "2026-09-21T11:00:03.208Z"
+    },
+    {
+      "id": 50,
+      "level": "INFO",
+      "message": "بارگذاری صفحه منبع: http://localhost:3000/fixtures/source-e.html (روش: FETCH)",
+      "metadata": {
+        "url": "http://localhost:3000/fixtures/source-e.html",
+        "table_source_id": 5,
+        "scrape_method": "FETCH"
+      },
+      "run_id": 3,
+      "table_source_id": 5,
+      "site_id": 5,
+      "created_at": "2026-09-21T11:00:03.194Z"
+    },
+    {
+      "id": 49,
+      "level": "INFO",
+      "message": "بررسی تازگی جدول منبع: امروز ساعت ۱۰:۵۵ -> بروز (امروز) (عبارت «امروز» در تاریخ منبع ثبت شده است)",
+      "metadata": {
+        "raw_text": "امروز ساعت ۱۰:۵۵",
+        "normalized_date": "1405/06/30",
+        "normalized_time": "10:55",
+        "fresh": true,
+        "reason": "عبارت «امروز» در تاریخ منبع ثبت شده است"
+      },
+      "run_id": 3,
+      "table_source_id": 4,
+      "site_id": 4,
+      "created_at": "2026-09-21T11:00:03.075Z"
+    },
+    {
+      "id": 48,
+      "level": "INFO",
+      "message": "بارگذاری صفحه منبع: http://localhost:3000/fixtures/source-d.html (روش: FETCH)",
+      "metadata": {
+        "url": "http://localhost:3000/fixtures/source-d.html",
+        "table_source_id": 4,
+        "scrape_method": "FETCH"
+      },
+      "run_id": 3,
+      "table_source_id": 4,
+      "site_id": 4,
+      "created_at": "2026-09-21T11:00:03.030Z"
+    },
+    {
+      "id": 47,
+      "level": "WARNING",
+      "message": "بررسی تازگی جدول منبع: دیروز ۱۵:۳۰ -> قدیمی (تاریخ متعلق به دیروز است)",
+      "metadata": {
+        "raw_text": "دیروز ۱۵:۳۰",
+        "normalized_date": "yesterday",
+        "normalized_time": "15:30",
+        "fresh": false,
+        "reason": "تاریخ متعلق به دیروز است"
+      },
+      "run_id": 3,
+      "table_source_id": 3,
+      "site_id": 3,
+      "created_at": "2026-09-21T11:00:03.026Z"
+    },
+    {
+      "id": 46,
+      "level": "INFO",
+      "message": "بارگذاری صفحه منبع: http://localhost:3000/fixtures/source-c.html (روش: FETCH)",
+      "metadata": {
+        "url": "http://localhost:3000/fixtures/source-c.html",
+        "table_source_id": 3,
+        "scrape_method": "FETCH"
+      },
+      "run_id": 3,
+      "table_source_id": 3,
+      "site_id": 3,
+      "created_at": "2026-09-21T11:00:02.850Z"
+    },
+    {
+      "id": 45,
+      "level": "INFO",
+      "message": "بارگذاری صفحه منبع: http://localhost:3000/fixtures/source-a.html (روش: FETCH)",
+      "metadata": {
+        "url": "http://localhost:3000/fixtures/source-a.html",
+        "table_source_id": 1,
+        "scrape_method": "FETCH"
+      },
+      "run_id": 3,
+      "table_source_id": 1,
+      "site_id": 1,
+      "created_at": "2026-09-21T11:00:02.848Z"
+    },
+    {
+      "id": 44,
+      "level": "INFO",
+      "message": "تعداد 4 منبع از مجموع 5 منبع در این دور بررسی خواهند شد.",
+      "metadata": {
+        "sourcesToCheckCount": 4
+      },
+      "run_id": 3,
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:00:02.847Z"
+    },
+    {
+      "id": 43,
+      "level": "INFO",
+      "message": "شروع اجرای جدول قیمت «میلگرد ذوب آهن» (تلاش شماره 1) [نوع: SCHEDULED]",
+      "metadata": {
+        "priceTableId": 1,
+        "attempt": 1,
+        "triggerType": "SCHEDULED"
+      },
+      "run_id": 3,
+      "price_table_id": 1,
+      "created_at": "2026-09-21T11:00:02.847Z"
+    },
     {
       "id": 42,
       "level": "INFO",
@@ -1956,6 +2788,30 @@
     }
   ],
   "import_history": [
+    {
+      "id": 9,
+      "file_name": "test_products.xlsx",
+      "import_type": "products",
+      "uploaded_at": "2026-09-21T11:11:23.795Z",
+      "rows_total": 1,
+      "rows_new": 1,
+      "rows_updated": 0,
+      "rows_unchanged": 0,
+      "rows_failed": 0,
+      "status": "SUCCESS"
+    },
+    {
+      "id": 8,
+      "file_name": "test_products.xlsx",
+      "import_type": "products",
+      "uploaded_at": "2026-09-21T11:10:44.589Z",
+      "rows_total": 1,
+      "rows_new": 1,
+      "rows_updated": 0,
+      "rows_unchanged": 0,
+      "rows_failed": 0,
+      "status": "SUCCESS"
+    },
     {
       "id": 7,
       "file_name": "test_products.xlsx",
