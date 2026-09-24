@@ -591,18 +591,21 @@ export class ExcelService {
           const tableName = String(rowData['جدول قیمت'] ?? rowData['price_table'] ?? '').trim();
 
           let tableSource = schema.table_sources.find(ts => {
+            let siteMatch = true;
+            let tableMatch = true;
             if (siteName) {
-              const s = schema.sites.find(site => site.name === siteName);
-              if (s && ts.site_id === s.id) return true;
+              const s = schema.sites.find(site => site.name.toLowerCase() === siteName.toLowerCase());
+              siteMatch = Boolean(s && ts.site_id === s.id);
             }
             if (tableName) {
-              const pt = schema.price_tables.find(t => t.name === tableName);
-              if (pt && ts.price_table_id === pt.id) return true;
+              const pt = schema.price_tables.find(t => t.name.toLowerCase() === tableName.toLowerCase());
+              tableMatch = Boolean(pt && ts.price_table_id === pt.id);
             }
-            return false;
+            return (siteName || tableName) ? (siteMatch && tableMatch) : false;
           });
 
           const parsedRow = {
+            id: rowData['شناسه'] ? parseInt(String(rowData['شناسه']), 10) : (rowData['id'] ? parseInt(String(rowData['id']), 10) : undefined),
             post_id: postId,
             product_id: product?.id,
             table_source_id: tableSource?.id,
@@ -611,10 +614,12 @@ export class ExcelService {
             active
           };
 
-          const existing = schema.product_selectors.find(ps => 
-            (parsedRow.product_id ? ps.product_id === parsedRow.product_id : ps.post_id === postId) &&
-            (parsedRow.table_source_id ? ps.table_source_id === parsedRow.table_source_id : true)
-          );
+          const existing = parsedRow.id
+            ? schema.product_selectors.find(ps => ps.id === parsedRow.id)
+            : schema.product_selectors.find(ps => 
+                (parsedRow.product_id ? ps.product_id === parsedRow.product_id : ps.post_id === postId) &&
+                (parsedRow.table_source_id ? ps.table_source_id === parsedRow.table_source_id : true)
+              );
 
           if (existing) {
             if (existing.price_xpath === priceXpath && existing.update_time_xpath === (updateTimeXpath || null) && existing.active === active) {
@@ -735,7 +740,9 @@ export class ExcelService {
         if (!tableSourceId) {
           tableSourceId = schema.table_sources[0]?.id || 1;
         }
-        const existing = schema.product_selectors.find(ps => ps.product_id === productId && ps.table_source_id === tableSourceId);
+        const existing = row.id
+          ? schema.product_selectors.find(ps => ps.id === row.id)
+          : schema.product_selectors.find(ps => ps.product_id === productId && ps.table_source_id === tableSourceId);
         const now = new Date().toISOString();
         if (existing) {
           existing.price_xpath = row.price_xpath;

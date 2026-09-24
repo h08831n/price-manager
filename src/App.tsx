@@ -79,6 +79,35 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  // Safe API Fetch Helpers
+  const safeJson = async (res: Response) => {
+    try {
+      const text = await res.text();
+      return text ? JSON.parse(text) : {};
+    } catch {
+      return { error: `پاسخ نامعتبر از سرور (کد ${res.status})` };
+    }
+  };
+
+  const fetchJson = async <T,>(url: string, fallback: T): Promise<T> => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`[API] Endpoint ${url} returned ${res.status}`);
+        return fallback;
+      }
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        console.warn(`[API] Endpoint ${url} returned non-JSON response`);
+        return fallback;
+      }
+      return await res.json();
+    } catch (err) {
+      console.warn(`[API] Fetch failed for ${url}:`, err);
+      return fallback;
+    }
+  };
+
   // Fetch All Application Data
   const loadAllData = useCallback(async () => {
     setIsRefreshing(true);
@@ -102,45 +131,45 @@ export default function App() {
         revRes,
         settRes
       ] = await Promise.all([
-        fetch('/api/dashboard').then((r) => r.json()),
-        fetch('/api/products').then((r) => r.json()),
-        fetch('/api/factories').then((r) => r.json()),
-        fetch('/api/price-tables').then((r) => r.json()),
-        fetch('/api/sites').then((r) => r.json()),
-        fetch('/api/source-pages').then((r) => r.json()),
-        fetch('/api/table-sources').then((r) => r.json()),
-        fetch('/api/selectors').then((r) => r.json()),
-        fetch('/api/page-actions').then((r) => r.json()),
-        fetch('/api/runs').then((r) => r.json()),
-        fetch('/api/errors').then((r) => r.json()),
-        fetch('/api/logs').then((r) => r.json()),
-        fetch('/api/history/config').then((r) => r.json()),
-        fetch('/api/history/import').then((r) => r.json()),
-        fetch('/api/price-changes').then((r) => r.json()),
-        fetch('/api/table-revisions').then((r) => r.json()),
-        fetch('/api/settings').then((r) => r.json())
+        fetchJson<DashboardData | null>('/api/dashboard', null),
+        fetchJson<Product[]>('/api/products', []),
+        fetchJson<Factory[]>('/api/factories', []),
+        fetchJson<PriceTable[]>('/api/price-tables', []),
+        fetchJson<Site[]>('/api/sites', []),
+        fetchJson<SourcePage[]>('/api/source-pages', []),
+        fetchJson<TableSource[]>('/api/table-sources', []),
+        fetchJson<ProductSelector[]>('/api/selectors', []),
+        fetchJson<PageAction[]>('/api/page-actions', []),
+        fetchJson<ExecutionRun[]>('/api/runs', []),
+        fetchJson<SystemError[]>('/api/errors', []),
+        fetchJson<SystemLog[]>('/api/logs', []),
+        fetchJson<ConfigHistoryItem[]>('/api/history/config', []),
+        fetchJson<ImportHistoryItem[]>('/api/history/import', []),
+        fetchJson<PriceChange[]>('/api/price-changes', []),
+        fetchJson<TableRevision[]>('/api/table-revisions', []),
+        fetchJson<GlobalSettings | null>('/api/settings', null)
       ]);
 
-      setDashboardData(dashRes);
-      setProducts(prodRes);
-      setFactories(facRes);
-      setPriceTables(tblRes);
-      setSites(siteRes);
-      setSourcePages(spRes);
-      setTableSources(tsRes);
-      setSelectors(selRes);
-      setPageActions(actRes);
-      setRuns(runRes);
-      setErrors(errRes);
-      setLogs(logRes);
-      setConfigHistory(confHistRes);
-      setImportHistory(impHistRes);
-      setPriceChanges(changesRes);
-      setTableRevisions(revRes);
-      setSettings(settRes);
+      if (dashRes) setDashboardData(dashRes);
+      if (Array.isArray(prodRes)) setProducts(prodRes);
+      if (Array.isArray(facRes)) setFactories(facRes);
+      if (Array.isArray(tblRes)) setPriceTables(tblRes);
+      if (Array.isArray(siteRes)) setSites(siteRes);
+      if (Array.isArray(spRes)) setSourcePages(spRes);
+      if (Array.isArray(tsRes)) setTableSources(tsRes);
+      if (Array.isArray(selRes)) setSelectors(selRes);
+      if (Array.isArray(actRes)) setPageActions(actRes);
+      if (Array.isArray(runRes)) setRuns(runRes);
+      if (Array.isArray(errRes)) setErrors(errRes);
+      if (Array.isArray(logRes)) setLogs(logRes);
+      if (Array.isArray(confHistRes)) setConfigHistory(confHistRes);
+      if (Array.isArray(impHistRes)) setImportHistory(impHistRes);
+      if (Array.isArray(changesRes)) setPriceChanges(changesRes);
+      if (Array.isArray(revRes)) setTableRevisions(revRes);
+      if (settRes) setSettings(settRes);
 
       // Keep selectedTable in sync if open
-      if (selectedTable) {
+      if (selectedTable && Array.isArray(tblRes)) {
         const refreshedTbl = tblRes.find((t: PriceTable) => t.id === selectedTable.id);
         if (refreshedTbl) setSelectedTable(refreshedTbl);
       }
@@ -166,7 +195,7 @@ export default function App() {
     try {
       showToast('اجرای جدول قیمت آغاز شد...', 'info');
       const res = await fetch(`/api/price-tables/${tableId}/run`, { method: 'POST' });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در اجرای جدول');
       showToast('اجرای جدول با موفقیت به پایان رسید');
       loadAllData();
@@ -179,7 +208,7 @@ export default function App() {
     try {
       showToast('اجرای منبع آغاز شد...', 'info');
       const res = await fetch(`/api/table-sources/${sourceId}/run`, { method: 'POST' });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در اجرای منبع');
       showToast('اجرای منبع با موفقیت انجام شد');
       loadAllData();
@@ -197,7 +226,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(prod)
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ذخیره محصول');
       showToast(prod.id ? 'محصول بروزرسانی شد' : 'محصول با موفقیت اضافه شد');
       loadAllData();
@@ -215,7 +244,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fac)
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ثبت کارخانه');
       showToast(fac.id ? 'کارخانه بروزرسانی شد' : 'کارخانه جدید با موفقیت ثبت شد');
       loadAllData();
@@ -233,7 +262,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(table)
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ذخیره جدول');
       showToast(table.id ? 'جدول قیمت بروزرسانی شد' : 'جدول قیمت جدید ثبت شد');
       await loadAllData();
@@ -256,7 +285,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(site)
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ثبت سایت');
       showToast('اطلاعات سایت با موفقیت ذخیره شد');
       loadAllData();
@@ -272,7 +301,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(page)
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ثبت صفحه');
       showToast('صفحه منبع با موفقیت اضافه شد');
       loadAllData();
@@ -288,7 +317,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(action)
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ثبت دستور');
       showToast('دستور شبیه‌سازی مرورگر اضافه شد');
       loadAllData();
@@ -319,7 +348,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      const result = await res.json();
+      const result = await safeJson(res);
       if (!res.ok) throw new Error(result.error || 'خطا در ذخیره سلکتور');
       showToast('سلکتور با موفقیت بروزرسانی شد');
       loadAllData();
@@ -337,7 +366,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ts)
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ثبت منبع جدول');
       showToast('اطلاعات منبع با موفقیت ذخیره شد');
       loadAllData();
@@ -349,7 +378,7 @@ export default function App() {
   const handleDeleteTableSource = async (id: number) => {
     try {
       const res = await fetch(`/api/table-sources/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در حذف منبع جدول');
       showToast('منبع جدول با موفقیت حذف گردید');
       loadAllData();
@@ -384,7 +413,7 @@ export default function App() {
     try {
       showToast('تلاش مجدد آغاز شد...', 'info');
       const res = await fetch(`/api/errors/${id}/retry`, { method: 'POST' });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در تلاش مجدد');
       showToast('تلاش مجدد با موفقیت انجام شد و خطا رفع گردید');
       loadAllData();
@@ -397,7 +426,7 @@ export default function App() {
     try {
       showToast('در حال ارسال مجدد به وردپرس...', 'info');
       const res = await fetch(`/api/wordpress/retry-publish/${revisionId}`, { method: 'POST' });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ارسال به وردپرس');
       showToast('قیمت‌ها با موفقیت در ووکامرس بروزرسانی شدند');
       loadAllData();
@@ -413,7 +442,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ذخیره تنظیمات');
       setSettings(data);
       showToast('تنظیمات با موفقیت در سیستم ذخیره گردید');

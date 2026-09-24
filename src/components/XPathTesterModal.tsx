@@ -33,7 +33,9 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, xpath, source_id: sourceId, type: testType })
       });
-      const data = await response.json();
+      const text = await response.text();
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { success: false, error: `پاسخ نامعتبر از سرور (${response.status})` }; }
       setResult(data);
     } catch (err: any) {
       setResult({ success: false, error: err.message });

@@ -1,4 +1,8 @@
-// Comprehensive Test Suite for Price System (18 Complete Scenarios)
+// Comprehensive Test Suite for Price System (20 Complete Scenarios)
+import path from 'path';
+import fs from 'fs';
+import express from 'express';
+import request from 'supertest';
 import { toAsciiDigits, gregorianToJalali, evaluateFreshness } from '../scraper/freshness';
 import { parseProductPrice } from '../scraper/priceParser';
 import { checkPriceGuard, calculateMinimumPrices, getEffectiveConfig } from '../engine/priceGuard';
@@ -11,6 +15,18 @@ import { excelService } from '../excel/excelService';
 import { publishTableToWordPress } from '../wordpress/client';
 import { closePlaywrightBrowser } from '../scraper/playwrightBrowserManager';
 import { Site, PageAction, TableSource, SourcePage, ProductSelector } from '../../src/types';
+import { apiRouter } from '../routes/api';
+import { getSeedDatabase } from '../db/seed';
+
+// Force hermetic test database file
+const TEST_DB_FILE = process.env.DATABASE_FILE || path.join(process.cwd(), 'data', 'test-database.json');
+process.env.DATABASE_FILE = TEST_DB_FILE;
+
+// Setup isolated Express test application
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/api', apiRouter);
 
 let passed = 0;
 let failed = 0;
@@ -27,6 +43,10 @@ function assert(condition: boolean, testName: string) {
 
 async function runTests() {
   console.log('🧪 Running Price Collector System Automated Tests (20 Scenarios)...\n');
+
+  // Hermetic database initialization: always reset test database to fresh seed
+  db.setDatabaseFile(TEST_DB_FILE);
+  db.resetWith(getSeedDatabase());
   const schema = db.getSchema();
 
   // ==========================================
@@ -495,7 +515,7 @@ async function runTests() {
   // Scenario 16: Excel Export/Import Round-Trip for scrape_method and update_time_xpath
   // ==========================================
   console.log('\n--- 16. Excel Export/Import Round-Trip for scrape_method and update_time_xpath ---');
-  // 1. Ensure a site with PLAYWRIGHT scrape_method exists
+  // 1. Ensure a site with PLAYWRIGHT scrape_method exists and persist to test DB
   let pwSite = schema.sites.find(s => s.scrape_method === 'PLAYWRIGHT');
   if (!pwSite) {
     pwSite = {
@@ -511,37 +531,40 @@ async function runTests() {
       updated_at: new Date().toISOString()
     };
     schema.sites.push(pwSite);
+  } else {
+    pwSite.scrape_method = 'PLAYWRIGHT';
   }
+  db.save();
 
-  // 2. Export Sites and preview import to verify PLAYWRIGHT survives round-trip
+  // 2. Export Sites and verify PLAYWRIGHT survives round-trip via preview and applyImport
   const siteExportBuffer = await excelService.exportData('sites');
+  // Mutate the site in test DB to FETCH to verify applyImport truly restores it
+  pwSite.scrape_method = 'FETCH';
+  db.save();
+  assert(db.getSchema().sites.find(s => s.id === pwSite?.id)?.scrape_method === 'FETCH', 'Site temporarily mutated to FETCH in DB');
+
   const siteImportPreview = await excelService.previewImport(Buffer.from(siteExportBuffer as any), 'sites', 'sites_roundtrip.xlsx');
-  const reimportedPwSite = siteImportPreview.valid_rows.find(r => r.name === pwSite?.name || r.scrape_method === 'PLAYWRIGHT');
-  assert(reimportedPwSite !== undefined && reimportedPwSite.scrape_method === 'PLAYWRIGHT', 'Site scrape_method = PLAYWRIGHT preserved across Excel export/import');
+  excelService.applyImport(siteImportPreview);
+  const reimportedPwSite = db.getSchema().sites.find(s => s.id === pwSite?.id);
+  assert(reimportedPwSite !== undefined && reimportedPwSite.scrape_method === 'PLAYWRIGHT', 'Site scrape_method = PLAYWRIGHT persisted across Excel export/import apply');
 
-  // 3. Ensure a product selector with update_time_xpath exists
+  // 3. Ensure a product selector with update_time_xpath exists and persist to test DB
   const testSelectorXpath = '//table//tr[1]/td[6]';
-  let dateSel = schema.product_selectors.find(s => s.update_time_xpath === testSelectorXpath);
-  if (!dateSel) {
-    dateSel = {
-      id: db.getNextId('product_selectors'),
-      product_id: 1,
-      post_id: 1840,
-      table_source_id: 1,
-      price_xpath: '//table//tr[1]/td[5]',
-      update_time_xpath: testSelectorXpath,
-      active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    schema.product_selectors.push(dateSel);
-  }
+  let dateSel = schema.product_selectors[0];
+  dateSel.update_time_xpath = testSelectorXpath;
+  db.save();
 
-  // 4. Export Product Selectors and preview import to verify update_time_xpath survives round-trip
+  // 4. Export Product Selectors and verify update_time_xpath survives round-trip via preview and applyImport
   const selectorExportBuffer = await excelService.exportData('product_selectors');
+  // Clear update_time_xpath in test DB to null to verify applyImport truly restores it
+  dateSel.update_time_xpath = null;
+  db.save();
+  assert(db.getSchema().product_selectors.find(s => s.id === dateSel?.id)?.update_time_xpath === null, 'Selector update_time_xpath temporarily cleared to null in DB');
+
   const selectorImportPreview = await excelService.previewImport(Buffer.from(selectorExportBuffer as any), 'product_selectors', 'selectors_roundtrip.xlsx');
-  const reimportedSel = selectorImportPreview.valid_rows.find(r => r.update_time_xpath === testSelectorXpath);
-  assert(reimportedSel !== undefined && reimportedSel.update_time_xpath === testSelectorXpath, 'ProductSelector update_time_xpath preserved across Excel export/import');
+  excelService.applyImport(selectorImportPreview);
+  const reimportedSel = db.getSchema().product_selectors.find(s => s.id === dateSel?.id);
+  assert(reimportedSel !== undefined && reimportedSel.update_time_xpath === testSelectorXpath, 'ProductSelector update_time_xpath persisted across Excel export/import apply');
 
   // ==========================================
   // Scenario 17: WordPress Bulk Publish Payload & Error Handling
@@ -584,69 +607,178 @@ async function runTests() {
   assert(createdErr?.status === 'RESOLVED', 'System error transitioned from OPEN to RESOLVED');
 
   // ==========================================
-  // Scenario 19: TableSource Validation & Inline SourcePage Creation
+  // Scenario 19: TableSource Real API Validation & Inline SourcePage Creation
   // ==========================================
-  console.log('\n--- 19. TableSource Validation & Inline SourcePage Creation ---');
-  const initialPagesCount = schema.source_pages.length;
-  const newPageUrl = 'https://fixture.local/new-test-page-inline';
-  const newPageId = db.getNextId('source_pages');
-  const inlineCreatedPage = {
-    id: newPageId,
-    site_id: 1,
-    url: newPageUrl,
-    active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-  schema.source_pages.push(inlineCreatedPage);
-  assert(schema.source_pages.length === initialPagesCount + 1, 'Inline SourcePage created for site');
+  console.log('\n--- 19. TableSource Real API Validation & Inline SourcePage Creation ---');
 
-  // Create TableSource referencing this new page
-  const newTableSourceId = db.getNextId('table_sources');
-  const newTableSource: TableSource = {
-    id: newTableSourceId,
-    price_table_id: 1,
-    site_id: 1,
-    site_name: 'آهن‌آنلاین',
-    source_page_id: newPageId,
-    source_page_url: newPageUrl,
-    update_time_xpath: '//div[@id="update-time"]',
-    recheck_enabled: true,
-    active: true,
-    max_attempts_override: 7,
-    retry_interval_override: 15,
-    timeout_override: 45,
-    price_guard_override: 20,
-    attempt_count: 0,
-    today_status: 'PENDING',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-  schema.table_sources.push(newTableSource);
-  assert(schema.table_sources.some(s => s.id === newTableSourceId), 'TableSource successfully created with inline SourcePage');
+  // 1. POST validation: invalid price_table_id => 400
+  const postBadTable = await request(app)
+    .post('/api/table-sources')
+    .send({ price_table_id: 99999, site_id: 1, source_page_id: 1 });
+  assert(postBadTable.status === 400, 'POST /api/table-sources with invalid price_table_id returns 400');
 
-  // Verify duplicate prevention rule
-  const isDuplicate = schema.table_sources.filter(
-    s => s.price_table_id === 1 && s.site_id === 1 && s.source_page_id === newPageId
-  ).length > 1;
-  assert(!isDuplicate, 'Duplicate TableSource detection prevents duplicate mapping');
+  // 2. POST validation: invalid site_id => 400
+  const postBadSite = await request(app)
+    .post('/api/table-sources')
+    .send({ price_table_id: 1, site_id: 99999, source_page_id: 1 });
+  assert(postBadSite.status === 400, 'POST /api/table-sources with invalid site_id returns 400');
 
-  // Verify site ownership rule
-  const pageBelongsToSite = schema.source_pages.find(p => p.id === newPageId)?.site_id === 1;
-  assert(pageBelongsToSite, 'SourcePage site_id matches TableSource site_id');
+  // 3. POST validation: invalid source_page_id => 400
+  const postBadPage = await request(app)
+    .post('/api/table-sources')
+    .send({ price_table_id: 1, site_id: 1, source_page_id: 99999 });
+  assert(postBadPage.status === 400, 'POST /api/table-sources with invalid source_page_id returns 400');
+
+  // 4. POST validation: SourcePage belonging to another Site => 400
+  // (In seed data: source_page 2 belongs to site 2, not site 1)
+  const postCrossSite = await request(app)
+    .post('/api/table-sources')
+    .send({ price_table_id: 1, site_id: 1, source_page_id: 2 });
+  assert(postCrossSite.status === 400, 'POST /api/table-sources with source_page belonging to another site returns 400');
+
+  // 5. POST valid mapping with inline new_url creation and overrides
+  const inlineUrl = 'http://localhost:3000/fixtures/source-inline-api-test.html';
+  const postValid = await request(app)
+    .post('/api/table-sources')
+    .send({
+      price_table_id: 1,
+      site_id: 1,
+      new_url: inlineUrl,
+      update_time_xpath: '//div[@id="update-time-xpath"]',
+      recheck_enabled: true,
+      max_attempts_override: 7,
+      retry_interval_override: 15,
+      timeout_override: 45,
+      price_guard_override: 20
+    });
+  assert(postValid.status === 200, 'POST /api/table-sources creates valid mapping with inline new_url');
+  const createdTs = postValid.body;
+  assert(typeof createdTs.id === 'number', 'Created TableSource has assigned id');
+  assert(typeof createdTs.source_page_id === 'number', 'Created TableSource attached to inline created SourcePage');
+
+  // Verify inline SourcePage was created in DB for site 1
+  const inlinePage = db.getSchema().source_pages.find(p => p.id === createdTs.source_page_id);
+  assert(inlinePage !== undefined && inlinePage.url === inlineUrl && inlinePage.site_id === 1, 'Inline SourcePage created in database with matching URL and site_id');
+
+  // Verify overrides in response
+  assert(createdTs.max_attempts_override === 7, 'max_attempts_override (7) saved in response');
+  assert(createdTs.retry_interval_override === 15, 'retry_interval_override (15) saved in response');
+  assert(createdTs.timeout_override === 45, 'timeout_override (45) saved in response');
+  assert(createdTs.price_guard_override === 20, 'price_guard_override (20) saved in response');
+
+  // 6. POST duplicate mapping prevention (same PriceTable + Site + SourcePage) => 400
+  const postDuplicate = await request(app)
+    .post('/api/table-sources')
+    .send({
+      price_table_id: 1,
+      site_id: 1,
+      source_page_id: createdTs.source_page_id
+    });
+  assert(postDuplicate.status === 400, 'POST /api/table-sources duplicate PriceTable+Site+SourcePage returns 400');
+
+  // 7. PUT validation: change to SourcePage belonging to another Site => 400
+  const putCrossSite = await request(app)
+    .put(`/api/table-sources/${createdTs.id}`)
+    .send({ source_page_id: 2 });
+  assert(putCrossSite.status === 400, 'PUT /api/table-sources/:id with source_page belonging to another site returns 400');
+
+  // 8. PUT validation: change to duplicate mapping => 400
+  // (In seed data: table 1 already has site 1 mapped to source_page 1)
+  const putDuplicate = await request(app)
+    .put(`/api/table-sources/${createdTs.id}`)
+    .send({ source_page_id: 1 });
+  assert(putDuplicate.status === 400, 'PUT /api/table-sources/:id resulting in duplicate mapping returns 400');
+
+  // 9. PUT valid change => success
+  const putValid = await request(app)
+    .put(`/api/table-sources/${createdTs.id}`)
+    .send({
+      update_time_xpath: '//span[@class="new-time"]',
+      recheck_enabled: false
+    });
+  assert(putValid.status === 200 && putValid.body.update_time_xpath === '//span[@class="new-time"]', 'PUT /api/table-sources/:id updates fields successfully');
+
+  // 10. PUT clear override with null or empty value => becomes null
+  const putClear = await request(app)
+    .put(`/api/table-sources/${createdTs.id}`)
+    .send({
+      max_attempts_override: null,
+      retry_interval_override: '',
+      timeout_override: null,
+      price_guard_override: ''
+    });
+  assert(
+    putClear.status === 200 &&
+    putClear.body.max_attempts_override === null &&
+    putClear.body.retry_interval_override === null &&
+    putClear.body.timeout_override === null &&
+    putClear.body.price_guard_override === null,
+    'PUT /api/table-sources/:id clears overrides with null or empty value to null'
+  );
 
   // ==========================================
   // Scenario 20: TableSource 4-Level Overrides Persistence & Evaluation
   // ==========================================
   console.log('\n--- 20. TableSource 4-Level Overrides Persistence & Evaluation ---');
-  const effectiveConfig = getEffectiveConfig(newTableSource, schema.price_tables[0]);
-  assert(effectiveConfig.max_attempts === 7, 'Effective config uses max_attempts_override (7)');
-  assert(effectiveConfig.retry_interval_minutes === 15, 'Effective config uses retry_interval_override (15)');
-  assert(effectiveConfig.price_guard_percent === 20, 'Effective config uses price_guard_override (20)');
-  assert(effectiveConfig.timeout_seconds === 45, 'Effective config uses timeout_override (45 seconds)');
+  // 1. Create a TableSource via API with explicit overrides
+  const resScenario20 = await request(app)
+    .post('/api/table-sources')
+    .send({
+      price_table_id: 1,
+      site_id: 2,
+      new_url: 'http://localhost:3000/fixtures/source-b-override-persistence-test.html',
+      update_time_xpath: '//div[@class="pubdate"]',
+      recheck_enabled: true,
+      max_attempts_override: 8,
+      retry_interval_override: 20,
+      timeout_override: 50,
+      price_guard_override: 25
+    });
+  assert(resScenario20.status === 200, 'TableSource created via API for persistence testing');
+  const persistedId = resScenario20.body.id;
 
-  // Clean up Playwright browser
-  await closePlaywrightBrowser();
+  // 2. Read back from database after persistence
+  db.reload();
+  const reloadedSource = db.getSchema().table_sources.find(s => s.id === persistedId);
+  assert(reloadedSource !== undefined, 'TableSource successfully re-read from isolated test DB');
+  assert(reloadedSource?.max_attempts_override === 8, 'Persisted max_attempts_override === 8');
+  assert(reloadedSource?.retry_interval_override === 20, 'Persisted retry_interval_override === 20');
+  assert(reloadedSource?.timeout_override === 50, 'Persisted timeout_override === 50');
+  assert(reloadedSource?.price_guard_override === 25, 'Persisted price_guard_override === 25');
+
+  // 3. Compute and assert getEffectiveConfig on the persisted record
+  const effectiveConfig = getEffectiveConfig(reloadedSource!, db.getSchema().price_tables[0]);
+  assert(effectiveConfig.max_attempts === 8 && effectiveConfig.origins.max_attempts === 'SOURCE', 'Effective config uses max_attempts_override (8)');
+  assert(effectiveConfig.retry_interval_minutes === 20 && effectiveConfig.origins.retry_interval === 'SOURCE', 'Effective config uses retry_interval_override (20)');
+  assert(effectiveConfig.price_guard_percent === 25 && effectiveConfig.origins.price_guard === 'SOURCE', 'Effective config uses price_guard_override (25)');
+  assert(effectiveConfig.timeout_seconds === 50 && effectiveConfig.origins.timeout === 'SOURCE', 'Effective config uses timeout_override (50)');
+}
+
+async function main() {
+  try {
+    await runTests();
+  } finally {
+    // 1. Clean up Playwright browser
+    await closePlaywrightBrowser();
+
+    // 2. Switch db manager back to production file
+    const defaultProdFile = path.join(process.cwd(), 'data', 'database.json');
+    db.setDatabaseFile(defaultProdFile);
+
+    // 3. Hermetic cleanup: delete test database file and temporary artifacts
+    if (fs.existsSync(TEST_DB_FILE)) {
+      try {
+        fs.unlinkSync(TEST_DB_FILE);
+      } catch (err) {
+        console.error('Failed to remove TEST_DB_FILE:', err);
+      }
+    }
+    if (fs.existsSync(`${TEST_DB_FILE}.tmp`)) {
+      try {
+        fs.unlinkSync(`${TEST_DB_FILE}.tmp`);
+      } catch {}
+    }
+  }
 
   console.log(`\n========================================`);
   console.log(`Test Results: ${passed} Passed, ${failed} Failed`);
@@ -657,7 +789,7 @@ async function runTests() {
   }
 }
 
-runTests().catch((err) => {
+main().catch((err) => {
   console.error('Fatal test runner error:', err);
   process.exit(1);
 });

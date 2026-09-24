@@ -41,7 +41,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         method: 'POST',
         body: formData
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { error: `پاسخ نامعتبر از سرور (${res.status})` }; }
       if (!res.ok) throw new Error(data.error || 'خطا در خواندن فایل اکسل');
       setPreviewData(data);
     } catch (err: any) {
@@ -60,7 +62,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(previewData)
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { error: `پاسخ نامعتبر از سرور (${res.status})` }; }
       if (!res.ok) throw new Error(data.error || 'خطا در ثبت تغییرات');
       onSuccess();
       onClose();

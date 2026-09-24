@@ -80,21 +80,35 @@ export interface DatabaseSchema {
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'database.json');
-const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
-const SCREENSHOTS_DIR = path.join(DATA_DIR, 'screenshots');
+const DEFAULT_DB_FILE = path.join(DATA_DIR, 'database.json');
 
-// Ensure directories exist
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(SNAPSHOTS_DIR)) fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
-if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
-
-class DatabaseManager {
+export class DatabaseManager {
   private data: DatabaseSchema;
-  private saveTimeout: NodeJS.Timeout | null = null;
+  private dbFile: string;
 
-  constructor() {
+  constructor(customPath?: string) {
+    this.dbFile = customPath || process.env.DATABASE_FILE || DEFAULT_DB_FILE;
+    this.ensureDirs();
     this.data = this.loadDatabase();
+  }
+
+  public getDatabaseFile(): string {
+    return this.dbFile;
+  }
+
+  public setDatabaseFile(filePath: string): void {
+    this.dbFile = filePath;
+    this.ensureDirs();
+    this.data = this.loadDatabase();
+  }
+
+  private ensureDirs() {
+    const dir = path.dirname(this.dbFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const snapshotsDir = path.join(dir, 'snapshots');
+    if (!fs.existsSync(snapshotsDir)) fs.mkdirSync(snapshotsDir, { recursive: true });
+    const screenshotsDir = path.join(dir, 'screenshots');
+    if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
   }
 
   private getDefaultSettings(): GlobalSettings {
@@ -115,9 +129,9 @@ class DatabaseManager {
   }
 
   private loadDatabase(): DatabaseSchema {
-    if (fs.existsSync(DB_FILE)) {
+    if (fs.existsSync(this.dbFile)) {
       try {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+        const raw = fs.readFileSync(this.dbFile, 'utf-8');
         const parsed = JSON.parse(raw);
         const sites = (parsed.sites || []).map((s: any) => ({
           ...s,
@@ -156,7 +170,7 @@ class DatabaseManager {
           import_history: parsed.import_history || []
         };
       } catch (e) {
-        console.error('Error loading database.json, initializing fresh data store:', e);
+        console.error(`Error loading ${this.dbFile}, initializing fresh data store:`, e);
       }
     }
 
@@ -190,16 +204,26 @@ class DatabaseManager {
 
   public persistSync(dataToSave: DatabaseSchema = this.data) {
     try {
-      const tempPath = `${DB_FILE}.tmp`;
+      this.ensureDirs();
+      const tempPath = `${this.dbFile}.tmp`;
       fs.writeFileSync(tempPath, JSON.stringify(dataToSave, null, 2), 'utf-8');
-      fs.renameSync(tempPath, DB_FILE);
+      fs.renameSync(tempPath, this.dbFile);
     } catch (err) {
-      console.error('Failed to persist database.json:', err);
+      console.error(`Failed to persist ${this.dbFile}:`, err);
     }
   }
 
   public save() {
     this.persistSync(this.data);
+  }
+
+  public resetWith(newData: DatabaseSchema): void {
+    this.data = JSON.parse(JSON.stringify(newData));
+    this.persistSync(this.data);
+  }
+
+  public reload(): void {
+    this.data = this.loadDatabase();
   }
 
   // Get raw schema references
