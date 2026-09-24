@@ -82,6 +82,141 @@ export interface DatabaseSchema {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DEFAULT_DB_FILE = path.join(DATA_DIR, 'database.json');
 
+export function migratePageActions(
+  rawActions: any[],
+  tableSources: TableSource[] = [],
+  sourcePages: SourcePage[] = []
+): PageAction[] {
+  const migrated: PageAction[] = [];
+  let maxId = rawActions.reduce((max, a) => Math.max(max, a.id || 0), 0);
+
+  for (const act of rawActions) {
+    if (act.scope === 'SITE_DEFAULT' || act.scope === 'TABLE_SOURCE') {
+      migrated.push({
+        id: act.id,
+        scope: act.scope,
+        site_id: act.site_id ?? null,
+        table_source_id: act.table_source_id ?? null,
+        order: act.order || 1,
+        action_type: act.action_type || 'WAIT',
+        selector_type: act.selector_type,
+        selector: act.selector || '',
+        value: act.value || '',
+        active: act.active !== undefined ? Boolean(act.active) : true,
+        created_at: act.created_at || new Date().toISOString(),
+        updated_at: act.updated_at,
+        source_page_id: act.source_page_id ?? null
+      });
+      continue;
+    }
+
+    // Legacy action without scope
+    // Case A: Has table_source_id
+    if (act.table_source_id) {
+      const ts = tableSources.find((t) => t.id === act.table_source_id);
+      migrated.push({
+        id: act.id,
+        scope: 'TABLE_SOURCE',
+        table_source_id: act.table_source_id,
+        site_id: ts ? ts.site_id : (act.site_id ?? null),
+        order: act.order || 1,
+        action_type: act.action_type || 'WAIT',
+        selector_type: act.selector_type,
+        selector: act.selector || '',
+        value: act.value || '',
+        active: act.active !== undefined ? Boolean(act.active) : true,
+        created_at: act.created_at || new Date().toISOString(),
+        updated_at: act.updated_at,
+        source_page_id: act.source_page_id ?? null
+      });
+      continue;
+    }
+
+    // Case B: Has site_id and no source_page_id
+    if (act.site_id && !act.source_page_id) {
+      migrated.push({
+        id: act.id,
+        scope: 'SITE_DEFAULT',
+        site_id: act.site_id,
+        table_source_id: null,
+        order: act.order || 1,
+        action_type: act.action_type || 'WAIT',
+        selector_type: act.selector_type,
+        selector: act.selector || '',
+        value: act.value || '',
+        active: act.active !== undefined ? Boolean(act.active) : true,
+        created_at: act.created_at || new Date().toISOString(),
+        updated_at: act.updated_at,
+        source_page_id: null
+      });
+      continue;
+    }
+
+    // Case C: Legacy action attached to source_page_id
+    if (act.source_page_id) {
+      const matchingSources = tableSources.filter((ts) => ts.source_page_id === act.source_page_id);
+      if (matchingSources.length > 0) {
+        matchingSources.forEach((ts, idx) => {
+          maxId++;
+          migrated.push({
+            id: idx === 0 ? act.id : maxId,
+            scope: 'TABLE_SOURCE',
+            table_source_id: ts.id,
+            site_id: ts.site_id,
+            order: act.order || 1,
+            action_type: act.action_type || 'WAIT',
+            selector_type: act.selector_type,
+            selector: act.selector || '',
+            value: act.value || '',
+            active: act.active !== undefined ? Boolean(act.active) : true,
+            created_at: act.created_at || new Date().toISOString(),
+            updated_at: act.updated_at,
+            source_page_id: act.source_page_id
+          });
+        });
+      } else {
+        const sp = sourcePages.find((p) => p.id === act.source_page_id);
+        const resolvedSiteId = sp ? sp.site_id : (act.site_id ?? 1);
+        migrated.push({
+          id: act.id,
+          scope: 'SITE_DEFAULT',
+          site_id: resolvedSiteId,
+          table_source_id: null,
+          order: act.order || 1,
+          action_type: act.action_type || 'WAIT',
+          selector_type: act.selector_type,
+          selector: act.selector || '',
+          value: act.value || '',
+          active: act.active !== undefined ? Boolean(act.active) : true,
+          created_at: act.created_at || new Date().toISOString(),
+          updated_at: act.updated_at,
+          source_page_id: act.source_page_id
+        });
+      }
+      continue;
+    }
+
+    // Fallback default
+    migrated.push({
+      id: act.id || ++maxId,
+      scope: 'SITE_DEFAULT',
+      site_id: act.site_id ?? 1,
+      table_source_id: null,
+      order: act.order || 1,
+      action_type: act.action_type || 'WAIT',
+      selector_type: act.selector_type,
+      selector: act.selector || '',
+      value: act.value || '',
+      active: act.active !== undefined ? Boolean(act.active) : true,
+      created_at: act.created_at || new Date().toISOString(),
+      updated_at: act.updated_at,
+      source_page_id: act.source_page_id ?? null
+    });
+  }
+
+  return migrated;
+}
+
 export class DatabaseManager {
   private data: DatabaseSchema;
   private dbFile: string;
@@ -146,15 +281,17 @@ export class DatabaseManager {
           ...ps,
           update_time_xpath: ps.update_time_xpath ?? null
         }));
+        const source_pages = parsed.source_pages || [];
+        const page_actions = migratePageActions(parsed.page_actions || [], table_sources, source_pages);
         return {
           factories: parsed.factories || [],
           price_tables: parsed.price_tables || [],
           products: parsed.products || [],
           sites,
-          source_pages: parsed.source_pages || [],
+          source_pages,
           table_sources,
           product_selectors,
-          page_actions: parsed.page_actions || [],
+          page_actions,
           global_settings: parsed.global_settings || this.getDefaultSettings(),
           runs: parsed.runs || [],
           run_locks: parsed.run_locks || [],

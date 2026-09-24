@@ -8,6 +8,7 @@ import { evaluateFreshness, FreshnessResult } from './freshness';
 import { parseProductPrice } from './priceParser';
 import { TableSource, SourcePage, ProductSelector, PageAction, Site } from '../../src/types';
 import { loadSourcePage, LoadedPage, PageActionError } from './pageLoader';
+import { resolveEffectivePageActions } from './pageActions';
 
 const SNAPSHOTS_DIR = path.join(process.cwd(), 'data', 'snapshots');
 const SCREENSHOTS_DIR = path.join(process.cwd(), 'data', 'screenshots');
@@ -128,11 +129,9 @@ export async function scrapeTableSource(
   const selectors = schema.product_selectors.filter(
     (sel) => sel.table_source_id === tableSource.id && sel.active
   );
-  const actions = schema.page_actions.filter(
-    (act) => act.source_page_id === tableSource.source_page_id && act.active
-  );
+  const actions = resolveEffectivePageActions(tableSource.id);
 
-  const url = sourcePage?.url || site.base_url || '';
+  const url = sourcePage?.url || (tableSource as any).source_page_url || site.base_url || '';
   const timeoutMs = (tableSource.timeout_override || site.timeout || 30) * 1000;
 
   const result: SourceScrapeResult = {

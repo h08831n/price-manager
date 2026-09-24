@@ -14,6 +14,11 @@ import { excelService } from '../excel/excelService';
 import { publishTableToWordPress } from '../wordpress/client';
 import { FIXTURE_PAGES } from '../fixtures/fixtures';
 import { loadSourcePage } from '../scraper/pageLoader';
+import {
+  resolveEffectivePageActions,
+  getSiteDefaultPageActions,
+  getTableSourcePageActionsInfo
+} from '../scraper/pageActions';
 import { DashboardData, Site, PageAction } from '../../src/types';
 
 export const apiRouter = express.Router();
@@ -431,12 +436,18 @@ apiRouter.get('/table-sources', (req: Request, res: Response) => {
     const daily = schema.daily_source_runs.find(
       (d) => d.table_source_id === ts.id && d.run_date === todayStr
     );
+    const actionsInfo = getTableSourcePageActionsInfo(ts.id);
 
     return {
       ...ts,
       price_table_name: pt?.name,
       site_name: site?.name,
-      source_page_url: sp?.url,
+      url: sp?.url || '',
+      source_page_url: sp?.url || '',
+      has_action_override: actionsInfo.hasOverride,
+      action_override_count: actionsInfo.overrideActions.length,
+      site_default_action_count: actionsInfo.siteDefaultActions.length,
+      effective_action_count: actionsInfo.effectiveActions.length,
       today_status: daily?.status || 'PENDING',
       fresh: daily?.fresh || false,
       attempt_count: daily?.attempt_count || 0,
@@ -486,9 +497,10 @@ apiRouter.post('/table-sources', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'سایت منبع مشخص شده وجود ندارد.' });
   }
 
-  // Handle inline creation of new source page if new_url is provided
-  if (new_url && (!spId || spId === 0)) {
-    const cleanUrl = String(new_url).trim();
+  // Handle inline creation of new source page if url or new_url is provided
+  const rawUrl = req.body.url || req.body.new_url;
+  if (rawUrl && (!spId || spId === 0)) {
+    const cleanUrl = String(rawUrl).trim();
     if (!cleanUrl) {
       return res.status(400).json({ error: 'آدرس صفحه الزامی است.' });
     }
@@ -556,7 +568,21 @@ apiRouter.post('/table-sources', (req: Request, res: Response) => {
   schema.table_sources.push(newSource);
   db.logConfigChange('table_source', newSource.id, 'create', null, `Table ${ptId} -> Site ${sId}`);
   db.save();
-  res.json(newSource);
+
+  const createdPage = schema.source_pages.find((p) => p.id === newSource.source_page_id);
+  const site = schema.sites.find((s) => s.id === newSource.site_id);
+  const actionsInfo = getTableSourcePageActionsInfo(newSource.id);
+
+  res.json({
+    ...newSource,
+    site_name: site?.name,
+    url: createdPage?.url || '',
+    source_page_url: createdPage?.url || '',
+    has_action_override: actionsInfo.hasOverride,
+    action_override_count: actionsInfo.overrideActions.length,
+    site_default_action_count: actionsInfo.siteDefaultActions.length,
+    effective_action_count: actionsInfo.effectiveActions.length
+  });
 });
 
 apiRouter.put('/table-sources/:id', (req: Request, res: Response) => {
@@ -570,8 +596,9 @@ apiRouter.put('/table-sources/:id', (req: Request, res: Response) => {
   let spId = req.body.source_page_id !== undefined ? parseInt(req.body.source_page_id, 10) : ts.source_page_id;
 
   // Handle inline creation of new source page on edit if requested
-  if (req.body.new_url && (!spId || spId === 0)) {
-    const cleanUrl = String(req.body.new_url).trim();
+  const rawUrl = req.body.url !== undefined ? req.body.url : req.body.new_url;
+  if (rawUrl !== undefined && (!req.body.source_page_id || req.body.source_page_id === 0)) {
+    const cleanUrl = String(rawUrl).trim();
     if (cleanUrl) {
       let existingPage = schema.source_pages.find((p) => p.site_id === sId && p.url === cleanUrl);
       if (!existingPage) {
@@ -648,7 +675,21 @@ apiRouter.put('/table-sources/:id', (req: Request, res: Response) => {
 
   db.logConfigChange('table_source', ts.id, 'update', null, ts.update_time_xpath);
   db.save();
-  res.json(ts);
+
+  const updatedPage = schema.source_pages.find((p) => p.id === ts.source_page_id);
+  const site = schema.sites.find((s) => s.id === ts.site_id);
+  const actionsInfo = getTableSourcePageActionsInfo(ts.id);
+
+  res.json({
+    ...ts,
+    site_name: site?.name,
+    url: updatedPage?.url || '',
+    source_page_url: updatedPage?.url || '',
+    has_action_override: actionsInfo.hasOverride,
+    action_override_count: actionsInfo.overrideActions.length,
+    site_default_action_count: actionsInfo.siteDefaultActions.length,
+    effective_action_count: actionsInfo.effectiveActions.length
+  });
 });
 
 apiRouter.delete('/table-sources/:id', (req: Request, res: Response) => {
@@ -803,23 +844,17 @@ apiRouter.post('/selectors/test', async (req: Request, res: Response) => {
     if (ts) {
       site = schema.sites.find((s) => s.id === ts.site_id);
       const sp = schema.source_pages.find((p) => p.id === ts.source_page_id);
-      if (!targetUrl) targetUrl = sp?.url || site?.base_url;
-      if (ts.source_page_id) {
-        actions = schema.page_actions
-          .filter((a) => a.source_page_id === ts.source_page_id && a.active)
-          .sort((a, b) => a.order - b.order);
-      }
+      if (!targetUrl) targetUrl = sp?.url || (ts as any).url || (ts as any).source_page_url || site?.base_url;
+      actions = resolveEffectivePageActions(ts.id);
     }
   }
 
-  if (!actions.length && targetUrl) {
-    const sp = schema.source_pages.find((p) => p.url === targetUrl);
-    if (sp) {
-      if (!site) site = schema.sites.find((s) => s.id === sp.site_id);
-      actions = schema.page_actions
-        .filter((a) => a.source_page_id === sp.id && a.active)
-        .sort((a, b) => a.order - b.order);
-    }
+  if (!site && req.body.site_id) {
+    site = schema.sites.find((s) => s.id === parseInt(req.body.site_id, 10));
+  }
+
+  if (!actions.length && site) {
+    actions = getSiteDefaultPageActions(site.id, true);
   }
 
   if (!targetUrl || !xpath) {
@@ -881,29 +916,277 @@ apiRouter.post('/selectors/test', async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// 8. PAGE ACTIONS API (Requirement #16)
+// 8. PAGE ACTIONS API (Scoped: SITE_DEFAULT & TABLE_SOURCE)
 // ==========================================
+
+// --- 8A. Site Default Page Actions ---
+apiRouter.get('/sites/:siteId/page-actions', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const siteId = parseInt(req.params.siteId, 10);
+  const site = schema.sites.find((s) => s.id === siteId);
+  if (!site) return res.status(404).json({ error: 'سایت مورد نظر یافت نشد.' });
+
+  const actions = getSiteDefaultPageActions(siteId, false);
+  res.json(actions);
+});
+
+apiRouter.post('/sites/:siteId/page-actions', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const siteId = parseInt(req.params.siteId, 10);
+  const site = schema.sites.find((s) => s.id === siteId);
+  if (!site) return res.status(404).json({ error: 'سایت مورد نظر یافت نشد.' });
+
+  const { order, action_type, selector, value, active, selector_type } = req.body;
+  const validTypes = ['WAIT', 'CLICK', 'SCROLL', 'SCROLL_TO', 'WAIT_FOR_ELEMENT'];
+  const type = validTypes.includes(action_type) ? action_type : 'WAIT';
+
+  const siteActions = schema.page_actions.filter(
+    (a) => a.scope === 'SITE_DEFAULT' && a.site_id === siteId
+  );
+
+  const newAction: PageAction = {
+    id: db.getNextId('page_actions'),
+    scope: 'SITE_DEFAULT',
+    site_id: siteId,
+    table_source_id: null,
+    order: parseInt(order, 10) || (siteActions.length + 1),
+    action_type: type as any,
+    selector_type: selector_type || (selector?.startsWith('//') ? 'XPATH' : 'CSS'),
+    selector: selector ? String(selector).trim() : '',
+    value: value ? String(value).trim() : '',
+    active: active !== undefined ? Boolean(active) : true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  schema.page_actions.push(newAction);
+  db.logConfigChange('site_page_action', newAction.id, 'create', null, `Site ${siteId} -> ${newAction.action_type}`);
+  db.save();
+  res.json(newAction);
+});
+
+apiRouter.put('/sites/:siteId/page-actions/:actionId', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const siteId = parseInt(req.params.siteId, 10);
+  const actionId = parseInt(req.params.actionId, 10);
+
+  const action = schema.page_actions.find(
+    (a) => a.id === actionId && (a.site_id === siteId || a.scope === 'SITE_DEFAULT')
+  );
+  if (!action || action.site_id !== siteId) {
+    return res.status(404).json({ error: 'دستور مورد نظر برای این سایت یافت نشد.' });
+  }
+
+  const { order, action_type, selector, value, active, selector_type } = req.body;
+  if (order !== undefined) action.order = parseInt(order, 10);
+  if (action_type !== undefined) action.action_type = action_type;
+  if (selector !== undefined) action.selector = String(selector).trim();
+  if (value !== undefined) action.value = String(value).trim();
+  if (active !== undefined) action.active = Boolean(active);
+  if (selector_type !== undefined) action.selector_type = selector_type;
+  action.scope = 'SITE_DEFAULT';
+  action.site_id = siteId;
+  action.table_source_id = null;
+  action.updated_at = new Date().toISOString();
+
+  db.logConfigChange('site_page_action', action.id, 'update', null, `Site ${siteId}`);
+  db.save();
+  res.json(action);
+});
+
+apiRouter.delete('/sites/:siteId/page-actions/:actionId', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const siteId = parseInt(req.params.siteId, 10);
+  const actionId = parseInt(req.params.actionId, 10);
+
+  const idx = schema.page_actions.findIndex(
+    (a) => a.id === actionId && a.site_id === siteId && a.scope === 'SITE_DEFAULT'
+  );
+  if (idx === -1) {
+    return res.status(404).json({ error: 'دستور مورد نظر برای این سایت یافت نشد.' });
+  }
+
+  schema.page_actions.splice(idx, 1);
+  db.logConfigChange('site_page_action', actionId, 'delete', null, `Site ${siteId}`);
+  db.save();
+  res.json({ success: true });
+});
+
+// --- 8B. TableSource Override Page Actions ---
+apiRouter.get('/table-sources/:tableSourceId/page-actions', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const tableSourceId = parseInt(req.params.tableSourceId, 10);
+  const ts = schema.table_sources.find((t) => t.id === tableSourceId);
+  if (!ts) return res.status(404).json({ error: 'منبع جدول یافت نشد.' });
+
+  const info = getTableSourcePageActionsInfo(tableSourceId);
+  if (req.query.effective === 'true') {
+    return res.json(info.effectiveActions);
+  }
+  if (req.query.format === 'array') {
+    return res.json(info.overrideActions);
+  }
+  res.json({
+    has_override: info.hasOverride,
+    actions: info.overrideActions,
+    site_default_actions: info.siteDefaultActions,
+    effective_actions: info.effectiveActions
+  });
+});
+
+apiRouter.post('/table-sources/:tableSourceId/page-actions', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const tableSourceId = parseInt(req.params.tableSourceId, 10);
+  const ts = schema.table_sources.find((t) => t.id === tableSourceId);
+  if (!ts) return res.status(404).json({ error: 'منبع جدول یافت نشد.' });
+
+  const { order, action_type, selector, value, active, selector_type } = req.body;
+  const validTypes = ['WAIT', 'CLICK', 'SCROLL', 'SCROLL_TO', 'WAIT_FOR_ELEMENT'];
+  const type = validTypes.includes(action_type) ? action_type : 'WAIT';
+
+  const existingOverrides = schema.page_actions.filter(
+    (a) => a.scope === 'TABLE_SOURCE' && a.table_source_id === tableSourceId
+  );
+
+  const newAction: PageAction = {
+    id: db.getNextId('page_actions'),
+    scope: 'TABLE_SOURCE',
+    table_source_id: tableSourceId,
+    site_id: ts.site_id,
+    order: parseInt(order, 10) || (existingOverrides.length + 1),
+    action_type: type as any,
+    selector_type: selector_type || (selector?.startsWith('//') ? 'XPATH' : 'CSS'),
+    selector: selector ? String(selector).trim() : '',
+    value: value ? String(value).trim() : '',
+    active: active !== undefined ? Boolean(active) : true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  schema.page_actions.push(newAction);
+  db.logConfigChange('table_source_action', newAction.id, 'create', null, `Source ${tableSourceId} -> ${newAction.action_type}`);
+  db.save();
+  res.json(newAction);
+});
+
+apiRouter.put('/table-sources/:tableSourceId/page-actions/:actionId', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const tableSourceId = parseInt(req.params.tableSourceId, 10);
+  const actionId = parseInt(req.params.actionId, 10);
+
+  const action = schema.page_actions.find(
+    (a) => a.id === actionId && a.table_source_id === tableSourceId && a.scope === 'TABLE_SOURCE'
+  );
+  if (!action) {
+    return res.status(404).json({ error: 'دستور اختصاصی مورد نظر برای این منبع یافت نشد.' });
+  }
+
+  const { order, action_type, selector, value, active, selector_type } = req.body;
+  if (order !== undefined) action.order = parseInt(order, 10);
+  if (action_type !== undefined) action.action_type = action_type;
+  if (selector !== undefined) action.selector = String(selector).trim();
+  if (value !== undefined) action.value = String(value).trim();
+  if (active !== undefined) action.active = Boolean(active);
+  if (selector_type !== undefined) action.selector_type = selector_type;
+  action.updated_at = new Date().toISOString();
+
+  db.logConfigChange('table_source_action', action.id, 'update', null, `Source ${tableSourceId}`);
+  db.save();
+  res.json(action);
+});
+
+apiRouter.delete('/table-sources/:tableSourceId/page-actions/:actionId', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const tableSourceId = parseInt(req.params.tableSourceId, 10);
+  const actionId = parseInt(req.params.actionId, 10);
+
+  const idx = schema.page_actions.findIndex(
+    (a) => a.id === actionId && a.table_source_id === tableSourceId && a.scope === 'TABLE_SOURCE'
+  );
+  if (idx === -1) {
+    return res.status(404).json({ error: 'دستور اختصاصی مورد نظر برای این منبع یافت نشد.' });
+  }
+
+  schema.page_actions.splice(idx, 1);
+  db.logConfigChange('table_source_action', actionId, 'delete', null, `Source ${tableSourceId}`);
+  db.save();
+  res.json({ success: true });
+});
+
+apiRouter.delete('/table-sources/:tableSourceId/page-actions', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const tableSourceId = parseInt(req.params.tableSourceId, 10);
+  const beforeCount = schema.page_actions.length;
+  schema.page_actions = schema.page_actions.filter(
+    (a) => !(a.table_source_id === tableSourceId && a.scope === 'TABLE_SOURCE')
+  );
+  const deletedCount = beforeCount - schema.page_actions.length;
+  db.logConfigChange('table_source_action', tableSourceId, 'clear_all_overrides', null, `Cleared ${deletedCount} overrides`);
+  db.save();
+  res.json({ success: true, count: deletedCount });
+});
+
+// --- 8C. Legacy Page Actions Endpoints for Compatibility ---
 apiRouter.get('/page-actions', (req: Request, res: Response) => {
   const schema = db.getSchema();
   const pageId = req.query.source_page_id ? parseInt(String(req.query.source_page_id), 10) : null;
+  const siteId = req.query.site_id ? parseInt(String(req.query.site_id), 10) : null;
+  const sourceId = req.query.table_source_id ? parseInt(String(req.query.table_source_id), 10) : null;
+
   let list = schema.page_actions;
-  if (pageId) list = list.filter((a) => a.source_page_id === pageId);
+  if (sourceId) {
+    list = list.filter((a) => a.table_source_id === sourceId);
+  } else if (siteId) {
+    list = list.filter((a) => a.site_id === siteId && a.scope === 'SITE_DEFAULT');
+  } else if (pageId) {
+    list = list.filter((a) => a.source_page_id === pageId);
+  }
   res.json(list.sort((a, b) => a.order - b.order));
 });
 
 apiRouter.post('/page-actions', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { source_page_id, order, action_type, selector, value, active } = req.body;
+  const {
+    scope,
+    site_id,
+    table_source_id,
+    source_page_id,
+    order,
+    action_type,
+    selector,
+    value,
+    active,
+    selector_type
+  } = req.body;
 
-  const newAction = {
+  let resolvedScope: 'SITE_DEFAULT' | 'TABLE_SOURCE' = scope || 'SITE_DEFAULT';
+  let resolvedSiteId = site_id ? parseInt(site_id, 10) : null;
+  let resolvedTableSourceId = table_source_id ? parseInt(table_source_id, 10) : null;
+
+  if (!scope) {
+    if (resolvedTableSourceId) {
+      resolvedScope = 'TABLE_SOURCE';
+    } else if (source_page_id) {
+      const sp = schema.source_pages.find((p) => p.id === parseInt(source_page_id, 10));
+      if (sp) resolvedSiteId = sp.site_id;
+      resolvedScope = 'SITE_DEFAULT';
+    }
+  }
+
+  const newAction: PageAction = {
     id: db.getNextId('page_actions'),
-    source_page_id: parseInt(source_page_id, 10),
+    scope: resolvedScope,
+    site_id: resolvedSiteId,
+    table_source_id: resolvedTableSourceId,
     order: parseInt(order, 10) || 1,
     action_type: action_type || 'WAIT',
+    selector_type: selector_type || (selector?.startsWith('//') ? 'XPATH' : 'CSS'),
     selector: selector || '',
     value: value || '',
     active: active !== undefined ? Boolean(active) : true,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    source_page_id: source_page_id ? parseInt(source_page_id, 10) : null
   };
 
   schema.page_actions.push(newAction);
@@ -936,11 +1219,7 @@ apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
     const ts = schema.table_sources.find((s) => s.id === tableSourceId);
     if (ts) {
       site = schema.sites.find((s) => s.id === ts.site_id);
-      if (ts.source_page_id) {
-        actions = schema.page_actions
-          .filter((a) => a.source_page_id === ts.source_page_id && a.active)
-          .sort((a, b) => a.order - b.order);
-      }
+      actions = resolveEffectivePageActions(ts.id);
     }
   }
 
@@ -951,14 +1230,8 @@ apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
     site = schema.sites.find((s) => targetUrl.startsWith(s.base_url));
   }
 
-  if (!actions.length) {
-    const sp = schema.source_pages.find((p) => p.url === targetUrl);
-    if (sp) {
-      if (!site) site = schema.sites.find((s) => s.id === sp.site_id);
-      actions = schema.page_actions
-        .filter((a) => a.source_page_id === sp.id && a.active)
-        .sort((a, b) => a.order - b.order);
-    }
+  if (!actions.length && site) {
+    actions = getSiteDefaultPageActions(site.id, true);
   }
 
   const effectiveSite: Site = site || {

@@ -312,26 +312,71 @@ export default function App() {
 
   const handleSavePageAction = async (action: Partial<PageAction>) => {
     try {
-      const res = await fetch('/api/page-actions', {
-        method: 'POST',
+      let url = '/api/page-actions';
+      let method = 'POST';
+
+      if (action.scope === 'SITE_DEFAULT' && action.site_id) {
+        if (action.id) {
+          url = `/api/sites/${action.site_id}/page-actions/${action.id}`;
+          method = 'PUT';
+        } else {
+          url = `/api/sites/${action.site_id}/page-actions`;
+          method = 'POST';
+        }
+      } else if (action.scope === 'TABLE_SOURCE' && action.table_source_id) {
+        if (action.id) {
+          url = `/api/table-sources/${action.table_source_id}/page-actions/${action.id}`;
+          method = 'PUT';
+        } else {
+          url = `/api/table-sources/${action.table_source_id}/page-actions`;
+          method = 'POST';
+        }
+      } else if (action.id) {
+        url = `/api/page-actions/${action.id}`;
+        method = 'PUT';
+      }
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(action)
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ثبت دستور');
-      showToast('دستور شبیه‌سازی مرورگر اضافه شد');
-      loadAllData();
+      showToast('دستور با موفقیت ذخیره شد');
+      await loadAllData();
+      return data;
     } catch (err: any) {
       showToast(err.message, 'error');
+      throw err;
     }
   };
 
   const handleDeletePageAction = async (id: number) => {
     try {
-      const res = await fetch(`/api/page-actions/${id}`, { method: 'DELETE' });
+      const act = pageActions.find((a) => a.id === id);
+      let url = `/api/page-actions/${id}`;
+      if (act?.scope === 'SITE_DEFAULT' && act.site_id) {
+        url = `/api/sites/${act.site_id}/page-actions/${id}`;
+      } else if (act?.scope === 'TABLE_SOURCE' && act.table_source_id) {
+        url = `/api/table-sources/${act.table_source_id}/page-actions/${id}`;
+      }
+
+      const res = await fetch(url, { method: 'DELETE' });
       if (!res.ok) throw new Error('خطا در حذف دستور');
       showToast('دستور حذف گردید');
-      loadAllData();
+      await loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleClearTableSourceActions = async (tableSourceId: number) => {
+    try {
+      const res = await fetch(`/api/table-sources/${tableSourceId}/page-actions`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('خطا در بازنشانی دستورات');
+      showToast('دستورات اختصاصی منبع حذف شد و به پیش‌فرض سایت بازگشت');
+      await loadAllData();
     } catch (err: any) {
       showToast(err.message, 'error');
     }
@@ -517,7 +562,7 @@ export default function App() {
             revisions={tableRevisions}
             revisionItems={tableRevisionItems}
             sites={sites}
-            sourcePages={sourcePages}
+            pageActions={pageActions}
             factories={factories}
             onBack={() => setSelectedTable(null)}
             onRunTable={handleRunTable}
@@ -526,6 +571,9 @@ export default function App() {
             onSaveTableSource={handleSaveTableSource}
             onDeleteTableSource={handleDeleteTableSource}
             onSaveSelector={handleSaveSelector}
+            onSavePageAction={handleSavePageAction}
+            onDeletePageAction={handleDeletePageAction}
+            onClearTableSourceActions={handleClearTableSourceActions}
             onOpenPicker={(url, sourceId, onSelect, target) =>
               setPickerModal({ isOpen: true, url, sourceId, onSelect, target })
             }
@@ -585,13 +633,10 @@ export default function App() {
             {activeTab === 'sites' && (
               <SitesView
                 sites={sites}
-                sourcePages={sourcePages}
                 pageActions={pageActions}
                 onSaveSite={handleSaveSite}
-                onSaveSourcePage={handleSaveSourcePage}
                 onSavePageAction={handleSavePageAction}
                 onDeletePageAction={handleDeletePageAction}
-                onOpenPicker={(url) => setPickerModal({ isOpen: true, url })}
               />
             )}
 

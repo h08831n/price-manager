@@ -3,59 +3,72 @@ import {
   Globe,
   Plus,
   Edit2,
-  MousePointerClick,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   Layers,
   CheckCircle2,
-  Trash2
+  Trash2,
+  MoveUp,
+  MoveDown,
+  Clock,
+  MousePointer,
+  Scroll,
+  Eye,
+  Info
 } from 'lucide-react';
-import { Site, SourcePage, PageAction } from '../types';
+import { Site, PageAction, PageActionType } from '../types';
 
 interface SitesViewProps {
   sites: Site[];
-  sourcePages: SourcePage[];
   pageActions: PageAction[];
   onSaveSite: (site: Partial<Site>) => Promise<void>;
-  onSaveSourcePage: (page: Partial<SourcePage>) => Promise<void>;
   onSavePageAction: (action: Partial<PageAction>) => Promise<void>;
   onDeletePageAction: (id: number) => Promise<void>;
-  onOpenPicker: (url: string) => void;
 }
 
 export const SitesView: React.FC<SitesViewProps> = ({
   sites,
-  sourcePages,
   pageActions,
   onSaveSite,
-  onSaveSourcePage,
   onSavePageAction,
-  onDeletePageAction,
-  onOpenPicker
+  onDeletePageAction
 }) => {
   const [selectedSiteId, setSelectedSiteId] = useState<number>(sites[0]?.id || 1);
   const [isSiteModalOpen, setIsSiteModalOpen] = useState(false);
   const [editingSite, setEditingSite] = useState<Partial<Site> | null>(null);
 
-  // New Source Page Modal
-  const [isPageModalOpen, setIsPageModalOpen] = useState(false);
-  const [newPageUrl, setNewPageUrl] = useState('');
-
-  // Page Action Add Form state
-  const [selectedPageForActions, setSelectedPageForActions] = useState<number | null>(null);
-  const [newActionType, setNewActionType] = useState<string>('WAIT');
-  const [newActionSelector, setNewActionSelector] = useState('');
-  const [newActionValue, setNewActionValue] = useState('');
+  // Default Page Action Modal / Form state
+  const [isActionModalOpen, setIsActionModalOpen] = useState(false);
+  const [editingActionId, setEditingActionId] = useState<number | null>(null);
+  const [actionForm, setActionForm] = useState<{
+    action_type: PageActionType;
+    selector: string;
+    value: string;
+    active: boolean;
+  }>({
+    action_type: 'WAIT',
+    selector: '',
+    value: '1000',
+    active: true
+  });
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
   const currentSite = sites.find((s) => s.id === selectedSiteId) || sites[0];
-  const sitePages = sourcePages.filter((p) => p.site_id === currentSite?.id);
+
+  // Filter default actions belonging to current site, sorted by order
+  const siteDefaultActions = pageActions
+    .filter(
+      (a) =>
+        (a.scope === 'SITE_DEFAULT' && a.site_id === currentSite?.id) ||
+        (!a.scope && a.site_id === currentSite?.id && !a.table_source_id && !a.source_page_id)
+    )
+    .sort((a, b) => a.order - b.order);
 
   const handleOpenAddSite = () => {
     setEditingSite({
       name: '',
       base_url: '',
-      scrape_method: 'FETCH',
+      scrape_method: 'PLAYWRIGHT',
       browser: 'Chromium',
       timeout: 30,
       wait_after_load: 1000,
@@ -64,30 +77,111 @@ export const SitesView: React.FC<SitesViewProps> = ({
     setIsSiteModalOpen(true);
   };
 
-  const handleAddPageAction = async (pageId: number) => {
-    const existingActions = pageActions.filter((a) => a.source_page_id === pageId);
-    await onSavePageAction({
-      source_page_id: pageId,
-      order: existingActions.length + 1,
-      action_type: newActionType as any,
-      selector: newActionSelector,
-      value: newActionValue,
+  const handleOpenAddAction = () => {
+    setEditingActionId(null);
+    setActionForm({
+      action_type: 'WAIT',
+      selector: '',
+      value: '1000',
       active: true
     });
-    setNewActionSelector('');
-    setNewActionValue('');
+    setIsActionModalOpen(true);
   };
 
-  const handleAddSourcePage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentSite || !newPageUrl.trim()) return;
-    await onSaveSourcePage({
-      site_id: currentSite.id,
-      url: newPageUrl.trim(),
-      active: true
+  const handleOpenEditAction = (action: PageAction) => {
+    setEditingActionId(action.id);
+    setActionForm({
+      action_type: action.action_type,
+      selector: action.selector || '',
+      value: action.value || '',
+      active: action.active
     });
-    setNewPageUrl('');
-    setIsPageModalOpen(false);
+    setIsActionModalOpen(true);
+  };
+
+  const handleSaveAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentSite) return;
+    setIsSubmittingAction(true);
+    try {
+      if (editingActionId) {
+        const existing = siteDefaultActions.find((a) => a.id === editingActionId);
+        await onSavePageAction({
+          id: editingActionId,
+          scope: 'SITE_DEFAULT',
+          site_id: currentSite.id,
+          order: existing?.order || 1,
+          action_type: actionForm.action_type,
+          selector: actionForm.selector.trim(),
+          value: actionForm.value.trim(),
+          active: actionForm.active
+        });
+      } else {
+        await onSavePageAction({
+          scope: 'SITE_DEFAULT',
+          site_id: currentSite.id,
+          order: siteDefaultActions.length + 1,
+          action_type: actionForm.action_type,
+          selector: actionForm.selector.trim(),
+          value: actionForm.value.trim(),
+          active: actionForm.active
+        });
+      }
+      setIsActionModalOpen(false);
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const handleMoveAction = async (index: number, direction: 'UP' | 'DOWN') => {
+    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= siteDefaultActions.length) return;
+
+    const currentItem = siteDefaultActions[index];
+    const targetItem = siteDefaultActions[targetIndex];
+
+    const currentOrder = currentItem.order;
+    const targetOrder = targetItem.order;
+
+    await onSavePageAction({
+      id: currentItem.id,
+      scope: 'SITE_DEFAULT',
+      site_id: currentSite.id,
+      order: targetOrder
+    });
+
+    await onSavePageAction({
+      id: targetItem.id,
+      scope: 'SITE_DEFAULT',
+      site_id: currentSite.id,
+      order: currentOrder
+    });
+  };
+
+  const handleToggleActionActive = async (action: PageAction) => {
+    await onSavePageAction({
+      id: action.id,
+      scope: 'SITE_DEFAULT',
+      site_id: currentSite.id,
+      active: !action.active
+    });
+  };
+
+  const getActionTypeLabel = (type: PageActionType) => {
+    switch (type) {
+      case 'WAIT':
+        return { label: 'توقف زمانی (WAIT)', icon: Clock, color: 'bg-amber-50 text-amber-800 border-amber-200' };
+      case 'CLICK':
+        return { label: 'کلیک روی عنصر (CLICK)', icon: MousePointer, color: 'bg-blue-50 text-blue-800 border-blue-200' };
+      case 'SCROLL':
+        return { label: 'اسکرول صفحه (SCROLL)', icon: Scroll, color: 'bg-indigo-50 text-indigo-800 border-indigo-200' };
+      case 'SCROLL_TO':
+        return { label: 'اسکرول به عنصر (SCROLL_TO)', icon: Scroll, color: 'bg-purple-50 text-purple-800 border-purple-200' };
+      case 'WAIT_FOR_ELEMENT':
+        return { label: 'انتظار برای عنصر (WAIT_FOR_ELEMENT)', icon: Eye, color: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
+      default:
+        return { label: type, icon: Clock, color: 'bg-gray-50 text-gray-800 border-gray-200' };
+    }
   };
 
   return (
@@ -142,19 +236,20 @@ export const SitesView: React.FC<SitesViewProps> = ({
                   setIsSiteModalOpen(true);
                 }}
                 className="p-1.5 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100"
+                title="ویرایش اطلاعات سایت"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="text-xs space-y-2 text-gray-600">
+            <div className="text-xs space-y-2.5 text-gray-600">
               <div className="flex justify-between py-1 border-b border-gray-50 items-center">
                 <span>روش جمع‌آوری داده:</span>
                 <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${
                     currentSite.scrape_method === 'PLAYWRIGHT'
-                      ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                      : 'bg-blue-100 text-blue-800 border border-blue-200'
+                      ? 'bg-purple-100 text-purple-800 border-purple-200'
+                      : 'bg-blue-100 text-blue-800 border-blue-200'
                   }`}
                 >
                   {currentSite.scrape_method === 'PLAYWRIGHT' ? 'Playwright (مرورگر زنده)' : 'FETCH (درخواست HTTP)'}
@@ -176,163 +271,157 @@ export const SitesView: React.FC<SitesViewProps> = ({
               </div>
             </div>
 
-            <div className="pt-2">
-              <button
-                onClick={() => setIsPageModalOpen(true)}
-                className="w-full py-2 text-xs font-medium text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>ثبت آدرس صفحه (URL) جدید</span>
-              </button>
+            <div className="p-3 bg-slate-50 rounded-md border border-gray-100 text-[11px] text-gray-500 leading-relaxed">
+              <p>
+                <strong>راهنما:</strong> URLهای استخراج و سلکتورهای هر جدول مستقیماً در بخش «جداول قیمت» مدیریت می‌شوند. دستورات زیر، شبیه‌سازی‌های پیش‌فرض قبل از استخراج برای تمام صفحات این سایت هستند.
+              </p>
             </div>
           </div>
 
-          {/* Source Pages & Page Actions (Requirement #10, #16) */}
+          {/* Site Default Page Actions Section */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-slate-700" />
-                  <h3 className="text-sm font-bold text-gray-900">صفحات هدف و دستورات شبیه‌سازی مرورگر (Page Actions)</h3>
+              <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-slate-800" />
+                    <h3 className="text-sm font-bold text-gray-900">
+                      دستورات پیش‌فرض قبل از استخراج ({currentSite.name})
+                    </h3>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    این دستورات در تمامی منابع متصل به این سایت اجرا می‌شوند (مگر آنکه منبع جدول، دستورات اختصاصی تعریف کرده باشد).
+                  </p>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenAddAction}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors shadow-xs whitespace-nowrap self-start sm:self-auto"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>افزودن دستور پیش‌فرض</span>
+                </button>
               </div>
 
-              <div className="divide-y divide-gray-100">
-                {sitePages.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-gray-400">
-                    هنوز صفحه‌ای برای این سایت ثبت نشده است.
+              {/* Actions List */}
+              <div className="p-4">
+                {siteDefaultActions.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                    هیچ دستور پیش‌فرضی برای این سایت تعریف نشده است.
+                    <br />
+                    در صورت نیاز (مثلاً کلیک روی تب قیمت‌ها، اسکرول یا انتظار)، روی دکمه «افزودن دستور پیش‌فرض» کلیک کنید.
                   </div>
                 ) : (
-                  sitePages.map((page) => {
-                    const actions = pageActions
-                      .filter((a) => a.source_page_id === page.id)
-                      .sort((a, b) => a.order - b.order);
-                    const isExpanded = selectedPageForActions === page.id;
+                  <div className="space-y-2">
+                    {siteDefaultActions.map((action, index) => {
+                      const typeInfo = getActionTypeLabel(action.action_type);
+                      const Icon = typeInfo.icon;
 
-                    return (
-                      <div key={page.id} className="p-4 space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="dir-ltr text-right max-w-lg truncate">
-                            <span className="font-mono text-xs font-medium text-slate-800 bg-gray-50 px-2 py-1 rounded border border-gray-200">
-                              {page.url}
+                      return (
+                        <div
+                          key={action.id}
+                          className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors gap-3 ${
+                            action.active
+                              ? 'bg-white border-gray-200 hover:border-gray-300'
+                              : 'bg-gray-50 border-gray-200 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {/* Reorder Buttons */}
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() => handleMoveAction(index, 'UP')}
+                                className="p-0.5 text-gray-400 hover:text-slate-900 disabled:opacity-20 rounded"
+                                title="انتقال به بالا"
+                              >
+                                <MoveUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === siteDefaultActions.length - 1}
+                                onClick={() => handleMoveAction(index, 'DOWN')}
+                                className="p-0.5 text-gray-400 hover:text-slate-900 disabled:opacity-20 rounded"
+                                title="انتقال به پایین"
+                              >
+                                <MoveDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 font-mono text-xs flex items-center justify-center font-bold">
+                              {index + 1}
                             </span>
+
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${typeInfo.color}`}
+                                >
+                                  <Icon className="w-3 h-3" />
+                                  <span>{typeInfo.label}</span>
+                                </span>
+
+                                {!action.active && (
+                                  <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                    غیرفعال
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-3 text-xs text-gray-600 font-mono dir-ltr text-right">
+                                {action.selector && (
+                                  <span className="bg-gray-50 px-2 py-0.5 rounded border border-gray-200 text-slate-800">
+                                    {action.selector}
+                                  </span>
+                                )}
+                                {action.value && (
+                                  <span className="text-gray-500 font-sans">
+                                    مقدار / زمان: <strong className="font-mono text-gray-800">{action.value}</strong>
+                                    {action.action_type === 'WAIT' && ' ms'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          {/* Action controls */}
+                          <div className="flex items-center gap-2 self-end sm:self-auto">
                             <button
-                              onClick={() => onOpenPicker(page.url)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-800 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors shadow-xs"
-                              title="باز کردن صفحه در محیط انتخابگر تعاملی XPath"
+                              type="button"
+                              onClick={() => handleToggleActionActive(action)}
+                              className={`px-2 py-1 text-[11px] rounded font-medium border transition-colors ${
+                                action.active
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                              }`}
                             >
-                              <MousePointerClick className="w-3.5 h-3.5" />
-                              <span>انتخاب با موس (Picker)</span>
+                              {action.active ? 'فعال' : 'غیرفعال'}
                             </button>
 
                             <button
-                              onClick={() => setSelectedPageForActions(isExpanded ? null : page.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                              type="button"
+                              onClick={() => handleOpenEditAction(action)}
+                              className="p-1.5 text-gray-500 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                              title="ویرایش دستور"
                             >
-                              <span>دستورات کلیک/اسکرول ({actions.length})</span>
-                              {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => onDeletePageAction(action.id)}
+                              className="p-1.5 text-rose-500 hover:text-rose-700 border border-rose-100 rounded hover:bg-rose-50 transition-colors"
+                              title="حذف دستور"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
-
-                        {/* Expandable Page Actions Editor */}
-                        {isExpanded && (
-                          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3 mt-2 text-xs">
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-gray-700">ترتیب دستورات قبل از استخراج اطلاعات:</span>
-                              <span className="text-gray-400">مثال: باز کردن تب قیمت‌ها یا اسکرول برای بارگذاری تنبل</span>
-                            </div>
-
-                            {/* Actions List */}
-                            <div className="space-y-1.5">
-                              {actions.length === 0 ? (
-                                <p className="text-gray-400 py-1">هیچ دستوری تعریف نشده است (صفحه به صورت ساده بارگذاری می‌شود).</p>
-                              ) : (
-                                actions.map((act, idx) => (
-                                  <div
-                                    key={act.id}
-                                    className="flex items-center justify-between bg-white p-2 rounded border border-gray-200"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center">
-                                        {idx + 1}
-                                      </span>
-                                      <span className="font-mono font-bold text-slate-800 text-[11px] px-1.5 py-0.5 bg-slate-100 rounded">
-                                        {act.action_type}
-                                      </span>
-                                      {act.selector && (
-                                        <span className="font-mono text-[11px] text-gray-600 dir-ltr">
-                                          {act.selector}
-                                        </span>
-                                      )}
-                                      {act.value && (
-                                        <span className="text-gray-500 text-[11px]">
-                                          (مقدار: {act.value})
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    <button
-                                      onClick={() => onDeletePageAction(act.id)}
-                                      className="text-gray-400 hover:text-rose-600 p-1"
-                                      title="حذف دستور"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-
-                            {/* Add Action Row */}
-                            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-200">
-                              <select
-                                value={newActionType}
-                                onChange={(e) => setNewActionType(e.target.value)}
-                                className="bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-                              >
-                                <option value="WAIT">WAIT (انتظار زمانی)</option>
-                                <option value="CLICK">CLICK (کلیک روی دکمه/تب)</option>
-                                <option value="SCROLL">SCROLL (اسکرول به پایین)</option>
-                                <option value="SCROLL_TO">SCROLL_TO (اسکرول به المان)</option>
-                                <option value="WAIT_FOR_ELEMENT">WAIT_FOR_ELEMENT (انتظار برای المان)</option>
-                              </select>
-
-                              {newActionType !== 'SCROLL' && newActionType !== 'WAIT' && (
-                                <input
-                                  type="text"
-                                  placeholder="سلکتور XPath یا CSS"
-                                  value={newActionSelector}
-                                  onChange={(e) => setNewActionSelector(e.target.value)}
-                                  className="bg-white border border-gray-300 rounded px-2 py-1 text-xs flex-1 dir-ltr text-right font-mono"
-                                />
-                              )}
-
-                              {(newActionType === 'WAIT' || newActionType === 'SCROLL') && (
-                                <input
-                                  type="text"
-                                  placeholder={newActionType === 'WAIT' ? 'مدت به میلی‌ثانیه (مثلا 2000)' : 'میزان اسکرول به پیکسل (مثلا 500)'}
-                                  value={newActionValue}
-                                  onChange={(e) => setNewActionValue(e.target.value)}
-                                  className="bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono"
-                                />
-                              )}
-
-                              <button
-                                onClick={() => handleAddPageAction(page.id)}
-                                className="px-3 py-1 bg-slate-900 text-white rounded text-xs hover:bg-slate-800 transition-colors"
-                              >
-                                ثبت دستور
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </div>
@@ -340,12 +429,12 @@ export const SitesView: React.FC<SitesViewProps> = ({
         </div>
       )}
 
-      {/* Add / Edit Site Modal */}
+      {/* Site Add / Edit Modal */}
       {isSiteModalOpen && editingSite && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150">
-            <h3 className="text-sm font-bold text-gray-900 mb-4">
-              {editingSite.id ? 'ویرایش اطلاعات سایت' : 'افزودن سایت رقیب جدید'}
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-3">
+              {editingSite.id ? 'ویرایش سایت رقیب' : 'افزودن سایت رقیب جدید'}
             </h3>
 
             <form
@@ -357,72 +446,71 @@ export const SitesView: React.FC<SitesViewProps> = ({
               className="space-y-4 text-xs"
             >
               <div>
-                <label className="block text-gray-700 font-medium mb-1">
-                  نام سایت رقیب <span className="text-rose-500">*</span>
+                <label className="block text-gray-700 font-semibold mb-1">
+                  نام سایت <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="مثال: آهن آنلاین"
                   value={editingSite.name || ''}
                   onChange={(e) => setEditingSite({ ...editingSite, name: e.target.value })}
-                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  placeholder="مثال: آهن آنلاین"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 font-medium mb-1">
-                  آدرس پایه سایت (Base URL) <span className="text-rose-500">*</span>
+                <label className="block text-gray-700 font-semibold mb-1">
+                  آدرس اصلی (Base URL) <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="url"
                   required
-                  placeholder="https://example.com"
                   value={editingSite.base_url || ''}
                   onChange={(e) => setEditingSite({ ...editingSite, base_url: e.target.value })}
-                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 dir-ltr text-right font-mono"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 dir-ltr text-right"
+                  placeholder="https://example.com"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 font-medium mb-1">
-                  روش جمع‌آوری و رندر صفحات (Scrape Method) <span className="text-rose-500">*</span>
+                <label className="block text-gray-700 font-semibold mb-1">
+                  روش جمع‌آوری داده (Scrape Method) <span className="text-rose-500">*</span>
                 </label>
                 <select
-                  value={editingSite.scrape_method || 'FETCH'}
-                  onChange={(e) => setEditingSite({ ...editingSite, scrape_method: e.target.value as any })}
-                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-medium text-xs"
+                  value={editingSite.scrape_method || 'PLAYWRIGHT'}
+                  onChange={(e) =>
+                    setEditingSite({ ...editingSite, scrape_method: e.target.value as 'FETCH' | 'PLAYWRIGHT' })
+                  }
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
                 >
-                  <option value="FETCH">FETCH (سبک و سریع - مناسب صفحات ساده بدون جاوااسکریپت سنگین)</option>
-                  <option value="PLAYWRIGHT">PLAYWRIGHT (مرورگر واقعی Headless Chromium - رندر کامل JS، کلیک و اسکرول)</option>
+                  <option value="PLAYWRIGHT">Playwright (مرورگر زنده - مناسب سایت‌های جاوااسکریپتی)</option>
+                  <option value="FETCH">FETCH (درخواست سریع HTTP - فقط سایت‌های بدون جاوااسکریپت پویا)</option>
                 </select>
-                <p className="text-[11px] text-gray-500 mt-1">
-                  {editingSite.scrape_method === 'PLAYWRIGHT'
-                    ? 'از مرورگر واقعی Chromium برای اجرای کدهای جاوااسکریپت صفحه و اجرای کامل اکشن‌های کلیک و اسکرول استفاده می‌شود.'
-                    : 'از درخواست استاندارد HTTP Fetch استفاده می‌شود که بسیار سریع و کم‌مصرف است (دستورات کلیک/اسکرول تعاملی در این حالت شبیه‌سازی نمی‌شوند).'}
-                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">مهلت انتظار بارگذاری (ثانیه)</label>
+                  <label className="block text-gray-700 font-semibold mb-1">مهلت بارگذاری (Timeout ثانیه)</label>
                   <input
                     type="number"
+                    min="5"
+                    max="120"
                     value={editingSite.timeout || 30}
                     onChange={(e) => setEditingSite({ ...editingSite, timeout: parseInt(e.target.value, 10) })}
-                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">تأخیر بعد از بارگذاری (ms)</label>
+                  <label className="block text-gray-700 font-semibold mb-1">تأخیر بعد لود (میلی‌ثانیه)</label>
                   <input
                     type="number"
-                    value={editingSite.wait_after_load || 1000}
-                    onChange={(e) =>
-                      setEditingSite({ ...editingSite, wait_after_load: parseInt(e.target.value, 10) })
-                    }
-                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
+                    min="0"
+                    step="100"
+                    value={editingSite.wait_after_load ?? 1000}
+                    onChange={(e) => setEditingSite({ ...editingSite, wait_after_load: parseInt(e.target.value, 10) })}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
                   />
                 </div>
               </div>
@@ -430,29 +518,29 @@ export const SitesView: React.FC<SitesViewProps> = ({
               <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
-                  id="site-active"
+                  id="site-active-toggle"
                   checked={editingSite.active ?? true}
                   onChange={(e) => setEditingSite({ ...editingSite, active: e.target.checked })}
-                  className="rounded text-slate-900 focus:ring-0"
+                  className="rounded border-gray-300 text-slate-800 focus:ring-slate-800"
                 />
-                <label htmlFor="site-active" className="text-gray-700 font-medium cursor-pointer">
-                  سایت فعال باشد و در پایش شرکت داده شود
+                <label htmlFor="site-active-toggle" className="text-gray-700 font-medium">
+                  این سایت در فرآیندهای استخراج خودکار فعال باشد
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsSiteModalOpen(false)}
-                  className="px-4 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
                 >
-                  ذخیره سایت
+                  ذخیره اطلاعات سایت
                 </button>
               </div>
             </form>
@@ -460,40 +548,98 @@ export const SitesView: React.FC<SitesViewProps> = ({
         </div>
       )}
 
-      {/* Add Source Page Modal */}
-      {isPageModalOpen && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg p-6 animate-in fade-in zoom-in-95 duration-150">
-            <h3 className="text-sm font-bold text-gray-900 mb-4">ثبت آدرس صفحه (URL) منبع در سایت {currentSite.name}</h3>
+      {/* Default Page Action Add / Edit Modal */}
+      {isActionModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-3">
+              {editingActionId ? 'ویرایش دستور پیش‌فرض قبل از استخراج' : 'افزودن دستور پیش‌فرض جدید برای سایت'}
+            </h3>
 
-            <form onSubmit={handleAddSourcePage} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveAction} className="space-y-4 text-xs">
               <div>
-                <label className="block text-gray-700 font-medium mb-1">
-                  آدرس دقیق صفحه وب (Full URL) <span className="text-rose-500">*</span>
+                <label className="block text-gray-700 font-semibold mb-1">
+                  نوع دستور (Action Type) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={actionForm.action_type}
+                  onChange={(e) =>
+                    setActionForm({ ...actionForm, action_type: e.target.value as PageActionType })
+                  }
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                >
+                  <option value="WAIT">توقف زمانی (WAIT) - برحسب میلی‌ثانیه</option>
+                  <option value="CLICK">کلیک روی عنصر (CLICK)</option>
+                  <option value="SCROLL">اسکرول صفحه (SCROLL)</option>
+                  <option value="SCROLL_TO">اسکرول به عنصر خاص (SCROLL_TO)</option>
+                  <option value="WAIT_FOR_ELEMENT">انتظار برای ظاهر شدن عنصر (WAIT_FOR_ELEMENT)</option>
+                </select>
+              </div>
+
+              {(actionForm.action_type === 'CLICK' ||
+                actionForm.action_type === 'WAIT_FOR_ELEMENT' ||
+                actionForm.action_type === 'SCROLL_TO') && (
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">
+                    سلکتور عنصر (XPath یا CSS Selector) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={actionForm.selector}
+                    onChange={(e) => setActionForm({ ...actionForm, selector: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-[11px] dir-ltr text-right"
+                    placeholder="//button[@id='show-price-tab'] یا #price-tab"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-gray-700 font-semibold mb-1">
+                  {actionForm.action_type === 'WAIT'
+                    ? 'مدت زمان انتظار (میلی‌ثانیه)'
+                    : actionForm.action_type === 'WAIT_FOR_ELEMENT'
+                    ? 'حداکثر زمان انتظار (میلی‌ثانیه - اختیاری)'
+                    : actionForm.action_type === 'SCROLL'
+                    ? 'مقدار اسکرول (پیکسل یا پایین صفحه: 500)'
+                    : 'مقدار یا پارامتر کمکی (اختیاری)'}
                 </label>
                 <input
-                  type="url"
-                  required
-                  placeholder="https://example.com/rebar-prices"
-                  value={newPageUrl}
-                  onChange={(e) => setNewPageUrl(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 dir-ltr text-right font-mono"
+                  type="text"
+                  value={actionForm.value}
+                  onChange={(e) => setActionForm({ ...actionForm, value: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-[11px] dir-ltr text-right"
+                  placeholder={actionForm.action_type === 'WAIT' ? '1500' : ''}
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200">
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="action-active-toggle"
+                  checked={actionForm.active}
+                  onChange={(e) => setActionForm({ ...actionForm, active: e.target.checked })}
+                  className="rounded border-gray-300 text-slate-800 focus:ring-slate-800"
+                />
+                <label htmlFor="action-active-toggle" className="text-gray-700 font-medium">
+                  این دستور در فرآیند استخراج فعال باشد
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setIsPageModalOpen(false)}
-                  className="px-4 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                  onClick={() => setIsActionModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
+                  disabled={isSubmittingAction}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded transition-colors"
                 >
-                  افزودن صفحه
+                  {isSubmittingAction ? 'در حال ذخیره...' : 'ذخیره دستور'}
                 </button>
               </div>
             </form>

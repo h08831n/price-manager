@@ -3,23 +3,26 @@ import {
   ArrowRight,
   Play,
   Globe,
-  Clock,
-  ShieldCheck,
-  ShieldAlert,
-  Send,
   Plus,
-  RefreshCw,
-  ExternalLink,
-  Code,
-  MousePointerClick,
-  CheckCircle2,
-  AlertTriangle,
   Edit2,
   Trash2,
   X,
   Check,
   Sliders,
-  Sparkles
+  ChevronDown,
+  ChevronUp,
+  MousePointerClick,
+  Code,
+  Layers,
+  Clock,
+  MousePointer,
+  Scroll,
+  Eye,
+  RotateCcw,
+  CheckCircle2,
+  ExternalLink,
+  MoveUp,
+  MoveDown
 } from 'lucide-react';
 import {
   PriceTable,
@@ -29,8 +32,9 @@ import {
   TableRevision,
   TableRevisionItem,
   Site,
-  SourcePage,
-  Factory
+  Factory,
+  PageAction,
+  PageActionType
 } from '../types';
 
 interface PriceTableDetailViewProps {
@@ -41,15 +45,18 @@ interface PriceTableDetailViewProps {
   revisions: TableRevision[];
   revisionItems: TableRevisionItem[];
   sites?: Site[];
-  sourcePages?: SourcePage[];
+  pageActions?: PageAction[];
   factories?: Factory[];
   onBack: () => void;
   onRunTable: (tableId: number) => Promise<void>;
   onRunSource: (sourceId: number) => Promise<void>;
   onSaveTable?: (table: Partial<PriceTable>) => Promise<void>;
-  onSaveTableSource?: (data: Partial<TableSource> & { new_url?: string }) => Promise<void>;
+  onSaveTableSource?: (data: Partial<TableSource> & { url?: string; new_url?: string }) => Promise<void>;
   onDeleteTableSource?: (id: number) => Promise<void>;
   onSaveSelector?: (tableSourceId: number, productId: number, data: { price_xpath?: string; update_time_xpath?: string; active?: boolean }) => Promise<void>;
+  onSavePageAction?: (action: Partial<PageAction>) => Promise<void>;
+  onDeletePageAction?: (id: number) => Promise<void>;
+  onClearTableSourceActions?: (tableSourceId: number) => Promise<void>;
   onOpenPicker: (url: string, sourceId?: number, onSelect?: (xpath: string) => void, target?: 'TABLE_UPDATE' | 'PRODUCT_UPDATE' | 'PRODUCT_PRICE') => void;
   onOpenTester: (sourceId: number, url: string, xpath?: string, type?: 'PRICE' | 'DATE') => void;
   onRetryPublish: (revisionId: number) => Promise<void>;
@@ -63,7 +70,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   revisions,
   revisionItems,
   sites = [],
-  sourcePages = [],
+  pageActions = [],
   factories = [],
   onBack,
   onRunTable,
@@ -72,6 +79,9 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   onSaveTableSource,
   onDeleteTableSource,
   onSaveSelector,
+  onSavePageAction,
+  onDeletePageAction,
+  onClearTableSourceActions,
   onOpenPicker,
   onOpenTester,
   onRetryPublish
@@ -79,9 +89,6 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const [activeTab, setActiveTab] = useState<'sources' | 'settings'>('sources');
   const [isRunning, setIsRunning] = useState(false);
   const [runningSourceId, setRunningSourceId] = useState<number | null>(null);
-  const [selectedSourceForSelectors, setSelectedSourceForSelectors] = useState<number | null>(sources.find(s => s.price_table_id === table.id)?.id || null);
-  const [editingSelectors, setEditingSelectors] = useState<Record<string, { price_xpath: string; update_time_xpath: string }>>({});
-  const [savingProductId, setSavingProductId] = useState<number | null>(null);
 
   // General Table Settings state
   const [tableSettings, setTableSettings] = useState({
@@ -96,14 +103,11 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSavedSuccess, setSettingsSavedSuccess] = useState(false);
 
-  // TableSource creation and editing modal state
-  const [isSourceModalOpen, setIsSourceModalOpen] = useState(false);
-  const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
-  const [sourceForm, setSourceForm] = useState({
-    site_id: 0,
-    page_mode: 'EXISTING' as 'EXISTING' | 'NEW',
-    source_page_id: 0,
-    new_page_url: '',
+  // New TableSource Modal state
+  const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
+  const [newSourceForm, setNewSourceForm] = useState({
+    site_id: sites[0]?.id || 1,
+    url: '',
     update_time_xpath: '',
     recheck_enabled: true,
     active: true,
@@ -112,23 +116,90 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     timeout_override: '',
     price_guard_override: ''
   });
-  const [savingSourceModal, setSavingSourceModal] = useState(false);
+  const [isSubmittingNewSource, setIsSubmittingNewSource] = useState(false);
 
-  // Table update XPath inline state
+  // Edit Source Settings Modal state
+  const [editingSourceSettings, setEditingSourceSettings] = useState<TableSource | null>(null);
+
+  // Inline inputs state for each TableSource
+  const [sourceUrls, setSourceUrls] = useState<Record<number, string>>({});
   const [sourceUpdateXPaths, setSourceUpdateXPaths] = useState<Record<number, string>>({});
   const [savingSourceId, setSavingSourceId] = useState<number | null>(null);
+
+  // Expanded states for accordions
+  const [expandedProducts, setExpandedProducts] = useState<Record<number, boolean>>({});
+  const [expandedActions, setExpandedActions] = useState<Record<number, boolean>>({});
+
+  // Product Selector inline edits: Record<`sourceId_productId`, { price_xpath: string; update_time_xpath: string }>
+  const [editingSelectors, setEditingSelectors] = useState<Record<string, { price_xpath: string; update_time_xpath: string }>>({});
+  const [savingSelectorKey, setSavingSelectorKey] = useState<string | null>(null);
+  const [savedSelectorKey, setSavedSelectorKey] = useState<string | null>(null);
+
+  // Page Action Add / Edit Modal state for TableSource
+  const [actionModal, setActionModal] = useState<{
+    isOpen: boolean;
+    sourceId: number | null;
+    actionId: number | null;
+    action_type: PageActionType;
+    selector: string;
+    value: string;
+    active: boolean;
+  }>({
+    isOpen: false,
+    sourceId: null,
+    actionId: null,
+    action_type: 'WAIT',
+    selector: '',
+    value: '1000',
+    active: true
+  });
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
   const tableSources = sources.filter((s) => s.price_table_id === table.id);
   const tableProducts = products.filter((p) => p.price_table_id === table.id);
 
-  // Latest calculated revision
-  const latestRevision = revisions
-    .filter((r) => r.price_table_id === table.id)
-    .sort((a, b) => new Date(b.calculated_at).getTime() - new Date(a.calculated_at).getTime())[0];
+  // Helpers for Source Page URLs and Actions
+  const getSourceUrl = (source: TableSource): string => {
+    if (sourceUrls[source.id] !== undefined) return sourceUrls[source.id];
+    return source.url || source.source_page_url || '';
+  };
 
-  const currentItems = latestRevision
-    ? revisionItems.filter((item) => item.table_revision_id === latestRevision.id)
-    : [];
+  const getSourceUpdateXPath = (source: TableSource): string => {
+    if (sourceUpdateXPaths[source.id] !== undefined) return sourceUpdateXPaths[source.id];
+    return source.update_time_xpath || '';
+  };
+
+  // Get override actions for a source
+  const getSourceOverrideActions = (sourceId: number): PageAction[] => {
+    return pageActions
+      .filter((a) => a.scope === 'TABLE_SOURCE' && a.table_source_id === sourceId)
+      .sort((a, b) => a.order - b.order);
+  };
+
+  // Get default actions for a site
+  const getSiteDefaultActions = (siteId: number): PageAction[] => {
+    return pageActions
+      .filter(
+        (a) =>
+          (a.scope === 'SITE_DEFAULT' && a.site_id === siteId) ||
+          (!a.scope && a.site_id === siteId && !a.table_source_id && !a.source_page_id)
+      )
+      .sort((a, b) => a.order - b.order);
+  };
+
+  const getSelectorForProduct = (sourceId: number, productId: number): ProductSelector | undefined => {
+    return selectors.find((s) => s.table_source_id === sourceId && s.product_id === productId);
+  };
+
+  const getSelectorInputValues = (sourceId: number, productId: number) => {
+    const key = `${sourceId}_${productId}`;
+    if (editingSelectors[key]) return editingSelectors[key];
+    const existing = getSelectorForProduct(sourceId, productId);
+    return {
+      price_xpath: existing?.price_xpath || '',
+      update_time_xpath: existing?.update_time_xpath || ''
+    };
+  };
 
   const handleRunTable = async () => {
     setIsRunning(true);
@@ -158,104 +229,23 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
         ...tableSettings
       });
       setSettingsSavedSuccess(true);
-      setTimeout(() => setSettingsSavedSuccess(false), 3500);
-    } catch (err: any) {
-      alert(err.message || 'خطا در ذخیره تنظیمات جدول');
+      setTimeout(() => setSettingsSavedSuccess(false), 3000);
     } finally {
       setSavingSettings(false);
     }
   };
 
-  const handleOpenAddSource = () => {
-    const firstSite = sites[0];
-    const available = firstSite ? sourcePages.filter(p => p.site_id === firstSite.id) : [];
-    setEditingSourceId(null);
-    setSourceForm({
-      site_id: firstSite?.id || 0,
-      page_mode: available.length > 0 ? 'EXISTING' : 'NEW',
-      source_page_id: available[0]?.id || 0,
-      new_page_url: '',
-      update_time_xpath: '',
-      recheck_enabled: true,
-      active: true,
-      max_attempts_override: '',
-      retry_interval_override: '',
-      timeout_override: '',
-      price_guard_override: ''
-    });
-    setIsSourceModalOpen(true);
-  };
-
-  const handleOpenEditSource = (source: TableSource) => {
-    setEditingSourceId(source.id);
-    setSourceForm({
-      site_id: source.site_id,
-      page_mode: 'EXISTING',
-      source_page_id: source.source_page_id,
-      new_page_url: '',
-      update_time_xpath: source.update_time_xpath || '',
-      recheck_enabled: source.recheck_enabled,
-      active: source.active,
-      max_attempts_override: source.max_attempts_override ? String(source.max_attempts_override) : '',
-      retry_interval_override: source.retry_interval_override ? String(source.retry_interval_override) : '',
-      timeout_override: source.timeout_override ? String(source.timeout_override) : '',
-      price_guard_override: source.price_guard_override ? String(source.price_guard_override) : ''
-    });
-    setIsSourceModalOpen(true);
-  };
-
-  const handleSaveSourceModal = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveSourceInline = async (source: TableSource) => {
     if (!onSaveTableSource) return;
-    if (!sourceForm.site_id) {
-      alert('لطفا سایت منبع را انتخاب نمایید.');
-      return;
-    }
-    if (sourceForm.page_mode === 'NEW') {
-      if (!sourceForm.new_page_url.trim()) {
-        alert('لطفا آدرس URL صفحه جدید را وارد نمایید.');
-        return;
-      }
-    } else {
-      if (!sourceForm.source_page_id) {
-        alert('لطفا صفحه منبع را انتخاب نمایید.');
-        return;
-      }
-    }
-
-    setSavingSourceModal(true);
+    setSavingSourceId(source.id);
     try {
+      const urlVal = getSourceUrl(source).trim();
+      const xpathVal = getSourceUpdateXPath(source).trim();
       await onSaveTableSource({
-        id: editingSourceId || undefined,
-        price_table_id: table.id,
-        site_id: sourceForm.site_id,
-        source_page_id: sourceForm.page_mode === 'NEW' ? 0 : sourceForm.source_page_id,
-        new_url: sourceForm.page_mode === 'NEW' ? sourceForm.new_page_url.trim() : undefined,
-        update_time_xpath: sourceForm.update_time_xpath ? sourceForm.update_time_xpath.trim() : '',
-        recheck_enabled: sourceForm.recheck_enabled,
-        active: sourceForm.active,
-        max_attempts_override: sourceForm.max_attempts_override ? parseInt(sourceForm.max_attempts_override, 10) : null,
-        retry_interval_override: sourceForm.retry_interval_override ? parseInt(sourceForm.retry_interval_override, 10) : null,
-        timeout_override: sourceForm.timeout_override ? parseInt(sourceForm.timeout_override, 10) : null,
-        price_guard_override: sourceForm.price_guard_override ? parseFloat(sourceForm.price_guard_override) : null
-      } as any);
-      setIsSourceModalOpen(false);
-    } catch (err: any) {
-      // Handled
-    } finally {
-      setSavingSourceModal(false);
-    }
-  };
-
-  const handleSaveInlineUpdateXPath = async (sourceId: number) => {
-    if (!onSaveTableSource) return;
-    const currentVal = sourceUpdateXPaths[sourceId];
-    if (currentVal === undefined) return;
-    setSavingSourceId(sourceId);
-    try {
-      await onSaveTableSource({
-        id: sourceId,
-        update_time_xpath: currentVal.trim() || ''
+        id: source.id,
+        site_id: source.site_id,
+        url: urlVal,
+        update_time_xpath: xpathVal
       });
     } finally {
       setSavingSourceId(null);
@@ -266,6 +256,153 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     if (!onDeleteTableSource) return;
     if (window.confirm('آیا از حذف این منبع و تمام سلکتورهای مرتبط با آن مطمئن هستید؟')) {
       await onDeleteTableSource(sourceId);
+    }
+  };
+
+  const handleAddSourceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onSaveTableSource) return;
+    if (!newSourceForm.url.trim()) {
+      alert('لطفاً آدرس صفحه (URL) منبع را وارد نمایید.');
+      return;
+    }
+
+    setIsSubmittingNewSource(true);
+    try {
+      await onSaveTableSource({
+        price_table_id: table.id,
+        site_id: newSourceForm.site_id,
+        url: newSourceForm.url.trim(),
+        update_time_xpath: newSourceForm.update_time_xpath.trim(),
+        recheck_enabled: newSourceForm.recheck_enabled,
+        active: newSourceForm.active,
+        max_attempts_override: newSourceForm.max_attempts_override ? parseInt(newSourceForm.max_attempts_override, 10) : null,
+        retry_interval_override: newSourceForm.retry_interval_override ? parseInt(newSourceForm.retry_interval_override, 10) : null,
+        timeout_override: newSourceForm.timeout_override ? parseInt(newSourceForm.timeout_override, 10) : null,
+        price_guard_override: newSourceForm.price_guard_override ? parseFloat(newSourceForm.price_guard_override) : null
+      });
+      setIsAddSourceModalOpen(false);
+      setNewSourceForm({
+        site_id: sites[0]?.id || 1,
+        url: '',
+        update_time_xpath: '',
+        recheck_enabled: true,
+        active: true,
+        max_attempts_override: '',
+        retry_interval_override: '',
+        timeout_override: '',
+        price_guard_override: ''
+      });
+    } finally {
+      setIsSubmittingNewSource(false);
+    }
+  };
+
+  const handleSaveSelector = async (sourceId: number, productId: number) => {
+    if (!onSaveSelector) return;
+    const key = `${sourceId}_${productId}`;
+    const vals = getSelectorInputValues(sourceId, productId);
+    setSavingSelectorKey(key);
+    try {
+      await onSaveSelector(sourceId, productId, {
+        price_xpath: vals.price_xpath.trim(),
+        update_time_xpath: vals.update_time_xpath.trim() || undefined,
+        active: true
+      });
+      setSavedSelectorKey(key);
+      setTimeout(() => setSavedSelectorKey(null), 2500);
+    } finally {
+      setSavingSelectorKey(null);
+    }
+  };
+
+  // Actions management
+  const handleSaveSourceAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onSavePageAction || !actionModal.sourceId) return;
+    setIsSubmittingAction(true);
+    try {
+      const overrides = getSourceOverrideActions(actionModal.sourceId);
+      if (actionModal.actionId) {
+        const existing = overrides.find((a) => a.id === actionModal.actionId);
+        await onSavePageAction({
+          id: actionModal.actionId,
+          scope: 'TABLE_SOURCE',
+          table_source_id: actionModal.sourceId,
+          order: existing?.order || 1,
+          action_type: actionModal.action_type,
+          selector: actionModal.selector.trim(),
+          value: actionModal.value.trim(),
+          active: actionModal.active
+        });
+      } else {
+        await onSavePageAction({
+          scope: 'TABLE_SOURCE',
+          table_source_id: actionModal.sourceId,
+          order: overrides.length + 1,
+          action_type: actionModal.action_type,
+          selector: actionModal.selector.trim(),
+          value: actionModal.value.trim(),
+          active: actionModal.active
+        });
+      }
+      setActionModal((prev) => ({ ...prev, isOpen: false }));
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const handleRevertToSiteDefaults = async (sourceId: number) => {
+    if (window.confirm('آیا می‌خواهید دستورات اختصاصی این منبع حذف شوند و از دستورات پیش‌فرض سایت استفاده شود؟')) {
+      if (onClearTableSourceActions) {
+        await onClearTableSourceActions(sourceId);
+      } else if (onDeletePageAction) {
+        const overrides = getSourceOverrideActions(sourceId);
+        for (const act of overrides) {
+          await onDeletePageAction(act.id);
+        }
+      }
+    }
+  };
+
+  const handleMoveSourceAction = async (sourceId: number, index: number, direction: 'UP' | 'DOWN') => {
+    if (!onSavePageAction) return;
+    const overrides = getSourceOverrideActions(sourceId);
+    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= overrides.length) return;
+
+    const currentItem = overrides[index];
+    const targetItem = overrides[targetIndex];
+
+    await onSavePageAction({
+      id: currentItem.id,
+      scope: 'TABLE_SOURCE',
+      table_source_id: sourceId,
+      order: targetItem.order
+    });
+
+    await onSavePageAction({
+      id: targetItem.id,
+      scope: 'TABLE_SOURCE',
+      table_source_id: sourceId,
+      order: currentItem.order
+    });
+  };
+
+  const getActionTypeLabel = (type: PageActionType) => {
+    switch (type) {
+      case 'WAIT':
+        return { label: 'توقف (WAIT)', icon: Clock, color: 'bg-amber-50 text-amber-800 border-amber-200' };
+      case 'CLICK':
+        return { label: 'کلیک (CLICK)', icon: MousePointer, color: 'bg-blue-50 text-blue-800 border-blue-200' };
+      case 'SCROLL':
+        return { label: 'اسکرول (SCROLL)', icon: Scroll, color: 'bg-indigo-50 text-indigo-800 border-indigo-200' };
+      case 'SCROLL_TO':
+        return { label: 'اسکرول به (SCROLL_TO)', icon: Scroll, color: 'bg-purple-50 text-purple-800 border-purple-200' };
+      case 'WAIT_FOR_ELEMENT':
+        return { label: 'انتظار عنصر (WAIT_FOR_ELEMENT)', icon: Eye, color: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
+      default:
+        return { label: type, icon: Clock, color: 'bg-gray-50 text-gray-800 border-gray-200' };
     }
   };
 
@@ -382,7 +519,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                 type="text"
                 required
                 value={tableSettings.name}
-                onChange={(e) => setTableSettings(prev => ({ ...prev, name: e.target.value }))}
+                onChange={(e) => setTableSettings((prev) => ({ ...prev, name: e.target.value }))}
                 className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
               />
             </div>
@@ -391,926 +528,1054 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               <label className="block text-gray-700 font-semibold mb-1">کارخانه تولیدکننده</label>
               <select
                 value={tableSettings.factory_id}
-                onChange={(e) => setTableSettings(prev => ({ ...prev, factory_id: parseInt(e.target.value, 10) }))}
+                onChange={(e) => setTableSettings((prev) => ({ ...prev, factory_id: parseInt(e.target.value, 10) }))}
                 className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
               >
                 {factories.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
                 ))}
               </select>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">ساعت شروع پایش روزانه (HH:mm)</label>
+                <label className="block text-gray-700 font-semibold mb-1">ساعت شروع پایش روزانه</label>
                 <input
-                  type="text"
-                  required
-                  dir="ltr"
+                  type="time"
                   value={tableSettings.start_time}
-                  onChange={(e) => setTableSettings(prev => ({ ...prev, start_time: e.target.value }))}
-                  className="w-full px-3 py-2 font-mono text-left bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  onChange={(e) => setTableSettings((prev) => ({ ...prev, start_time: e.target.value }))}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 text-left font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">فاصله تلاش مجدد در صورت قدیمی بودن (دقیقه)</label>
+                <label className="block text-gray-700 font-semibold mb-1">فاصله تلاش مجدد در صورت عدم انتشار (دقیقه)</label>
                 <input
                   type="number"
-                  min="1"
-                  max="1440"
+                  min="5"
+                  max="120"
                   value={tableSettings.retry_interval_minutes}
-                  onChange={(e) => setTableSettings(prev => ({ ...prev, retry_interval_minutes: parseInt(e.target.value, 10) }))}
-                  className="w-full px-3 py-2 font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  onChange={(e) =>
+                    setTableSettings((prev) => ({ ...prev, retry_interval_minutes: parseInt(e.target.value, 10) }))
+                  }
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">حداکثر دفعات تلاش در روز (Max Attempts)</label>
+                <label className="block text-gray-700 font-semibold mb-1">حداکثر دفعات تلاش مجدد در روز</label>
                 <input
                   type="number"
                   min="1"
-                  max="100"
+                  max="20"
                   value={tableSettings.max_attempts}
-                  onChange={(e) => setTableSettings(prev => ({ ...prev, max_attempts: parseInt(e.target.value, 10) }))}
-                  className="w-full px-3 py-2 font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  onChange={(e) => setTableSettings((prev) => ({ ...prev, max_attempts: parseInt(e.target.value, 10) }))}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">آستانه هشدار Price Guard (درصد تغییر)</label>
+                <label className="block text-gray-700 font-semibold mb-1">آستانه محافظ نوسان قیمت (Price Guard درصد)</label>
                 <input
                   type="number"
-                  step="0.1"
                   min="1"
                   max="100"
                   value={tableSettings.price_guard_percent}
-                  onChange={(e) => setTableSettings(prev => ({ ...prev, price_guard_percent: parseFloat(e.target.value) }))}
-                  className="w-full px-3 py-2 font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  onChange={(e) =>
+                    setTableSettings((prev) => ({ ...prev, price_guard_percent: parseFloat(e.target.value) }))
+                  }
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                 />
               </div>
             </div>
 
-            <div className="pt-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={tableSettings.active}
-                  onChange={(e) => setTableSettings(prev => ({ ...prev, active: e.target.checked }))}
-                  className="rounded text-slate-900 focus:ring-slate-800"
-                />
-                <span className="font-semibold text-gray-800">
-                  جدول فعال باشد و در چرخه کرون روزانه پایش شود
-                </span>
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                id="active-toggle"
+                checked={tableSettings.active}
+                onChange={(e) => setTableSettings((prev) => ({ ...prev, active: e.target.checked }))}
+                className="rounded border-gray-300 text-slate-800 focus:ring-slate-800"
+              />
+              <label htmlFor="active-toggle" className="text-gray-700 font-medium">
+                این جدول قیمت فعال باشد
               </label>
             </div>
 
-            <div className="flex items-center justify-between pt-5 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setActiveTab('sources')}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded transition-colors text-xs font-medium"
-              >
-                انتقال به مدیریت منابع و سلکتورها ←
-              </button>
-
+            <div className="pt-4 border-t border-gray-100 flex justify-end">
               <button
                 type="submit"
                 disabled={savingSettings}
-                className="inline-flex items-center gap-1.5 px-5 py-2 font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors disabled:opacity-50 text-xs shadow-xs"
+                className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded transition-colors shadow-xs"
               >
-                {savingSettings ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                <span>{savingSettings ? 'در حال ذخیره...' : 'ذخیره تنظیمات جدول'}</span>
+                {savingSettings ? 'در حال ذخیره...' : 'ذخیره تنظیمات جدول'}
               </button>
             </div>
           </form>
         </div>
       ) : (
-        <>
-          {/* Sources Section (Requirement #11, #51) */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-slate-700" />
-            <h2 className="text-sm font-bold text-gray-900">منابع و سایت‌های رقیب این جدول ({tableSources.length})</h2>
-          </div>
-          <div className="flex items-center gap-3">
-            <p className="text-xs text-gray-500 hidden sm:block">پایش روزانه تاریخ، زمان و استخراج قیمت از هر رقیب</p>
+        /* Sources & Selectors Section */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-gray-200 shadow-xs">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-slate-800" />
+                منابع استخراج قیمت برای این جدول
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                تعریف سایت رقیب، آدرس URL، سلکتور تاریخ جدول، دستورات قبل از استخراج و XPath قیمت محصولات
+              </p>
+            </div>
+
             {onSaveTableSource && (
               <button
                 type="button"
-                onClick={handleOpenAddSource}
+                onClick={() => setIsAddSourceModalOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>افزودن منبع</span>
+                <span>افزودن منبع جدید</span>
               </button>
             )}
           </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
-              <tr>
-                <th className="py-3 px-4">سایت رقیب / منبع</th>
-                <th className="py-3 px-4">آدرس منبع (URL)</th>
-                <th className="py-3 px-4 min-w-[280px]">XPath تاریخ کل جدول</th>
-                <th className="py-3 px-4">تاریخ استخراج شده</th>
-                <th className="py-3 px-4 text-center">تازگی (امروز)</th>
-                <th className="py-3 px-4 text-center">تلاش‌ها</th>
-                <th className="py-3 px-4 text-center">بررسی مجدد</th>
-                <th className="py-3 px-4 text-center">وضعیت امروز</th>
-                <th className="py-3 px-4 text-center w-36">عملیات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {tableSources.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="py-8 text-center text-gray-400">
-                    هیچ منبعی برای این جدول تعریف نشده است.
-                  </td>
-                </tr>
-              ) : (
-                tableSources.map((source) => {
-                  const currentXPathVal = sourceUpdateXPaths[source.id] !== undefined
-                    ? sourceUpdateXPaths[source.id]
-                    : (source.update_time_xpath || '');
+          {tableSources.length === 0 ? (
+            <div className="bg-white p-8 text-center rounded-lg border border-dashed border-gray-300 text-xs text-gray-400">
+              هنوز هیچ منبعی برای این جدول تعریف نشده است.
+              <br />
+              برای شروع روی دکمه «افزودن منبع جدید» کلیک کنید و سایت رقیب و URL صفحه را وارد نمایید.
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {tableSources.map((source) => {
+                const currentUrlVal = getSourceUrl(source);
+                const currentXPathVal = getSourceUpdateXPath(source);
+                const siteObj = sites.find((s) => s.id === source.site_id);
+                const overrideActions = getSourceOverrideActions(source.id);
+                const siteDefaults = getSiteDefaultActions(source.site_id);
+                const hasOverrides = overrideActions.length > 0;
+                const isProductsOpen = expandedProducts[source.id] !== false; // open by default
+                const isActionsOpen = expandedActions[source.id] === true;
 
-                  return (
-                    <tr key={source.id} className="hover:bg-gray-50/70 transition-colors">
-                      <td className="py-3 px-4 font-semibold text-gray-900">{source.site_name}</td>
-                      <td className="py-3 px-4 max-w-xs truncate text-gray-500 dir-ltr text-right font-mono text-[11px]">
-                        {source.source_page_url || '—'}
-                      </td>
-                      <td className="py-2.5 px-3 min-w-[280px]">
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={currentXPathVal}
-                            onChange={(e) => setSourceUpdateXPaths(prev => ({ ...prev, [source.id]: e.target.value }))}
-                            placeholder="//div[@class='update-time']"
-                            className="w-full px-2 py-1 font-mono text-[11px] dir-ltr text-right bg-white border border-gray-200 rounded focus:border-slate-800 focus:outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => onOpenTester(source.id, source.source_page_url || '', currentXPathVal || undefined, 'DATE')}
-                            className="p-1 text-gray-500 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                            title="تست XPath تاریخ جدول"
-                          >
-                            <Play className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onOpenPicker(
-                                source.source_page_url || '',
-                                source.id,
-                                (pickedXPath) => {
-                                  setSourceUpdateXPaths(prev => ({ ...prev, [source.id]: pickedXPath }));
-                                },
-                                'TABLE_UPDATE'
-                              )
-                            }
-                            className="p-1 text-gray-500 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                            title="انتخابگر تعاملی تاریخ با موس (Picker)"
-                          >
-                            <MousePointerClick className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSourceUpdateXPaths(prev => ({ ...prev, [source.id]: '' }))}
-                            className="p-1 text-gray-400 hover:text-rose-600 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                            title="پاک کردن XPath"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                          {onSaveTableSource && (
-                            <button
-                              type="button"
-                              onClick={() => handleSaveInlineUpdateXPath(source.id)}
-                              disabled={savingSourceId === source.id}
-                              className="p-1 text-emerald-600 hover:text-emerald-800 border border-emerald-200 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                              title="ذخیره XPath تاریخ"
-                            >
-                              <Check className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-gray-700">
-                        {source.last_update_text || '—'}
-                      </td>
-                      <td className="py-3 px-4 text-center">
+                return (
+                  <div
+                    key={source.id}
+                    className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden transition-all"
+                  >
+                    {/* Source Card Header */}
+                    <div className="p-4 bg-slate-50/80 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+                          <Globe className="w-4 h-4 text-slate-700" />
+                          {source.site_name || siteObj?.name || `سایت ${source.site_id}`}
+                        </span>
+
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          className={`text-[11px] px-2 py-0.5 rounded font-medium border ${
+                            siteObj?.scrape_method === 'PLAYWRIGHT'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}
+                        >
+                          {siteObj?.scrape_method === 'PLAYWRIGHT' ? 'Playwright' : 'FETCH'}
+                        </span>
+
+                        <span
+                          className={`text-[11px] px-2 py-0.5 rounded font-medium ${
                             source.fresh
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : 'bg-amber-50 text-amber-700 border border-amber-200'
                           }`}
                         >
-                          {source.fresh ? 'بروز (امروز)' : 'قدیمی / نامشخص'}
+                          {source.fresh ? 'بروز امروز' : 'قدیمی / نامشخص'}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-center font-mono">
-                        {source.attempt_count} / {source.max_attempts_override || table.max_attempts}
-                      </td>
-                      <td className="py-3 px-4 text-center">
+
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded font-medium ${
-                            source.recheck_enabled ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          {source.recheck_enabled ? 'فعال' : 'غیرفعال'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <span
-                          className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+                          className={`text-[11px] px-2 py-0.5 rounded font-medium ${
                             source.today_status === 'DONE' || source.today_status === 'UPDATED'
                               ? 'bg-emerald-100 text-emerald-800'
                               : source.today_status === 'FAILED'
                               ? 'bg-rose-100 text-rose-800'
-                              : 'bg-gray-100 text-gray-600'
+                              : 'bg-gray-100 text-gray-700'
                           }`}
                         >
                           {source.today_status === 'DONE' || source.today_status === 'UPDATED'
-                            ? 'استخراج شد'
+                            ? 'استخراج موفق'
                             : source.today_status === 'FAILED'
                             ? 'خطا در استخراج'
                             : 'در انتظار'}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
+
+                        {source.last_update_text && (
+                          <span className="text-xs text-gray-500 mr-2">
+                            تاریخ خوانده شده: <strong className="text-gray-800">{source.last_update_text}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Header Controls */}
+                      <div className="flex items-center gap-1.5 self-end md:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleRunSource(source.id)}
+                          disabled={runningSourceId === source.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white border border-gray-300 rounded hover:bg-gray-50 shadow-xs disabled:opacity-50 transition-colors"
+                          title="اجرای مستقل این منبع"
+                        >
+                          <Play className={`w-3 h-3 ${runningSourceId === source.id ? 'animate-spin' : ''}`} />
+                          <span>تست استخراج</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setEditingSourceSettings(source)}
+                          className="p-1.5 text-gray-500 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                          title="تنظیمات پیشرفته منبع"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                        </button>
+
+                        {onDeleteTableSource && (
                           <button
-                            onClick={() => handleRunSource(source.id)}
-                            disabled={runningSourceId === source.id}
-                            className="p-1.5 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
-                            title="اجرای مستقل این منبع"
+                            type="button"
+                            onClick={() => handleDeleteSource(source.id)}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 border border-rose-200 rounded hover:bg-rose-50 transition-colors"
+                            title="حذف این منبع"
                           >
-                            <Play className={`w-3.5 h-3.5 ${runningSourceId === source.id ? 'animate-spin' : ''}`} />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                          {onSaveTableSource && (
-                            <button
-                              onClick={() => handleOpenEditSource(source)}
-                              className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
-                              title="ویرایش تنظیمات منبع"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {onDeleteTableSource && (
-                            <button
-                              onClick={() => handleDeleteSource(source.id)}
-                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors"
-                              title="حذف منبع از این جدول"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Source URL & Table Update XPath Form */}
+                    <div className="p-4 border-b border-gray-100 space-y-4">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* URL Direct Input */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            آدرس صفحه استخراج (URL مستقیم)
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="url"
+                              value={currentUrlVal}
+                              onChange={(e) => setSourceUrls((prev) => ({ ...prev, [source.id]: e.target.value }))}
+                              placeholder="https://example.com/rebar/zobahan"
+                              className="w-full px-3 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none"
+                            />
+                            {currentUrlVal && (
+                              <a
+                                href={currentUrlVal}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1.5 text-gray-400 hover:text-slate-800 border border-gray-200 rounded hover:bg-gray-50"
+                                title="باز کردن در تب جدید"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      {/* Product Selectors Configuration Section */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70">
-          <div>
-            <div className="flex items-center gap-2">
-              <Code className="w-4 h-4 text-slate-800" />
-              <h2 className="text-sm font-bold text-gray-900">پیکربندی سلکتورهای استخراج قیمت و تاریخ کالاها (Product Selectors)</h2>
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              تنظیم XPath قیمت و تاریخ بروزرسانی اختصاصی هر ردیف کالا برای منابع رقیب
-            </p>
-          </div>
-
-          {/* Source Tabs */}
-          {tableSources.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto">
-              {tableSources.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedSourceForSelectors(s.id)}
-                  className={`px-3 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap ${
-                    selectedSourceForSelectors === s.id
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {s.site_name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {(() => {
-          const currentSource = tableSources.find((s) => s.id === selectedSourceForSelectors) || tableSources[0];
-          if (!currentSource) {
-            return (
-              <div className="p-8 text-center text-xs text-gray-400">
-                منبعی برای تنظیم سلکتورها وجود ندارد. ابتدا منبع رقیب را به جدول متصل کنید.
-              </div>
-            );
-          }
-
-          return (
-            <div className="p-4 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-gray-700">صفحه منبع {currentSource.site_name}:</span>
-                  <span className="font-mono text-gray-600 dir-ltr text-right max-w-md truncate">
-                    {currentSource.source_page_url || '—'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500">XPath تاریخ کل جدول:</span>
-                  <span className="font-mono bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-800">
-                    {currentSource.update_time_xpath || '(تعریف نشده)'}
-                  </span>
-                  {currentSource.update_time_xpath && (
-                    <button
-                      onClick={() =>
-                        onOpenTester(currentSource.id, currentSource.source_page_url || '', currentSource.update_time_xpath || undefined, 'DATE')
-                      }
-                      className="px-2 py-1 bg-white border border-gray-300 rounded text-slate-800 hover:bg-gray-50 text-[11px] font-medium inline-flex items-center gap-1"
-                    >
-                      <Play className="w-3 h-3 text-slate-700" />
-                      <span>تست تاریخ</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs">
-                  <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
-                    <tr>
-                      <th className="py-2.5 px-3 w-20">کد کالا</th>
-                      <th className="py-2.5 px-3 w-44">نام کالا</th>
-                      <th className="py-2.5 px-3">عبارت XPath استخراج قیمت <span className="text-rose-500">*</span></th>
-                      <th className="py-2.5 px-3">XPath تاریخ اختصاصی کالا (اختیاری)</th>
-                      <th className="py-2.5 px-3 text-center w-28">عملیات</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {tableProducts.map((product) => {
-                      const sel = selectors.find(
-                        (s) => s.table_source_id === currentSource.id && s.product_id === product.id
-                      );
-                      const key = `${currentSource.id}_${product.id}`;
-                      const currentVal = editingSelectors[key] ?? {
-                        price_xpath: sel?.price_xpath || '',
-                        update_time_xpath: sel?.update_time_xpath || ''
-                      };
-
-                      const handleFieldChange = (field: 'price_xpath' | 'update_time_xpath', value: string) => {
-                        setEditingSelectors((prev) => ({
-                          ...prev,
-                          [key]: {
-                            ...currentVal,
-                            [field]: value
-                          }
-                        }));
-                      };
-
-                      const handleSave = async () => {
-                        if (!onSaveSelector) return;
-                        setSavingProductId(product.id);
-                        try {
-                          await onSaveSelector(currentSource.id, product.id, {
-                            price_xpath: currentVal.price_xpath,
-                            update_time_xpath: currentVal.update_time_xpath || undefined,
-                            active: true
-                          });
-                        } finally {
-                          setSavingProductId(null);
-                        }
-                      };
-
-                      return (
-                        <tr key={product.id} className="hover:bg-gray-50/60">
-                          <td className="py-2.5 px-3 font-mono text-slate-700 font-medium">
-                            {product.post_id}
-                          </td>
-                          <td className="py-2.5 px-3 font-medium text-gray-900">
-                            {product.name}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="text"
-                                value={currentVal.price_xpath}
-                                onChange={(e) => handleFieldChange('price_xpath', e.target.value)}
-                                placeholder="//table//tr[1]/td[2]"
-                                className="w-full px-2.5 py-1 font-mono text-[11px] dir-ltr text-right bg-white border border-gray-200 rounded focus:border-slate-800 focus:outline-none"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onOpenTester(
-                                    currentSource.id,
-                                    currentSource.source_page_url || '',
-                                    currentVal.price_xpath,
-                                    'PRICE'
-                                  )
-                                }
-                                disabled={!currentVal.price_xpath}
-                                className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors disabled:opacity-40"
-                                title="تست XPath استخراج قیمت"
-                              >
-                                <Play className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onOpenPicker(
-                                    currentSource.source_page_url || '',
-                                    currentSource.id,
-                                    (pickedXPath) => {
-                                      handleFieldChange('price_xpath', pickedXPath);
-                                    },
-                                    'PRODUCT_PRICE'
-                                  )
-                                }
-                                className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                                title="انتخاب قیمت با موس (Picker)"
-                              >
-                                <MousePointerClick className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="text"
-                                value={currentVal.update_time_xpath}
-                                onChange={(e) => handleFieldChange('update_time_xpath', e.target.value)}
-                                placeholder="اختیاری: //table//tr[1]/td[4]"
-                                className="w-full px-2.5 py-1 font-mono text-[11px] dir-ltr text-right bg-white border border-gray-200 rounded focus:border-slate-800 focus:outline-none"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onOpenTester(
-                                    currentSource.id,
-                                    currentSource.source_page_url || '',
-                                    currentVal.update_time_xpath,
-                                    'DATE'
-                                  )
-                                }
-                                disabled={!currentVal.update_time_xpath}
-                                className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors disabled:opacity-40"
-                                title="تست XPath تاریخ این کالا"
-                              >
-                                <Play className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onOpenPicker(
-                                    currentSource.source_page_url || '',
-                                    currentSource.id,
-                                    (pickedXPath) => {
-                                      handleFieldChange('update_time_xpath', pickedXPath);
-                                    },
-                                    'PRODUCT_UPDATE'
-                                  )
-                                }
-                                className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                                title="انتخاب تاریخ کالا با موس (Picker)"
-                              >
-                                <MousePointerClick className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
+                        {/* Table Update XPath Input */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-semibold text-gray-700">
+                              XPath تاریخ کل جدول (برای راستی‌آزمایی تازگی قیمت‌ها)
+                            </label>
+                            <span className="text-[11px] text-gray-400">اختیاری</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={currentXPathVal}
+                              onChange={(e) => setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: e.target.value }))}
+                              placeholder="//div[@class='update-time']"
+                              className="w-full px-3 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none"
+                            />
                             <button
                               type="button"
-                              onClick={handleSave}
-                              disabled={savingProductId === product.id || !currentVal.price_xpath}
-                              className="px-3 py-1 text-[11px] font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors disabled:opacity-50"
+                              onClick={() => onOpenTester(source.id, currentUrlVal, currentXPathVal || undefined, 'DATE')}
+                              className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                              title="تست XPath تاریخ جدول"
                             >
-                              {savingProductId === product.id ? 'در حال ثبت...' : 'ذخیره'}
+                              <Play className="w-3.5 h-3.5" />
                             </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onOpenPicker(
+                                  currentUrlVal,
+                                  source.id,
+                                  (pickedXPath) => {
+                                    setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: pickedXPath }));
+                                  },
+                                  'TABLE_UPDATE'
+                                )
+                              }
+                              className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                              title="انتخابگر تعاملی تاریخ با موس (Picker)"
+                            >
+                              <MousePointerClick className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: '' }))}
+                              className="p-1.5 text-gray-400 hover:text-rose-600 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                              title="پاک کردن"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                            {onSaveTableSource && (
+                              <button
+                                type="button"
+                                onClick={() => handleSaveSourceInline(source)}
+                                disabled={savingSourceId === source.id}
+                                className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                                title="ذخیره URL و XPath منبع"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{savingSourceId === source.id ? '...' : 'ذخیره'}</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
-      {/* Calculated Output & WordPress Sync (Requirement #22-#27, #58) */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
-          <div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-slate-800" />
-              <h2 className="text-sm font-bold text-gray-900">اقلام خروجی و بررسی Price Guard</h2>
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              محاسبه حداقل قیمت بین منابع بروز و ارزیابی امنیتی قبل از ارسال به ووکامرس
-            </p>
-          </div>
+                      {/* Pre-Extraction Page Actions for this Source (Requirement #5) */}
+                      <div className="bg-slate-50/60 rounded-md border border-gray-200 p-3 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-slate-700" />
+                            <span className="text-xs font-bold text-gray-800">دستورات قبل از استخراج:</span>
+                            {hasOverrides ? (
+                              <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                در حال استفاده از {overrideActions.length} دستور اختصاصی این منبع
+                              </span>
+                            ) : (
+                              <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                در حال استفاده از {siteDefaults.length} دستور پیش‌فرض سایت ({source.site_name || siteObj?.name})
+                              </span>
+                            )}
+                          </div>
 
-          {latestRevision && (
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500">
-                وضعیت ارسال به وردپرس:
-                <strong
-                  className={`mr-1 font-semibold ${
-                    latestRevision.wordpress_status === 'SUCCESS' ? 'text-emerald-700' : 'text-rose-700'
-                  }`}
-                >
-                  {latestRevision.wordpress_status === 'SUCCESS' ? 'موفق' : 'ناموفق'}
-                </strong>
-              </span>
+                          <div className="flex items-center gap-2">
+                            {hasOverrides ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setActionModal({
+                                      isOpen: true,
+                                      sourceId: source.id,
+                                      actionId: null,
+                                      action_type: 'WAIT',
+                                      selector: '',
+                                      value: '1000',
+                                      active: true
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-800 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  <span>افزودن دستور اختصاصی</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevertToSiteDefaults(source.id)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded transition-colors"
+                                  title="حذف دستورات اختصاصی و بازگشت به پیش‌فرض‌های سایت"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>بازگشت به پیش‌فرض سایت</span>
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setActionModal({
+                                    isOpen: true,
+                                    sourceId: source.id,
+                                    actionId: null,
+                                    action_type: 'WAIT',
+                                    selector: '',
+                                    value: '1000',
+                                    active: true
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-slate-800 bg-white border border-gray-300 rounded hover:bg-gray-50 shadow-xs"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>تعریف دستورات اختصاصی برای این منبع</span>
+                              </button>
+                            )}
 
-              {latestRevision.wordpress_status !== 'SUCCESS' && (
-                <button
-                  onClick={() => onRetryPublish(latestRevision.id)}
-                  className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-slate-800 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors shadow-xs"
-                >
-                  <Send className="w-3 h-3" />
-                  <span>تلاش مجدد ارسال</span>
-                </button>
-              )}
+                            <button
+                              type="button"
+                              onClick={() => setExpandedActions((prev) => ({ ...prev, [source.id]: !isActionsOpen }))}
+                              className="p-1 text-gray-500 hover:text-gray-900 rounded"
+                              title={isActionsOpen ? 'بستن لیست دستورات' : 'مشاهده لیست دستورات'}
+                            >
+                              {isActionsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Expandable actions preview / editor */}
+                        {isActionsOpen && (
+                          <div className="pt-2 border-t border-gray-200 space-y-2">
+                            {hasOverrides ? (
+                              <div className="space-y-1.5">
+                                <div className="text-[11px] text-gray-500">
+                                  دستورات اختصاصی زیر قبل از استخراج این منبع به ترتیب اجرا می‌شوند:
+                                </div>
+                                {overrideActions.map((action, idx) => {
+                                  const typeInfo = getActionTypeLabel(action.action_type);
+                                  const Icon = typeInfo.icon;
+                                  return (
+                                    <div
+                                      key={action.id}
+                                      className="flex items-center justify-between p-2 rounded bg-white border border-gray-200 text-xs"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex flex-col gap-0.5">
+                                          <button
+                                            type="button"
+                                            disabled={idx === 0}
+                                            onClick={() => handleMoveSourceAction(source.id, idx, 'UP')}
+                                            className="p-0.5 text-gray-400 hover:text-slate-800 disabled:opacity-20"
+                                          >
+                                            <MoveUp className="w-3 h-3" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={idx === overrideActions.length - 1}
+                                            onClick={() => handleMoveSourceAction(source.id, idx, 'DOWN')}
+                                            className="p-0.5 text-gray-400 hover:text-slate-800 disabled:opacity-20"
+                                          >
+                                            <MoveDown className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                        <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 font-mono text-[10px] flex items-center justify-center font-bold">
+                                          {idx + 1}
+                                        </span>
+                                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${typeInfo.color}`}>
+                                          <Icon className="w-3 h-3" />
+                                          <span>{typeInfo.label}</span>
+                                        </span>
+                                        {action.selector && (
+                                          <span className="font-mono text-[11px] dir-ltr text-slate-800 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
+                                            {action.selector}
+                                          </span>
+                                        )}
+                                        {action.value && (
+                                          <span className="text-[11px] text-gray-500 font-mono">
+                                            {action.value} {action.action_type === 'WAIT' ? 'ms' : ''}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setActionModal({
+                                              isOpen: true,
+                                              sourceId: source.id,
+                                              actionId: action.id,
+                                              action_type: action.action_type,
+                                              selector: action.selector || '',
+                                              value: action.value || '',
+                                              active: action.active
+                                            })
+                                          }
+                                          className="p-1 text-gray-500 hover:text-slate-900 rounded"
+                                        >
+                                          <Edit2 className="w-3 h-3" />
+                                        </button>
+                                        {onDeletePageAction && (
+                                          <button
+                                            type="button"
+                                            onClick={() => onDeletePageAction(action.id)}
+                                            className="p-1 text-rose-500 hover:text-rose-700 rounded"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="space-y-1 text-xs text-gray-600">
+                                <div className="text-[11px] text-gray-500">
+                                  در حال حاضر از دستورات پیش‌فرض تعریف‌شده در بخش سایت‌ها استفاده می‌شود:
+                                </div>
+                                {siteDefaults.length === 0 ? (
+                                  <div className="text-gray-400 italic text-[11px]">هیچ دستور پیش‌فرضی در سایت تعریف نشده است.</div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {siteDefaults.map((action, idx) => {
+                                      const typeInfo = getActionTypeLabel(action.action_type);
+                                      const Icon = typeInfo.icon;
+                                      return (
+                                        <div key={action.id} className="flex items-center gap-2 p-1.5 rounded bg-white border border-gray-100 text-[11px]">
+                                          <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-700 font-mono text-[10px] flex items-center justify-center font-bold">
+                                            {idx + 1}
+                                          </span>
+                                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${typeInfo.color}`}>
+                                            <Icon className="w-2.5 h-2.5" />
+                                            <span>{typeInfo.label}</span>
+                                          </span>
+                                          {action.selector && (
+                                            <span className="font-mono text-[10px] dir-ltr text-slate-700">{action.selector}</span>
+                                          )}
+                                          {action.value && (
+                                            <span className="text-gray-500 font-mono text-[10px]">
+                                              {action.value} {action.action_type === 'WAIT' ? 'ms' : ''}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Product Selectors under this Source (Requirement #6) */}
+                    <div className="p-4 bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedProducts((prev) => ({ ...prev, [source.id]: !isProductsOpen }))}
+                        className="w-full flex items-center justify-between p-2.5 bg-gray-50 hover:bg-gray-100 rounded-md border border-gray-200 transition-colors text-right"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Code className="w-4 h-4 text-slate-800" />
+                          <span className="text-xs font-bold text-gray-900">
+                            محصولات این منبع و سلکتورهای استخراج قیمت و تاریخ
+                          </span>
+                          <span className="text-[11px] font-mono px-2 py-0.5 bg-slate-200 text-slate-800 rounded-full font-semibold">
+                            {tableProducts.length} محصول
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 text-xs text-gray-500 font-medium">
+                          <span>{isProductsOpen ? 'بستن محصولات' : 'مشاهده محصولات و XPathها'}</span>
+                          {isProductsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </div>
+                      </button>
+
+                      {/* Products List */}
+                      {isProductsOpen && (
+                        <div className="mt-3 space-y-3">
+                          {tableProducts.length === 0 ? (
+                            <div className="p-6 text-center text-xs text-gray-400 border border-dashed border-gray-200 rounded">
+                              هیچ کالایی برای این جدول قیمت تعریف نشده است.
+                            </div>
+                          ) : (
+                            tableProducts.map((product) => {
+                              const key = `${source.id}_${product.id}`;
+                              const inputVals = getSelectorInputValues(source.id, product.id);
+                              const isSaving = savingSelectorKey === key;
+                              const isSaved = savedSelectorKey === key;
+
+                              return (
+                                <div
+                                  key={product.id}
+                                  className="p-3.5 rounded-lg border border-gray-200 hover:border-gray-300 bg-white transition-all space-y-3"
+                                >
+                                  {/* Product Row Header */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-xs text-gray-900">{product.name}</span>
+                                      <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                                        کد وردپرس: {product.post_id}
+                                      </span>
+                                      {product.attributes?.pa_size && (
+                                        <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                                          سایز: {product.attributes.pa_size}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-3 text-xs">
+                                      <span className="text-gray-500">
+                                        قیمت فعلی:{' '}
+                                        <strong className="text-slate-900 font-mono">
+                                          {product.current_price?.toLocaleString('fa-IR')}
+                                        </strong>{' '}
+                                        تومان
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Product Selectors Inputs Grid */}
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
+                                    {/* Price XPath */}
+                                    <div>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <label className="font-semibold text-gray-700">
+                                          XPath قیمت محصول <span className="text-rose-500">*</span>
+                                        </label>
+                                        <span className="text-[10px] text-gray-400">الزامی برای استخراج</span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={inputVals.price_xpath}
+                                          onChange={(e) =>
+                                            setEditingSelectors((prev) => ({
+                                              ...prev,
+                                              [key]: { ...inputVals, price_xpath: e.target.value }
+                                            }))
+                                          }
+                                          placeholder="//table//tr[1]/td[2]"
+                                          className="w-full px-2.5 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            onOpenTester(source.id, currentUrlVal, inputVals.price_xpath || undefined, 'PRICE')
+                                          }
+                                          className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
+                                          title="تست استخراج قیمت"
+                                        >
+                                          <Play className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            onOpenPicker(
+                                              currentUrlVal,
+                                              source.id,
+                                              (pickedXPath) => {
+                                                setEditingSelectors((prev) => ({
+                                                  ...prev,
+                                                  [key]: { ...inputVals, price_xpath: pickedXPath }
+                                                }));
+                                              },
+                                              'PRODUCT_PRICE'
+                                            )
+                                          }
+                                          className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
+                                          title="انتخابگر قیمت با موس (Picker)"
+                                        >
+                                          <MousePointerClick className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Date XPath */}
+                                    <div>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <label className="font-semibold text-gray-700">XPath تاریخ اختصاصی کالا</label>
+                                        <span className="text-[10px] text-gray-400">
+                                          اختیاری (در صورت خالی بودن، تاریخ کل جدول ملاک است)
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={inputVals.update_time_xpath}
+                                          onChange={(e) =>
+                                            setEditingSelectors((prev) => ({
+                                              ...prev,
+                                              [key]: { ...inputVals, update_time_xpath: e.target.value }
+                                            }))
+                                          }
+                                          placeholder="ارث‌بری از تاریخ جدول"
+                                          className="w-full px-2.5 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none placeholder:text-gray-400 placeholder:font-sans"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            onOpenTester(
+                                              source.id,
+                                              currentUrlVal,
+                                              inputVals.update_time_xpath || undefined,
+                                              'DATE'
+                                            )
+                                          }
+                                          className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
+                                          title="تست تاریخ کالا"
+                                        >
+                                          <Play className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            onOpenPicker(
+                                              currentUrlVal,
+                                              source.id,
+                                              (pickedXPath) => {
+                                                setEditingSelectors((prev) => ({
+                                                  ...prev,
+                                                  [key]: { ...inputVals, update_time_xpath: pickedXPath }
+                                                }));
+                                              },
+                                              'PRODUCT_UPDATE'
+                                            )
+                                          }
+                                          className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
+                                          title="انتخابگر تاریخ کالا با موس (Picker)"
+                                        >
+                                          <MousePointerClick className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveSelector(source.id, product.id)}
+                                          disabled={isSaving}
+                                          className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors disabled:opacity-50 whitespace-nowrap flex items-center gap-1 shadow-xs"
+                                        >
+                                          {isSaved ? (
+                                            <>
+                                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                              <span>ذخیره شد</span>
+                                            </>
+                                          ) : (
+                                            <span>{isSaving ? '...' : 'ذخیره'}</span>
+                                          )}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
-              <tr>
-                <th className="py-3 px-4 w-28">post_id</th>
-                <th className="py-3 px-4">نام کالا</th>
-                <th className="py-3 px-4">قیمت فعلی سیستم</th>
-                <th className="py-3 px-4">قیمت حداقل جدید</th>
-                <th className="py-3 px-4 text-center">تغییر</th>
-                <th className="py-3 px-4 text-center">وضعیت Price Guard</th>
-                <th className="py-3 px-4">تعداد منابع استخراجی</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {tableProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-gray-400">
-                    کالایی به این جدول اختصاص داده نشده است.
-                  </td>
-                </tr>
-              ) : (
-                tableProducts.map((p) => {
-                  const revItem = currentItems.find((item) => item.product_id === p.id || item.post_id === p.post_id);
-                  const newPrice = revItem ? revItem.calculated_price : p.current_price;
-                  const isBlocked = revItem?.is_blocked_by_price_guard || false;
-                  const diff = p.current_price > 0 && newPrice > 0 ? newPrice - p.current_price : 0;
-                  const diffPct = p.current_price > 0 ? ((diff / p.current_price) * 100).toFixed(1) : '0';
-
-                  return (
-                    <tr key={p.id} className="hover:bg-gray-50/70 transition-colors">
-                      <td className="py-3 px-4 font-mono font-medium text-slate-700">{p.post_id}</td>
-                      <td className="py-3 px-4 font-medium text-gray-900">{p.name}</td>
-                      <td className="py-3 px-4 text-gray-600">
-                        {p.current_price.toLocaleString('fa-IR')} تومان
-                      </td>
-                      <td className="py-3 px-4 font-bold text-gray-900">
-                        {newPrice > 0 ? `${newPrice.toLocaleString('fa-IR')} تومان` : '—'}
-                      </td>
-                      <td className="py-3 px-4 text-center font-mono">
-                        {diff !== 0 ? (
-                          <span className={diff > 0 ? 'text-rose-600' : 'text-emerald-600'}>
-                            {diff > 0 ? '+' : ''}{diffPct}٪
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {isBlocked ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                            <ShieldAlert className="w-3 h-3" />
-                            مسدود شده (نوسان شدید)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <ShieldCheck className="w-3 h-3" />
-                            تایید شده
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-gray-500">
-                        {revItem ? `${revItem.sources_count} منبع فعال` : '—'}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-        </>
       )}
 
-      {/* Add / Edit TableSource Modal */}
-      {isSourceModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-slate-900 text-white shrink-0">
-              <div className="flex items-center gap-2">
-                <Globe className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-sm">
-                  {editingSourceId ? 'ویرایش منبع جدول' : 'افزودن منبع جدید به جدول'}
-                </h3>
-              </div>
+      {/* Add New Source Modal (Direct Site + URL) */}
+      {isAddSourceModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <Plus className="w-4 h-4 text-slate-800" />
+                افزودن منبع قیمت جدید برای {table.name}
+              </h3>
               <button
                 type="button"
-                onClick={() => setIsSourceModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
+                onClick={() => setIsAddSourceModalOpen(false)}
+                className="text-gray-400 hover:text-gray-700"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveSourceModal} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+            <form onSubmit={handleAddSourceSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-gray-700 font-semibold mb-1">
-                  سایت رقیب / منبع <span className="text-rose-500">*</span>
+                  انتخاب سایت رقیب <span className="text-rose-500">*</span>
                 </label>
                 <select
-                  value={sourceForm.site_id}
-                  onChange={(e) => {
-                    const sid = parseInt(e.target.value, 10);
-                    const pages = sourcePages.filter(p => p.site_id === sid);
-                    setSourceForm(prev => ({
-                      ...prev,
-                      site_id: sid,
-                      page_mode: pages.length > 0 ? prev.page_mode : 'NEW',
-                      source_page_id: pages[0]?.id || 0
-                    }));
-                  }}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded focus:bg-white focus:outline-none focus:border-slate-800 text-xs"
+                  value={newSourceForm.site_id}
+                  onChange={(e) => setNewSourceForm({ ...newSourceForm, site_id: parseInt(e.target.value, 10) })}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
                 >
-                  <option value={0}>انتخاب سایت رقیب...</option>
-                  {sites.map(s => (
+                  {sites.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.base_url})
+                      {s.name} ({s.base_url}) - {s.scrape_method}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {sourceForm.site_id > 0 && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-gray-700 font-semibold">
-                      صفحه هدف منبع (Source Page) <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="flex items-center gap-1 bg-gray-200/80 p-0.5 rounded">
-                      <button
-                        type="button"
-                        onClick={() => setSourceForm(prev => ({ ...prev, page_mode: 'EXISTING' }))}
-                        disabled={sourcePages.filter(p => p.site_id === sourceForm.site_id).length === 0}
-                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-                          sourceForm.page_mode === 'EXISTING'
-                            ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-gray-600 hover:text-gray-900 disabled:opacity-40'
-                        }`}
-                      >
-                        صفحه موجود ({sourcePages.filter(p => p.site_id === sourceForm.site_id).length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSourceForm(prev => ({ ...prev, page_mode: 'NEW' }))}
-                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-                          sourceForm.page_mode === 'NEW'
-                            ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        + آدرس صفحه جدید
-                      </button>
-                    </div>
-                  </div>
-
-                  {sourceForm.page_mode === 'EXISTING' ? (
-                    <div>
-                      <select
-                        value={sourceForm.source_page_id}
-                        onChange={(e) => setSourceForm(prev => ({ ...prev, source_page_id: parseInt(e.target.value, 10) }))}
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded focus:outline-none focus:border-slate-800 text-xs dir-ltr text-right"
-                      >
-                        <option value={0}>انتخاب صفحه هدف...</option>
-                        {sourcePages
-                          .filter(p => p.site_id === sourceForm.site_id)
-                          .map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.url}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <div>
-                      <input
-                        type="url"
-                        dir="ltr"
-                        required
-                        value={sourceForm.new_page_url}
-                        onChange={(e) => setSourceForm(prev => ({ ...prev, new_page_url: e.target.value }))}
-                        placeholder="https://example.com/products/rebars"
-                        className="w-full px-3 py-2 font-mono text-xs text-left bg-white border border-gray-300 rounded focus:outline-none focus:border-slate-800"
-                      />
-                      <p className="text-[11px] text-gray-500 mt-1">
-                        این صفحه مستقیماً برای این سایت ذخیره شده و به این جدول متصل خواهد شد (بدون نیاز به خروج).
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Update Time XPath */}
               <div>
                 <label className="block text-gray-700 font-semibold mb-1">
-                  XPath استخراج تاریخ و زمان کل جدول (اختیاری)
+                  آدرس مستقیم صفحه استخراج (URL) <span className="text-rose-500">*</span>
                 </label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={sourceForm.update_time_xpath}
-                    onChange={(e) => setSourceForm(prev => ({ ...prev, update_time_xpath: e.target.value }))}
-                    placeholder="//div[@class='update-date']"
-                    className="w-full px-3 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-300 rounded focus:bg-white focus:outline-none focus:border-slate-800"
-                  />
-                  {(() => {
-                    const effectiveUrl = sourceForm.page_mode === 'NEW'
-                      ? sourceForm.new_page_url.trim()
-                      : (sourcePages.find(p => p.id === sourceForm.source_page_id)?.url || '');
-                    return (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!effectiveUrl) return;
-                            onOpenTester(editingSourceId || 0, effectiveUrl, sourceForm.update_time_xpath || undefined, 'DATE');
-                          }}
-                          disabled={!effectiveUrl || !sourceForm.update_time_xpath}
-                          className="p-2 text-gray-600 hover:text-slate-900 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-40"
-                          title="تست XPath"
-                        >
-                          <Play className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!effectiveUrl) return;
-                            onOpenPicker(
-                              effectiveUrl,
-                              editingSourceId || undefined,
-                              (pickedXPath) => {
-                                setSourceForm(prev => ({ ...prev, update_time_xpath: pickedXPath }));
-                              },
-                              'TABLE_UPDATE'
-                            );
-                          }}
-                          disabled={!effectiveUrl}
-                          className="p-2 text-gray-600 hover:text-slate-900 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-40"
-                          title="انتخابگر تعاملی تاریخ (Picker)"
-                        >
-                          <MousePointerClick className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    );
-                  })()}
+                <input
+                  type="url"
+                  required
+                  value={newSourceForm.url}
+                  onChange={(e) => setNewSourceForm({ ...newSourceForm, url: e.target.value })}
+                  placeholder="https://example.com/rebar/zobahan"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-[11px] dir-ltr text-right"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-gray-700 font-semibold">XPath تاریخ کل جدول</label>
+                  <span className="text-gray-400 text-[10px]">اختیاری</span>
                 </div>
-                <p className="text-[11px] text-gray-500 mt-1">
-                  اگر صفحه حاوی تاریخ روزانه قیمت‌ها است، سلکتور آن را ثبت کنید تا سیستم تازگی استعلام‌ها را بسنجد.
-                </p>
+                <input
+                  type="text"
+                  value={newSourceForm.update_time_xpath}
+                  onChange={(e) => setNewSourceForm({ ...newSourceForm, update_time_xpath: e.target.value })}
+                  placeholder="//div[@class='update-date']"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-[11px] dir-ltr text-right"
+                />
               </div>
 
-              {/* Overrides Section */}
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-gray-700 font-semibold mb-2">تنظیمات اختصاصی این منبع (Override)</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-gray-600 text-[11px] mb-1">
-                      حداکثر دفعات تلاش (Max Attempts)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={sourceForm.max_attempts_override}
-                      onChange={(e) => setSourceForm(prev => ({ ...prev, max_attempts_override: e.target.value }))}
-                      placeholder={`جدول: ${table.max_attempts}`}
-                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded focus:bg-white focus:outline-none focus:border-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-600 text-[11px] mb-1">
-                      فاصله تلاش‌ها به دقیقه (Interval)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="1440"
-                      value={sourceForm.retry_interval_override}
-                      onChange={(e) => setSourceForm(prev => ({ ...prev, retry_interval_override: e.target.value }))}
-                      placeholder={`جدول: ${table.retry_interval_minutes}`}
-                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded focus:bg-white focus:outline-none focus:border-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-600 text-[11px] mb-1">
-                      مهلت بارگذاری صفحه (Timeout ثانیه)
-                    </label>
-                    <input
-                      type="number"
-                      min="5"
-                      max="300"
-                      value={sourceForm.timeout_override}
-                      onChange={(e) => setSourceForm(prev => ({ ...prev, timeout_override: e.target.value }))}
-                      placeholder="پیش‌فرض: 30"
-                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded focus:bg-white focus:outline-none focus:border-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-600 text-[11px] mb-1">
-                      آستانه Price Guard اختصاصی (درصد)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="1"
-                      max="100"
-                      value={sourceForm.price_guard_override}
-                      onChange={(e) => setSourceForm(prev => ({ ...prev, price_guard_override: e.target.value }))}
-                      placeholder={`جدول: ${table.price_guard_percent}٪`}
-                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded focus:bg-white focus:outline-none focus:border-slate-800"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-2 border-t border-gray-200">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={sourceForm.recheck_enabled}
-                    onChange={(e) => setSourceForm(prev => ({ ...prev, recheck_enabled: e.target.checked }))}
-                    className="rounded text-slate-900 focus:ring-slate-800"
-                  />
-                  <span className="text-gray-800 font-medium">
-                    بررسی مجدد (Recheck) فعال باشد (در صورت قدیمی بودن تاریخ منبع مجددا استعلام شود)
-                  </span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={sourceForm.active}
-                    onChange={(e) => setSourceForm(prev => ({ ...prev, active: e.target.checked }))}
-                    className="rounded text-slate-900 focus:ring-slate-800"
-                  />
-                  <span className="text-gray-800 font-medium">منبع فعال باشد</span>
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
+              <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsSourceModalOpen(false)}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                  onClick={() => setIsAddSourceModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
-                  disabled={
-                    savingSourceModal ||
-                    !sourceForm.site_id ||
-                    (sourceForm.page_mode === 'NEW' ? !sourceForm.new_page_url.trim() : !sourceForm.source_page_id)
-                  }
-                  className="px-5 py-2 font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors disabled:opacity-50 shadow-xs"
+                  disabled={isSubmittingNewSource}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded transition-colors shadow-xs"
                 >
-                  {savingSourceModal ? 'در حال ذخیره...' : 'ذخیره منبع'}
+                  {isSubmittingNewSource ? 'در حال ایجاد...' : 'افزودن منبع به جدول'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Advanced Settings Modal for TableSource (Overrides) */}
+      {editingSourceSettings && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-sm font-bold text-gray-900">
+                تنظیمات پیشرفته و Overrideهای منبع: {editingSourceSettings.site_name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingSourceSettings(null)}
+                className="text-gray-400 hover:text-gray-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!onSaveTableSource) return;
+                await onSaveTableSource({
+                  id: editingSourceSettings.id,
+                  recheck_enabled: editingSourceSettings.recheck_enabled,
+                  active: editingSourceSettings.active,
+                  max_attempts_override: editingSourceSettings.max_attempts_override,
+                  retry_interval_override: editingSourceSettings.retry_interval_override,
+                  timeout_override: editingSourceSettings.timeout_override,
+                  price_guard_override: editingSourceSettings.price_guard_override
+                });
+                setEditingSourceSettings(null);
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">تلاش مجدد اختصاصی</label>
+                  <input
+                    type="number"
+                    value={editingSourceSettings.max_attempts_override ?? ''}
+                    onChange={(e) =>
+                      setEditingSourceSettings({
+                        ...editingSourceSettings,
+                        max_attempts_override: e.target.value ? parseInt(e.target.value, 10) : (null as any)
+                      })
+                    }
+                    placeholder="پیش‌فرض جدول"
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">فاصله تکرار (دقیقه)</label>
+                  <input
+                    type="number"
+                    value={editingSourceSettings.retry_interval_override ?? ''}
+                    onChange={(e) =>
+                      setEditingSourceSettings({
+                        ...editingSourceSettings,
+                        retry_interval_override: e.target.value ? parseInt(e.target.value, 10) : (null as any)
+                      })
+                    }
+                    placeholder="پیش‌فرض جدول"
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">Timeout بارگذاری (ثانیه)</label>
+                  <input
+                    type="number"
+                    value={editingSourceSettings.timeout_override ?? ''}
+                    onChange={(e) =>
+                      setEditingSourceSettings({
+                        ...editingSourceSettings,
+                        timeout_override: e.target.value ? parseInt(e.target.value, 10) : (null as any)
+                      })
+                    }
+                    placeholder="پیش‌فرض سایت"
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">Price Guard اختصاصی (٪)</label>
+                  <input
+                    type="number"
+                    value={editingSourceSettings.price_guard_override ?? ''}
+                    onChange={(e) =>
+                      setEditingSourceSettings({
+                        ...editingSourceSettings,
+                        price_guard_override: e.target.value ? parseFloat(e.target.value) : (null as any)
+                      })
+                    }
+                    placeholder="پیش‌فرض جدول"
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="source-active-override"
+                  checked={editingSourceSettings.active}
+                  onChange={(e) =>
+                    setEditingSourceSettings({ ...editingSourceSettings, active: e.target.checked })
+                  }
+                  className="rounded border-gray-300 text-slate-800"
+                />
+                <label htmlFor="source-active-override" className="text-gray-700 font-medium">
+                  منبع فعال باشد
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingSourceSettings(null)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
+                >
+                  ذخیره تنظیمات
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit TableSource Override Action Modal */}
+      {actionModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-3">
+              {actionModal.actionId ? 'ویرایش دستور اختصاصی منبع' : 'افزودن دستور اختصاصی قبل از استخراج منبع'}
+            </h3>
+
+            <form onSubmit={handleSaveSourceAction} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-gray-700 font-semibold mb-1">
+                  نوع دستور (Action Type) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={actionModal.action_type}
+                  onChange={(e) =>
+                    setActionModal((prev) => ({ ...prev, action_type: e.target.value as PageActionType }))
+                  }
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                >
+                  <option value="WAIT">توقف زمانی (WAIT) - برحسب میلی‌ثانیه</option>
+                  <option value="CLICK">کلیک روی عنصر (CLICK)</option>
+                  <option value="SCROLL">اسکرول صفحه (SCROLL)</option>
+                  <option value="SCROLL_TO">اسکرول به عنصر خاص (SCROLL_TO)</option>
+                  <option value="WAIT_FOR_ELEMENT">انتظار برای ظاهر شدن عنصر (WAIT_FOR_ELEMENT)</option>
+                </select>
+              </div>
+
+              {(actionModal.action_type === 'CLICK' ||
+                actionModal.action_type === 'WAIT_FOR_ELEMENT' ||
+                actionModal.action_type === 'SCROLL_TO') && (
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">
+                    سلکتور عنصر (XPath یا CSS Selector) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={actionModal.selector}
+                    onChange={(e) => setActionModal((prev) => ({ ...prev, selector: e.target.value }))}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-[11px] dir-ltr text-right"
+                    placeholder="//button[@id='show-prices'] یا #show-prices"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-gray-700 font-semibold mb-1">
+                  {actionModal.action_type === 'WAIT'
+                    ? 'مدت زمان انتظار (میلی‌ثانیه)'
+                    : actionModal.action_type === 'WAIT_FOR_ELEMENT'
+                    ? 'حداکثر زمان انتظار (میلی‌ثانیه - اختیاری)'
+                    : actionModal.action_type === 'SCROLL'
+                    ? 'مقدار اسکرول (پیکسل یا ۵۰۰)'
+                    : 'مقدار کمکی (اختیاری)'}
+                </label>
+                <input
+                  type="text"
+                  value={actionModal.value}
+                  onChange={(e) => setActionModal((prev) => ({ ...prev, value: e.target.value }))}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-[11px] dir-ltr text-right"
+                  placeholder={actionModal.action_type === 'WAIT' ? '1500' : ''}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="source-action-active"
+                  checked={actionModal.active}
+                  onChange={(e) => setActionModal((prev) => ({ ...prev, active: e.target.checked }))}
+                  className="rounded border-gray-300 text-slate-800"
+                />
+                <label htmlFor="source-action-active" className="text-gray-700 font-medium">
+                  این دستور در فرآیند استخراج فعال باشد
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setActionModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAction}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded transition-colors"
+                >
+                  {isSubmittingAction ? 'در حال ذخیره...' : 'ذخیره دستور'}
                 </button>
               </div>
             </form>

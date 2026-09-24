@@ -83,17 +83,23 @@ export interface SourcePage {
 }
 
 export type PageActionType = 'WAIT' | 'CLICK' | 'SCROLL' | 'SCROLL_TO' | 'WAIT_FOR_ELEMENT';
+export type PageActionScope = 'SITE_DEFAULT' | 'TABLE_SOURCE';
 
 export interface PageAction {
   id: number;
-  source_page_id: number;
+  scope?: PageActionScope;
+  site_id?: number | null;
+  table_source_id?: number | null;
   order: number;
   action_type: PageActionType;
   selector_type?: 'XPATH' | 'CSS';
   selector?: string;
-  value?: string; // duration in ms or text
+  value?: string; // duration in ms or text/element
   active: boolean;
   created_at: string;
+  updated_at?: string;
+  // Legacy backward compatibility field:
+  source_page_id?: number | null;
 }
 
 export interface TableSource {
@@ -102,11 +108,16 @@ export interface TableSource {
   price_table_name?: string;
   site_id: number;
   site_name?: string;
+  url?: string;
   source_page_id: number;
   source_page_url?: string;
   active: boolean;
   update_time_xpath?: string | null;
   recheck_enabled: boolean;
+  has_action_override?: boolean;
+  action_override_count?: number;
+  site_default_action_count?: number;
+  effective_action_count?: number;
   max_attempts_override?: number | null;
   retry_interval_override?: number | null;
   timeout_override?: number | null;
