@@ -17,6 +17,7 @@ import { closePlaywrightBrowser } from '../scraper/playwrightBrowserManager';
 import { Site, PageAction, TableSource, SourcePage, ProductSelector } from '../../src/types';
 import { apiRouter } from '../routes/api';
 import { getSeedDatabase } from '../db/seed';
+import { runPageActionTests } from './pageActions.test';
 
 // Force hermetic test database file
 const TEST_DB_FILE = process.env.DATABASE_FILE || path.join(process.cwd(), 'data', 'test-database.json');
@@ -752,6 +753,11 @@ async function runTests() {
   assert(effectiveConfig.retry_interval_minutes === 20 && effectiveConfig.origins.retry_interval === 'SOURCE', 'Effective config uses retry_interval_override (20)');
   assert(effectiveConfig.price_guard_percent === 25 && effectiveConfig.origins.price_guard === 'SOURCE', 'Effective config uses price_guard_override (25)');
   assert(effectiveConfig.timeout_seconds === 50 && effectiveConfig.origins.timeout === 'SOURCE', 'Effective config uses timeout_override (50)');
+
+  // ==========================================
+  // Scenario 21: PageAction Scoping, Overrides, Strict Ownership & Parity
+  // ==========================================
+  await runPageActionTests(app, assert);
 }
 
 async function main() {

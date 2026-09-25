@@ -122,6 +122,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const [editingSourceSettings, setEditingSourceSettings] = useState<TableSource | null>(null);
 
   // Inline inputs state for each TableSource
+  const [sourceSites, setSourceSites] = useState<Record<number, number>>({});
   const [sourceUrls, setSourceUrls] = useState<Record<number, string>>({});
   const [sourceUpdateXPaths, setSourceUpdateXPaths] = useState<Record<number, string>>({});
   const [savingSourceId, setSavingSourceId] = useState<number | null>(null);
@@ -158,7 +159,12 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const tableSources = sources.filter((s) => s.price_table_id === table.id);
   const tableProducts = products.filter((p) => p.price_table_id === table.id);
 
-  // Helpers for Source Page URLs and Actions
+  // Helpers for Source Page URLs, Sites, and Actions
+  const getSourceSiteId = (source: TableSource): number => {
+    if (sourceSites[source.id] !== undefined) return sourceSites[source.id];
+    return source.site_id;
+  };
+
   const getSourceUrl = (source: TableSource): string => {
     if (sourceUrls[source.id] !== undefined) return sourceUrls[source.id];
     return source.url || source.source_page_url || '';
@@ -239,11 +245,12 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     if (!onSaveTableSource) return;
     setSavingSourceId(source.id);
     try {
+      const siteIdVal = getSourceSiteId(source);
       const urlVal = getSourceUrl(source).trim();
       const xpathVal = getSourceUpdateXPath(source).trim();
       await onSaveTableSource({
         id: source.id,
-        site_id: source.site_id,
+        site_id: siteIdVal,
         url: urlVal,
         update_time_xpath: xpathVal
       });
@@ -650,9 +657,10 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
           ) : (
             <div className="space-y-5">
               {tableSources.map((source) => {
+                const currentSiteIdVal = getSourceSiteId(source);
                 const currentUrlVal = getSourceUrl(source);
                 const currentXPathVal = getSourceUpdateXPath(source);
-                const siteObj = sites.find((s) => s.id === source.site_id);
+                const siteObj = sites.find((s) => s.id === currentSiteIdVal) || sites.find((s) => s.id === source.site_id);
                 const overrideActions = getSourceOverrideActions(source.id);
                 const siteDefaults = getSiteDefaultActions(source.site_id);
                 const hasOverrides = overrideActions.length > 0;
@@ -750,97 +758,116 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Source URL & Table Update XPath Form */}
-                    <div className="p-4 border-b border-gray-100 space-y-4">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* URL Direct Input */}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">
-                            آدرس صفحه استخراج (URL مستقیم)
-                          </label>
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="url"
-                              value={currentUrlVal}
-                              onChange={(e) => setSourceUrls((prev) => ({ ...prev, [source.id]: e.target.value }))}
-                              placeholder="https://example.com/rebar/zobahan"
-                              className="w-full px-3 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none"
-                            />
-                            {currentUrlVal && (
-                              <a
-                                href={currentUrlVal}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1.5 text-gray-400 hover:text-slate-800 border border-gray-200 rounded hover:bg-gray-50"
-                                title="باز کردن در تب جدید"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Table Update XPath Input */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block text-xs font-semibold text-gray-700">
-                              XPath تاریخ کل جدول (برای راستی‌آزمایی تازگی قیمت‌ها)
+                      {/* Source Site, URL & Table Update XPath Form */}
+                      <div className="p-4 border-b border-gray-100 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                          {/* Site Select Input */}
+                          <div className="md:col-span-3">
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">
+                              سایت منبع
                             </label>
-                            <span className="text-[11px] text-gray-400">اختیاری</span>
+                            <select
+                              value={currentSiteIdVal}
+                              onChange={(e) => setSourceSites((prev) => ({ ...prev, [source.id]: parseInt(e.target.value, 10) }))}
+                              className="w-full px-2.5 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none"
+                            >
+                              {sites.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="text"
-                              value={currentXPathVal}
-                              onChange={(e) => setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: e.target.value }))}
-                              placeholder="//div[@class='update-time']"
-                              className="w-full px-3 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => onOpenTester(source.id, currentUrlVal, currentXPathVal || undefined, 'DATE')}
-                              className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                              title="تست XPath تاریخ جدول"
-                            >
-                              <Play className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onOpenPicker(
-                                  currentUrlVal,
-                                  source.id,
-                                  (pickedXPath) => {
-                                    setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: pickedXPath }));
-                                  },
-                                  'TABLE_UPDATE'
-                                )
-                              }
-                              className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                              title="انتخابگر تعاملی تاریخ با موس (Picker)"
-                            >
-                              <MousePointerClick className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: '' }))}
-                              className="p-1.5 text-gray-400 hover:text-rose-600 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                              title="پاک کردن"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                            {onSaveTableSource && (
+
+                          {/* URL Direct Input */}
+                          <div className="md:col-span-5">
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">
+                              آدرس صفحه استخراج (URL مستقیم)
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="url"
+                                value={currentUrlVal}
+                                onChange={(e) => setSourceUrls((prev) => ({ ...prev, [source.id]: e.target.value }))}
+                                placeholder="https://example.com/rebar/zobahan"
+                                className="w-full px-3 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none"
+                              />
+                              {currentUrlVal && (
+                                <a
+                                  href={currentUrlVal}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 text-gray-400 hover:text-slate-800 border border-gray-200 rounded hover:bg-gray-50"
+                                  title="باز کردن در تب جدید"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Table Update XPath Input */}
+                          <div className="md:col-span-4">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-xs font-semibold text-gray-700">
+                                XPath تاریخ کل جدول
+                              </label>
+                              <span className="text-[11px] text-gray-400">اختیاری</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={currentXPathVal}
+                                onChange={(e) => setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: e.target.value }))}
+                                placeholder="//div[@class='update-time']"
+                                className="w-full px-2.5 py-1.5 font-mono text-xs dir-ltr text-right bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-slate-800 focus:outline-none"
+                              />
                               <button
                                 type="button"
-                                onClick={() => handleSaveSourceInline(source)}
-                                disabled={savingSourceId === source.id}
-                                className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded transition-colors disabled:opacity-50 flex items-center gap-1"
-                                title="ذخیره URL و XPath منبع"
+                                onClick={() => onOpenTester(source.id, currentUrlVal, currentXPathVal || undefined, 'DATE')}
+                                className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                                title="تست XPath تاریخ جدول"
                               >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>{savingSourceId === source.id ? '...' : 'ذخیره'}</span>
+                                <Play className="w-3.5 h-3.5" />
                               </button>
-                            )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onOpenPicker(
+                                    currentUrlVal,
+                                    source.id,
+                                    (pickedXPath) => {
+                                      setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: pickedXPath }));
+                                    },
+                                    'TABLE_UPDATE'
+                                  )
+                                }
+                                className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                                title="انتخابگر تعاملی تاریخ با موس (Picker)"
+                              >
+                                <MousePointerClick className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: '' }))}
+                                className="p-1.5 text-gray-400 hover:text-rose-600 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                                title="پاک کردن"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                              {onSaveTableSource && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveSourceInline(source)}
+                                  disabled={savingSourceId === source.id}
+                                  className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded transition-colors disabled:opacity-50 flex items-center gap-1 shrink-0"
+                                  title="ذخیره سایت، URL و XPath منبع"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>{savingSourceId === source.id ? '...' : 'ذخیره'}</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1050,7 +1077,6 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                           </div>
                         )}
                       </div>
-                    </div>
 
                     {/* Product Selectors under this Source (Requirement #6) */}
                     <div className="p-4 bg-white">

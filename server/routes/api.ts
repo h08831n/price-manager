@@ -614,6 +614,26 @@ apiRouter.put('/table-sources/:id', (req: Request, res: Response) => {
       }
       spId = existingPage.id;
     }
+  } else if (req.body.site_id !== undefined && req.body.site_id !== ts.site_id && (!req.body.source_page_id || req.body.source_page_id === ts.source_page_id)) {
+    // If site changed but URL was not explicitly re-sent and source_page_id wasn't changed,
+    // find or create a source_page for the new site using the existing source_page's URL
+    const existingSp = schema.source_pages.find((p) => p.id === ts.source_page_id);
+    const existingUrl = existingSp?.url || (ts as any).url || (ts as any).source_page_url || '';
+    if (existingUrl) {
+      let pageForNewSite = schema.source_pages.find((p) => p.site_id === sId && p.url === existingUrl);
+      if (!pageForNewSite) {
+        pageForNewSite = {
+          id: db.getNextId('source_pages'),
+          site_id: sId,
+          url: existingUrl,
+          active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        schema.source_pages.push(pageForNewSite);
+      }
+      spId = pageForNewSite.id;
+    }
   }
 
   // 1. Validate price_table
@@ -698,8 +718,11 @@ apiRouter.delete('/table-sources/:id', (req: Request, res: Response) => {
   const index = schema.table_sources.findIndex((s) => s.id === id);
   if (index === -1) return res.status(404).json({ error: 'منبع جدول یافت نشد.' });
   const [removed] = schema.table_sources.splice(index, 1);
-  // Also clean up selectors for this table source
+  // Also clean up selectors and TABLE_SOURCE page_actions for this table source
   schema.product_selectors = schema.product_selectors.filter((s) => s.table_source_id !== id);
+  schema.page_actions = schema.page_actions.filter(
+    (a) => !(a.scope === 'TABLE_SOURCE' && a.table_source_id === id)
+  );
   db.logConfigChange('table_source', id, 'delete', `Table ${removed.price_table_id} -> Site ${removed.site_id}`, null);
   db.save();
   res.json({ success: true, removed });
@@ -845,16 +868,20 @@ apiRouter.post('/selectors/test', async (req: Request, res: Response) => {
       site = schema.sites.find((s) => s.id === ts.site_id);
       const sp = schema.source_pages.find((p) => p.id === ts.source_page_id);
       if (!targetUrl) targetUrl = sp?.url || (ts as any).url || (ts as any).source_page_url || site?.base_url;
+      // When tableSource context exists, use ONLY resolveEffectivePageActions without any secondary fallback
       actions = resolveEffectivePageActions(ts.id);
     }
-  }
-
-  if (!site && req.body.site_id) {
-    site = schema.sites.find((s) => s.id === parseInt(req.body.site_id, 10));
-  }
-
-  if (!actions.length && site) {
-    actions = getSiteDefaultPageActions(site.id, true);
+  } else {
+    // Only when no tableSource context is present, check site_id or URL site
+    if (req.body.site_id) {
+      site = schema.sites.find((s) => s.id === parseInt(req.body.site_id, 10));
+    }
+    if (!site && targetUrl) {
+      site = schema.sites.find((s) => targetUrl.startsWith(s.base_url));
+    }
+    if (site) {
+      actions = getSiteDefaultPageActions(site.id, true);
+    }
   }
 
   if (!targetUrl || !xpath) {
@@ -971,9 +998,9 @@ apiRouter.put('/sites/:siteId/page-actions/:actionId', (req: Request, res: Respo
   const actionId = parseInt(req.params.actionId, 10);
 
   const action = schema.page_actions.find(
-    (a) => a.id === actionId && (a.site_id === siteId || a.scope === 'SITE_DEFAULT')
+    (a) => a.id === actionId && a.site_id === siteId && a.scope === 'SITE_DEFAULT'
   );
-  if (!action || action.site_id !== siteId) {
+  if (!action) {
     return res.status(404).json({ error: 'دستور مورد نظر برای این سایت یافت نشد.' });
   }
 
@@ -1219,19 +1246,20 @@ apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
     const ts = schema.table_sources.find((s) => s.id === tableSourceId);
     if (ts) {
       site = schema.sites.find((s) => s.id === ts.site_id);
+      // When tableSource context exists, use ONLY resolveEffectivePageActions without any secondary fallback
       actions = resolveEffectivePageActions(ts.id);
     }
-  }
-
-  if (!site && siteId) {
-    site = schema.sites.find((s) => s.id === siteId);
-  }
-  if (!site) {
-    site = schema.sites.find((s) => targetUrl.startsWith(s.base_url));
-  }
-
-  if (!actions.length && site) {
-    actions = getSiteDefaultPageActions(site.id, true);
+  } else {
+    // Only when no tableSource context is present, check siteId or URL site
+    if (siteId) {
+      site = schema.sites.find((s) => s.id === siteId);
+    }
+    if (!site) {
+      site = schema.sites.find((s) => targetUrl.startsWith(s.base_url));
+    }
+    if (site) {
+      actions = getSiteDefaultPageActions(site.id, true);
+    }
   }
 
   const effectiveSite: Site = site || {
