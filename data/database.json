@@ -159,13 +159,13 @@
       "id": 5,
       "name": "منبع هـ (مرکز آهن)",
       "base_url": "http://localhost:3000/fixtures/source-e.html",
-      "scrape_method": "FETCH",
+      "scrape_method": "PLAYWRIGHT",
       "browser": "Chromium",
       "timeout": 30,
       "wait_after_load": 1000,
       "active": true,
       "created_at": "2026-09-21T08:19:39.381Z",
-      "updated_at": "2026-09-21T08:19:39.381Z"
+      "updated_at": "2026-09-25T12:51:38.643Z"
     }
   ],
   "source_pages": [
@@ -208,19 +208,27 @@
       "active": true,
       "created_at": "2026-09-21T08:19:39.381Z",
       "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 6,
+      "site_id": 5,
+      "url": "https://www.markazeahan.com/product-category/%D9%85%DB%8C%D9%84%DA%AF%D8%B1%D8%AF/",
+      "active": true,
+      "created_at": "2026-09-25T12:51:01.279Z",
+      "updated_at": "2026-09-25T12:51:01.279Z"
     }
   ],
   "table_sources": [
     {
       "id": 1,
       "price_table_id": 1,
-      "site_id": 1,
-      "source_page_id": 1,
+      "site_id": 5,
+      "source_page_id": 6,
       "active": true,
-      "update_time_xpath": "//*[@id=\"last-update\"]",
+      "update_time_xpath": "/html/body/div[3]/div[2]/div[1]/div[1]/div[2]/div[1]/div[1]/div/div[1]/div/div/span[1]",
       "recheck_enabled": true,
       "created_at": "2026-09-21T08:19:39.381Z",
-      "updated_at": "2026-09-21T08:19:39.381Z"
+      "updated_at": "2026-09-25T12:51:01.279Z"
     },
     {
       "id": 2,
@@ -552,7 +560,28 @@
       "created_at": "2026-09-22T12:31:18.528Z"
     }
   ],
-  "config_history": [],
+  "config_history": [
+    {
+      "id": 2,
+      "entity_type": "site",
+      "entity_id": 5,
+      "field_changed": "update",
+      "old_value": "",
+      "new_value": "منبع هـ (مرکز آهن)",
+      "changed_at": "2026-09-25T12:51:38.643Z",
+      "changed_by": "مدیر سیستم"
+    },
+    {
+      "id": 1,
+      "entity_type": "table_source",
+      "entity_id": 1,
+      "field_changed": "update",
+      "old_value": "",
+      "new_value": "/html/body/div[3]/div[2]/div[1]/div[1]/div[2]/div[1]/div[1]/div/div[1]/div/div/span[1]",
+      "changed_at": "2026-09-25T12:51:01.279Z",
+      "changed_by": "مدیر سیستم"
+    }
+  ],
   "import_history": [
     {
       "id": 1,
