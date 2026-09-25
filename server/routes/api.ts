@@ -665,9 +665,20 @@ apiRouter.put('/table-sources/:id', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'منبع دیگری با همین مشخصات برای این جدول ثبت شده است.' });
   }
 
+  const previousSiteId = ts.site_id;
   ts.price_table_id = ptId;
   ts.site_id = sId;
   ts.source_page_id = spId;
+
+  // If site_id changed, sync site_id metadata for all TABLE_SOURCE actions owned by this source
+  if (previousSiteId !== sId) {
+    schema.page_actions.forEach((a) => {
+      if (a.scope === 'TABLE_SOURCE' && a.table_source_id === id) {
+        a.site_id = sId;
+        a.updated_at = new Date().toISOString();
+      }
+    });
+  }
   if (req.body.update_time_xpath !== undefined) ts.update_time_xpath = String(req.body.update_time_xpath).trim();
   if (req.body.recheck_enabled !== undefined) ts.recheck_enabled = Boolean(req.body.recheck_enabled);
   if (req.body.active !== undefined) ts.active = Boolean(req.body.active);
@@ -1186,25 +1197,24 @@ apiRouter.post('/page-actions', (req: Request, res: Response) => {
     selector_type
   } = req.body;
 
-  let resolvedScope: 'SITE_DEFAULT' | 'TABLE_SOURCE' = scope || 'SITE_DEFAULT';
-  let resolvedSiteId = site_id ? parseInt(site_id, 10) : null;
-  let resolvedTableSourceId = table_source_id ? parseInt(table_source_id, 10) : null;
-
-  if (!scope) {
-    if (resolvedTableSourceId) {
-      resolvedScope = 'TABLE_SOURCE';
-    } else if (source_page_id) {
-      const sp = schema.source_pages.find((p) => p.id === parseInt(source_page_id, 10));
-      if (sp) resolvedSiteId = sp.site_id;
-      resolvedScope = 'SITE_DEFAULT';
-    }
+  // Prevent bypassing strict ownership: Scoped actions must be managed via dedicated scoped endpoints
+  if (scope === 'SITE_DEFAULT' || scope === 'TABLE_SOURCE' || site_id || table_source_id) {
+    return res.status(403).json({
+      error: 'ثبت دستورات اسکوپ‌دار از اندپوینت عمومی مسدود است. لطفاً از روت‌های اختصاصی سایت یا منبع استفاده کنید.'
+    });
   }
 
+  // Legacy fallback: only if source_page_id is provided without new scope
+  if (!source_page_id) {
+    return res.status(400).json({ error: 'دستورات جدید باید در اندپوینت اختصاصی سایت یا منبع ثبت شوند.' });
+  }
+
+  const sp = schema.source_pages.find((p) => p.id === parseInt(source_page_id, 10));
   const newAction: PageAction = {
     id: db.getNextId('page_actions'),
-    scope: resolvedScope,
-    site_id: resolvedSiteId,
-    table_source_id: resolvedTableSourceId,
+    scope: 'SITE_DEFAULT',
+    site_id: sp?.site_id || null,
+    table_source_id: null,
     order: parseInt(order, 10) || 1,
     action_type: action_type || 'WAIT',
     selector_type: selector_type || (selector?.startsWith('//') ? 'XPATH' : 'CSS'),
@@ -1213,7 +1223,7 @@ apiRouter.post('/page-actions', (req: Request, res: Response) => {
     active: active !== undefined ? Boolean(active) : true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    source_page_id: source_page_id ? parseInt(source_page_id, 10) : null
+    source_page_id: parseInt(source_page_id, 10)
   };
 
   schema.page_actions.push(newAction);
@@ -1221,9 +1231,41 @@ apiRouter.post('/page-actions', (req: Request, res: Response) => {
   res.json(newAction);
 });
 
+apiRouter.put('/page-actions/:id', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const id = parseInt(req.params.id, 10);
+  const action = schema.page_actions.find((a) => a.id === id);
+
+  if (!action) {
+    return res.status(404).json({ error: 'دستور مورد نظر یافت نشد.' });
+  }
+
+  // Prevent bypassing strict ownership: Scoped actions CANNOT be updated via legacy generic endpoint
+  if (action.scope === 'SITE_DEFAULT' || action.scope === 'TABLE_SOURCE') {
+    return res.status(403).json({
+      error: 'ویرایش دستورات اسکوپ‌دار از اندپوینت عمومی غیرمجاز است. لطفاً از روت اختصاصی سایت یا منبع استفاده کنید.'
+    });
+  }
+
+  return res.status(403).json({ error: 'ویرایش دستورات از اندپوینت عمومی غیرمجاز است.' });
+});
+
 apiRouter.delete('/page-actions/:id', (req: Request, res: Response) => {
   const schema = db.getSchema();
   const id = parseInt(req.params.id, 10);
+  const action = schema.page_actions.find((a) => a.id === id);
+
+  if (!action) {
+    return res.status(404).json({ error: 'دستور مورد نظر یافت نشد.' });
+  }
+
+  // Prevent bypassing strict ownership: Scoped actions CANNOT be deleted via legacy generic endpoint
+  if (action.scope === 'SITE_DEFAULT' || action.scope === 'TABLE_SOURCE') {
+    return res.status(403).json({
+      error: 'حذف دستورات اسکوپ‌دار از اندپوینت عمومی غیرمجاز است. لطفاً از روت اختصاصی سایت یا منبع استفاده کنید.'
+    });
+  }
+
   schema.page_actions = schema.page_actions.filter((a) => a.id !== id);
   db.save();
   res.json({ success: true });

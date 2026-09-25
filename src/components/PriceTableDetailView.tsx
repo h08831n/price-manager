@@ -259,6 +259,37 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     }
   };
 
+  // Helper to ensure source config is saved before launching Tester or Picker (Requirement #3)
+  const ensureSourceSavedBeforeInspect = async (source: TableSource) => {
+    const siteIdVal = getSourceSiteId(source);
+    const urlVal = getSourceUrl(source).trim();
+    const xpathVal = getSourceUpdateXPath(source).trim();
+
+    const isDirty =
+      siteIdVal !== source.site_id ||
+      urlVal !== (source.url || source.source_page_url || '').trim() ||
+      xpathVal !== (source.update_time_xpath || '').trim();
+
+    if (isDirty && onSaveTableSource) {
+      await handleSaveSourceInline(source);
+    }
+    return { siteIdVal, urlVal, xpathVal };
+  };
+
+  const handleOpenSourceTester = async (source: TableSource, xpathVal?: string, type: 'PRICE' | 'DATE' = 'DATE') => {
+    const { urlVal } = await ensureSourceSavedBeforeInspect(source);
+    onOpenTester(source.id, urlVal, xpathVal || undefined, type);
+  };
+
+  const handleOpenSourcePicker = async (
+    source: TableSource,
+    onSelect: (xpath: string) => void,
+    target: 'TABLE_UPDATE' | 'PRODUCT_UPDATE' | 'PRODUCT_PRICE'
+  ) => {
+    const { urlVal } = await ensureSourceSavedBeforeInspect(source);
+    onOpenPicker(urlVal, source.id, onSelect, target);
+  };
+
   const handleDeleteSource = async (sourceId: number) => {
     if (!onDeleteTableSource) return;
     if (window.confirm('آیا از حذف این منبع و تمام سلکتورهای مرتبط با آن مطمئن هستید؟')) {
@@ -662,7 +693,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                 const currentXPathVal = getSourceUpdateXPath(source);
                 const siteObj = sites.find((s) => s.id === currentSiteIdVal) || sites.find((s) => s.id === source.site_id);
                 const overrideActions = getSourceOverrideActions(source.id);
-                const siteDefaults = getSiteDefaultActions(source.site_id);
+                const siteDefaults = getSiteDefaultActions(currentSiteIdVal);
                 const hasOverrides = overrideActions.length > 0;
                 const isProductsOpen = expandedProducts[source.id] !== false; // open by default
                 const isActionsOpen = expandedActions[source.id] === true;
@@ -824,7 +855,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                               />
                               <button
                                 type="button"
-                                onClick={() => onOpenTester(source.id, currentUrlVal, currentXPathVal || undefined, 'DATE')}
+                                onClick={() => handleOpenSourceTester(source, currentXPathVal || undefined, 'DATE')}
                                 className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
                                 title="تست XPath تاریخ جدول"
                               >
@@ -833,9 +864,8 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() =>
-                                  onOpenPicker(
-                                    currentUrlVal,
-                                    source.id,
+                                  handleOpenSourcePicker(
+                                    source,
                                     (pickedXPath) => {
                                       setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: pickedXPath }));
                                     },
@@ -884,7 +914,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                               </span>
                             ) : (
                               <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                در حال استفاده از {siteDefaults.length} دستور پیش‌فرض سایت ({source.site_name || siteObj?.name})
+                                در حال استفاده از {siteDefaults.length} دستور پیش‌فرض سایت ({siteObj?.name || source.site_name || `سایت ${currentSiteIdVal}`})
                               </span>
                             )}
                           </div>
@@ -1170,9 +1200,10 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                         />
                                         <button
                                           type="button"
-                                          onClick={() =>
-                                            onOpenTester(source.id, currentUrlVal, inputVals.price_xpath || undefined, 'PRICE')
-                                          }
+                                          onClick={async () => {
+                                            const { urlVal } = await ensureSourceSavedBeforeInspect(source);
+                                            onOpenTester(source.id, urlVal, inputVals.price_xpath || undefined, 'PRICE');
+                                          }}
                                           className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
                                           title="تست استخراج قیمت"
                                         >
@@ -1180,9 +1211,10 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() =>
+                                          onClick={async () => {
+                                            const { urlVal } = await ensureSourceSavedBeforeInspect(source);
                                             onOpenPicker(
-                                              currentUrlVal,
+                                              urlVal,
                                               source.id,
                                               (pickedXPath) => {
                                                 setEditingSelectors((prev) => ({
@@ -1191,8 +1223,8 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                                 }));
                                               },
                                               'PRODUCT_PRICE'
-                                            )
-                                          }
+                                            );
+                                          }}
                                           className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
                                           title="انتخابگر قیمت با موس (Picker)"
                                         >
@@ -1224,14 +1256,15 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                         />
                                         <button
                                           type="button"
-                                          onClick={() =>
+                                          onClick={async () => {
+                                            const { urlVal } = await ensureSourceSavedBeforeInspect(source);
                                             onOpenTester(
                                               source.id,
-                                              currentUrlVal,
+                                              urlVal,
                                               inputVals.update_time_xpath || undefined,
                                               'DATE'
-                                            )
-                                          }
+                                            );
+                                          }}
                                           className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
                                           title="تست تاریخ کالا"
                                         >
@@ -1239,9 +1272,10 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() =>
+                                          onClick={async () => {
+                                            const { urlVal } = await ensureSourceSavedBeforeInspect(source);
                                             onOpenPicker(
-                                              currentUrlVal,
+                                              urlVal,
                                               source.id,
                                               (pickedXPath) => {
                                                 setEditingSelectors((prev) => ({
@@ -1250,8 +1284,8 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                                 }));
                                               },
                                               'PRODUCT_UPDATE'
-                                            )
-                                          }
+                                            );
+                                          }}
                                           className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
                                           title="انتخابگر تاریخ کالا با موس (Picker)"
                                         >
