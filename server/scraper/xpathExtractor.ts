@@ -11,6 +11,25 @@ export interface XPathResult {
   error?: string;
 }
 
+function extractNodeText(node: any): string {
+  if (!node) return '';
+  if (node.nodeType === 3) return node.nodeValue || '';
+  if (!node.childNodes || node.childNodes.length === 0) return node.textContent?.trim() || '';
+
+  let text = '';
+  for (let i = 0; i < node.childNodes.length; i++) {
+    const child = node.childNodes[i];
+    const childText = extractNodeText(child).trim();
+    if (childText) {
+      if (text && !text.endsWith(' ') && !childText.startsWith(' ')) {
+        text += ' ';
+      }
+      text += childText;
+    }
+  }
+  return text.trim() || node.textContent?.trim() || '';
+}
+
 export function extractXPathFromHtml(html: string, xpathQuery: string): XPathResult {
   if (!xpathQuery || !xpathQuery.trim()) {
     return {
@@ -40,7 +59,7 @@ export function extractXPathFromHtml(html: string, xpathQuery: string): XPathRes
     let node = iterator.iterateNext();
 
     while (node) {
-      const text = node.textContent?.trim() || '';
+      const text = extractNodeText(node);
       values.push(text);
       node = iterator.iterateNext();
     }
@@ -63,7 +82,7 @@ export function extractXPathFromHtml(html: string, xpathQuery: string): XPathRes
 
       const values = (nodes || []).map((n: any) => {
         if (typeof n === 'string' || typeof n === 'number') return String(n);
-        return n.textContent?.trim() || n.nodeValue?.trim() || '';
+        return extractNodeText(n) || n.nodeValue?.trim() || '';
       }).filter(Boolean);
 
       return {

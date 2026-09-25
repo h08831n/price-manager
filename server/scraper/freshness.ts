@@ -70,10 +70,17 @@ export function evaluateFreshness(rawText: string, referenceDate: Date = new Dat
     };
   }
 
-  const cleanText = toAsciiDigits(rawText.trim());
+  let cleanText = toAsciiDigits(rawText.trim());
 
-  // Extract time if present (e.g. 10:42 or 10:42:00)
-  const timeMatch = cleanText.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  // 0. Pre-clean: Separate dates and times when glued together without space
+  // e.g. "1405/07/0212:07" -> "1405/07/02 12:07"
+  cleanText = cleanText
+    .replace(/(\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})([0-2]?\d:[0-5]\d)/g, '$1 $2')
+    .replace(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})([0-2]?\d:[0-5]\d)/g, '$1 $2')
+    .replace(/([0-2]?\d:[0-5]\d)(\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})/g, '$1 $2');
+
+  // Extract time if present (e.g. 10:42 or 10:42:00 or ساعت 10:42)
+  const timeMatch = cleanText.match(/(?:ساعت\s*)?([0-2]?\d):([0-5]\d)(?::([0-5]\d))?/);
   const normalized_time = timeMatch ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}` : null;
 
   // Compute Today in Tehran / reference date
@@ -107,12 +114,29 @@ export function evaluateFreshness(rawText: string, referenceDate: Date = new Dat
     };
   }
 
-  // 3. Numeric Jalali date pattern: YYYY/MM/DD or YYYY-MM-DD
-  const jalaliNumericMatch = cleanText.match(/(1[34]\d{2})[\/\-\.](0?[1-9]|1[0-2])[\/\-\.](3[01]|[12]\d|0?[1-9])\b/);
+  // 3A. Numeric Jalali date pattern (Year first): YYYY/MM/DD or YYYY-MM-DD or YYYY.MM.DD
+  const jalaliNumericMatch = cleanText.match(/(1[34]\d{2})[\/\-\.](0?[1-9]|1[0-2])[\/\-\.](0?[1-9]|[12]\d|3[01])(?!\d)/);
   if (jalaliNumericMatch) {
     const y = parseInt(jalaliNumericMatch[1], 10);
     const m = parseInt(jalaliNumericMatch[2], 10);
     const d = parseInt(jalaliNumericMatch[3], 10);
+    const normalized = `${y}/${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
+    const isToday = (y === todayJy && m === todayJm && d === todayJd);
+    return {
+      raw_text: rawText,
+      normalized_date: normalized,
+      normalized_time,
+      fresh: isToday,
+      reason: isToday ? 'تاریخ جلالی با امروز مطابقت دارد' : `تاریخ منبع (${normalized}) متعلق به گذشته است`
+    };
+  }
+
+  // 3B. Numeric Jalali date pattern (Day first): DD/MM/YYYY
+  const jalaliDayFirstMatch = cleanText.match(/(0?[1-9]|[12]\d|3[01])[\/\-\.](0?[1-9]|1[0-2])[\/\-\.](1[34]\d{2})(?!\d)/);
+  if (jalaliDayFirstMatch) {
+    const d = parseInt(jalaliDayFirstMatch[1], 10);
+    const m = parseInt(jalaliDayFirstMatch[2], 10);
+    const y = parseInt(jalaliDayFirstMatch[3], 10);
     const normalized = `${y}/${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
     const isToday = (y === todayJy && m === todayJm && d === todayJd);
     return {
