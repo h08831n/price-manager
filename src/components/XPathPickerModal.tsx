@@ -22,8 +22,11 @@ export const XPathPickerModal: React.FC<XPathPickerModalProps> = ({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'PICKER_ELEMENT_SELECTED') {
-        setCurrentXPath(event.data.xpath);
+      if (
+        event.data &&
+        (event.data.type === 'PICKER_ELEMENT_SELECTED' || event.data.type === 'XPATH_SELECTED')
+      ) {
+        setCurrentXPath(event.data.xpath || '');
         setSelectedText(event.data.text || '');
       }
     };
@@ -106,7 +109,11 @@ export const XPathPickerModal: React.FC<XPathPickerModalProps> = ({
                   value={currentXPath}
                   onChange={(e) => setCurrentXPath(e.target.value)}
                   placeholder="روی هر قیمت، جدول یا تاریخ در صفحه بالا کلیک کنید تا XPath استخراج شود..."
-                  className="w-full px-3 py-1.5 text-xs font-mono dir-ltr text-right bg-gray-50 border border-gray-300 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  className={`w-full px-3 py-1.5 text-xs font-mono dir-ltr text-right border rounded focus:outline-none transition-colors ${
+                    currentXPath
+                      ? 'bg-emerald-50/70 border-emerald-400 text-emerald-950 font-bold'
+                      : 'bg-gray-50 border-gray-300 focus:bg-white focus:border-slate-800'
+                  }`}
                 />
                 <button
                   onClick={handleCopy}
@@ -129,9 +136,10 @@ export const XPathPickerModal: React.FC<XPathPickerModalProps> = ({
               <button
                 onClick={handleApply}
                 disabled={!currentXPath}
-                className="px-5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-40 rounded transition-colors shadow-xs"
+                className="px-5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-40 rounded transition-colors shadow-xs flex items-center gap-1.5"
               >
-                انتخاب و استفاده از این سلکتور
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>انتخاب و استفاده از این سلکتور</span>
               </button>
             </div>
           </div>

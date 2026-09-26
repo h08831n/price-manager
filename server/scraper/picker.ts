@@ -121,7 +121,8 @@ export function injectPickerScript(html: string): string {
   document.body.appendChild(banner);
 
   function getXPath(el) {
-    if (el.id) return '//*[@id="' + el.id + '"]';
+    if (el.id && /^[A-Za-z0-9_\\-]+$/.test(el.id)) return '//*[@id="' + el.id + '"]';
+
     var table = el.closest ? el.closest('table') : null;
     if (table) {
       var prefix = table.id ? '//table[@id="' + table.id + '"]' : '//table';
@@ -139,9 +140,48 @@ export function injectPickerScript(html: string): string {
         }
       }
     }
+
+    // Check for stable class names on element
+    if (el.className && typeof el.className === 'string') {
+      var classes = el.className.trim().split(/\\s+/).filter(function(c) {
+        return c && c.length > 3 && !/^[0-9]+$/.test(c);
+      });
+      for (var i = 0; i < classes.length; i++) {
+        var cls = classes[i];
+        var cleanCls = cls.split('__')[0];
+        if (cleanCls && cleanCls.length > 3) {
+          var matching = document.querySelectorAll('.' + cls);
+          if (matching.length === 1) {
+            return '//' + el.tagName.toLowerCase() + '[contains(@class, "' + cleanCls + '")]';
+          } else if (matching.length > 1) {
+            var index = Array.from(matching).indexOf(el) + 1;
+            return '(//' + el.tagName.toLowerCase() + '[contains(@class, "' + cleanCls + '")])[' + index + ']';
+          }
+        }
+      }
+    }
+
+    // Check parent with informative class
+    var parentWithClass = el.parentElement;
+    if (parentWithClass && parentWithClass.className && typeof parentWithClass.className === 'string') {
+      var pCls = parentWithClass.className.trim().split(/\\s+/)[0];
+      var cleanPCls = pCls ? pCls.split('__')[0] : '';
+      if (cleanPCls && cleanPCls.length > 3) {
+        var pMatching = document.querySelectorAll('.' + pCls);
+        var pIdx = Array.from(pMatching).indexOf(parentWithClass) + 1;
+        var pPrefix = pMatching.length > 1 ? '(//*[contains(@class, "' + cleanPCls + '")])[' + pIdx + ']' : '//*[contains(@class, "' + cleanPCls + '")]';
+        return pPrefix + '//' + el.tagName.toLowerCase();
+      }
+    }
+
+    // Relative fallback with nearest ID or ancestors
     var path = [];
     var curr = el;
     while (curr && curr.nodeType === 1 && curr.tagName.toLowerCase() !== 'body') {
+      if (curr.id && /^[A-Za-z0-9_\\-]+$/.test(curr.id)) {
+        path.unshift('*[@id="' + curr.id + '"]');
+        return '//' + path.join('/');
+      }
       var idx = 1;
       var sib = curr.previousElementSibling;
       while (sib) {
@@ -173,6 +213,22 @@ export function injectPickerScript(html: string): string {
     var xpath = getXPath(target);
     var text = target.textContent ? target.textContent.trim() : '';
 
+    // Flash border green to confirm selection
+    activeOverlay.style.borderColor = '#10b981';
+    activeOverlay.style.background = 'rgba(16, 185, 129, 0.2)';
+    setTimeout(function() {
+      activeOverlay.style.borderColor = '#e11d48';
+      activeOverlay.style.background = 'rgba(225, 29, 72, 0.1)';
+    }, 400);
+
+    // Send both event types for 100% receiver compatibility
+    window.parent.postMessage({
+      type: 'PICKER_ELEMENT_SELECTED',
+      xpath: xpath,
+      text: text,
+      tagName: target.tagName.toLowerCase()
+    }, '*');
+
     window.parent.postMessage({
       type: 'XPATH_SELECTED',
       xpath: xpath,
@@ -184,5 +240,8 @@ export function injectPickerScript(html: string): string {
 </script>
 `;
 
-  return html.replace('</body>', `${pickerScript}</body>`);
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${pickerScript}</body>`);
+  }
+  return `${html}${pickerScript}`;
 }
