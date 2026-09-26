@@ -10,7 +10,8 @@ import {
   FileText,
   Settings,
   History,
-  RefreshCw
+  RefreshCw,
+  LogOut
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -19,6 +20,7 @@ interface HeaderProps {
   openErrorsCount: number;
   onRefresh: () => void;
   isRefreshing: boolean;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,7 +28,8 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   openErrorsCount,
   onRefresh,
-  isRefreshing
+  isRefreshing,
+  onLogout
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
@@ -67,7 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Quick Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               id="header-refresh-btn"
               onClick={onRefresh}
@@ -75,8 +78,20 @@ export const Header: React.FC<HeaderProps> = ({
               title="بروزرسانی داده‌ها"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-gray-500 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>بروزرسانی وضعیت</span>
+              <span className="hidden sm:inline">بروزرسانی وضعیت</span>
             </button>
+
+            {onLogout && (
+              <button
+                id="header-logout-btn"
+                onClick={onLogout}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition-colors shadow-xs"
+                title="خروج از پنل مدیریت"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                <span>خروج</span>
+              </button>
+            )}
           </div>
         </div>
 

@@ -18,6 +18,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { Site, PageAction, PageActionType } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface SitesViewProps {
   sites: Site[];
@@ -59,6 +60,13 @@ export const SitesView: React.FC<SitesViewProps> = ({
     active: true
   });
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+
+  // Close modals on Escape
+  useEscapeKey(() => {
+    if (deletingSite) setDeletingSite(null);
+    else if (isActionModalOpen) setIsActionModalOpen(false);
+    else if (isSiteModalOpen) setIsSiteModalOpen(false);
+  }, Boolean(deletingSite || isActionModalOpen || isSiteModalOpen));
 
   const currentSite = sites.find((s) => s.id === selectedSiteId) || sites[0];
 

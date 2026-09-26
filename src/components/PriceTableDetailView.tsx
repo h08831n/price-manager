@@ -37,6 +37,7 @@ import {
   PageAction,
   PageActionType
 } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface PriceTableDetailViewProps {
   table: PriceTable;
@@ -167,6 +168,16 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const [revertingSourceId, setRevertingSourceId] = useState<number | null>(null);
   const [isRevertingSource, setIsRevertingSource] = useState(false);
   const [addSourceError, setAddSourceError] = useState<string | null>(null);
+
+  // Close modals on Escape
+  useEscapeKey(() => {
+    if (deletingSource) setDeletingSource(null);
+    else if (revertingSourceId) setRevertingSourceId(null);
+    else if (isDeleteTableModalOpen) setIsDeleteTableModalOpen(false);
+    else if (actionModal.isOpen) setActionModal((prev) => ({ ...prev, isOpen: false }));
+    else if (editingSourceSettings) setEditingSourceSettings(null);
+    else if (isAddSourceModalOpen) setIsAddSourceModalOpen(false);
+  }, Boolean(deletingSource || revertingSourceId || isDeleteTableModalOpen || actionModal.isOpen || editingSourceSettings || isAddSourceModalOpen));
 
   const tableSources = sources.filter((s) => s.price_table_id === table.id);
   const tableProducts = products.filter((p) => p.price_table_id === table.id);

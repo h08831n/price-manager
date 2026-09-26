@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Play, Eye, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Clock, ArrowLeft } from 'lucide-react';
 import { PriceTable, Factory } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface PriceTablesViewProps {
   tables: PriceTable[];
@@ -40,6 +41,12 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   // Delete modal state
   const [deletingTable, setDeletingTable] = useState<PriceTable | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Close modals on Escape
+  useEscapeKey(() => {
+    if (deletingTable) setDeletingTable(null);
+    else if (isAddModalOpen) setIsAddModalOpen(false);
+  }, Boolean(deletingTable || isAddModalOpen));
 
   const handleOpenAdd = () => {
     setNewTable({

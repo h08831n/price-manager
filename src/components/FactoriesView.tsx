@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Factory as FactoryIcon } from 'lucide-react';
 import { Factory } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface FactoriesViewProps {
   factories: Factory[];
@@ -25,6 +26,15 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
   // Delete modal state
   const [deletingFactory, setDeletingFactory] = useState<Factory | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Close modals on Escape
+  useEscapeKey(() => {
+    if (deletingFactory) setDeletingFactory(null);
+    else if (isModalOpen) {
+      setIsModalOpen(false);
+      setEditingFactory(null);
+    }
+  }, Boolean(deletingFactory || isModalOpen));
 
   const handleOpenAdd = () => {
     setEditingFactory({ name: '', active: true });

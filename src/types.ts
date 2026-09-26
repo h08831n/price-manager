@@ -329,6 +329,7 @@ export interface GlobalSettings {
   wordpress_url: string;
   wordpress_api_token: string;
   timezone: string; // "Asia/Tehran"
+  admin_password?: string;
   default_timeout?: number;
   default_wait_after_load?: number;
 }

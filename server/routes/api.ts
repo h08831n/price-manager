@@ -24,6 +24,86 @@ import { DashboardData, Site, PageAction } from '../../src/types';
 export const apiRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// In-memory active session tokens
+const activeSessions = new Set<string>();
+
+function getAdminPassword(): string {
+  const schema = db.getSchema();
+  return (
+    schema.global_settings?.admin_password ||
+    process.env.ADMIN_PASSWORD ||
+    'admin123'
+  );
+}
+
+// ==========================================
+// 0. AUTHENTICATION API
+// ==========================================
+apiRouter.post('/auth/login', (req: Request, res: Response) => {
+  const { password } = req.body;
+  const configuredPassword = getAdminPassword();
+
+  if (!password || String(password).trim() !== configuredPassword) {
+    return res.status(401).json({
+      success: false,
+      error: 'رمز عبور وارد شده اشتباه است.'
+    });
+  }
+
+  const token = `tok_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
+  activeSessions.add(token);
+
+  res.json({
+    success: true,
+    token,
+    user: 'مدیر سامانه',
+    message: 'ورود موفقیت‌آمیز بود.'
+  });
+});
+
+apiRouter.get('/auth/verify', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : (req.query.token as string);
+
+  if (token && activeSessions.has(token)) {
+    return res.json({ authenticated: true, user: 'مدیر سامانه' });
+  }
+
+  res.status(401).json({ authenticated: false, error: 'نشست کاربری نامعتبر است یا منقضی شده است.' });
+});
+
+apiRouter.post('/auth/change-password', (req: Request, res: Response) => {
+  const { current_password, new_password } = req.body;
+  const configuredPassword = getAdminPassword();
+
+  if (!current_password || String(current_password).trim() !== configuredPassword) {
+    return res.status(400).json({ success: false, error: 'رمز عبور فعلی اشتباه است.' });
+  }
+
+  if (!new_password || String(new_password).trim().length < 4) {
+    return res.status(400).json({ success: false, error: 'رمز عبور جدید باید حداقل ۴ کاراکتر باشد.' });
+  }
+
+  const schema = db.getSchema();
+  if (!schema.global_settings) {
+    schema.global_settings = {} as any;
+  }
+  schema.global_settings.admin_password = String(new_password).trim();
+  db.logConfigChange('security', 1, 'update', 'رمز عبور قبلی', 'رمز عبور جدید');
+  db.save();
+
+  res.json({ success: true, message: 'رمز عبور با موفقیت بروزرسانی شد.' });
+});
+
+apiRouter.post('/auth/logout', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : (req.body?.token as string);
+  if (token) {
+    activeSessions.delete(token);
+  }
+  res.json({ success: true, message: 'با موفقیت خارج شدید.' });
+});
+
 // ==========================================
 // 1. DASHBOARD API (Requirement #41-#45, #71)
 // ==========================================

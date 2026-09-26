@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, ExternalLink, Calendar, TrendingUp, TrendingDown, Layers, Hash } from 'lucide-react';
 import { Product, ProductSelector, PriceChange } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -15,6 +16,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   priceChanges,
   onClose
 }) => {
+  useEscapeKey(onClose, Boolean(product));
   if (!product) return null;
 
   const productSelectors = selectors.filter((s) => s.product_id === product.id || s.post_id === product.post_id);

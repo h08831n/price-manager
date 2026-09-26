@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Product, Factory, PriceTable, ProductSelector, PriceChange } from '../types';
 import { ProductDetailModal } from './ProductDetailModal';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ProductsViewProps {
   products: Product[];
@@ -53,6 +54,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   // Delete modal state
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Close modals on Escape key
+  useEscapeKey(() => {
+    if (deletingProduct) setDeletingProduct(null);
+    else if (isEditModalOpen) setIsEditModalOpen(false);
+    else if (selectedProductForDetail) setSelectedProductForDetail(null);
+  }, Boolean(deletingProduct || isEditModalOpen || selectedProductForDetail));
 
   // Filter products
   const filteredProducts = products.filter((p) => {

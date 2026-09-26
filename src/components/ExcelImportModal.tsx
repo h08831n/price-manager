@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ExcelImportModalProps {
   entityType: string;
@@ -14,6 +15,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   onClose,
   onSuccess
 }) => {
+  useEscapeKey(onClose);
   const [file, setFile] = useState<File | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState<any | null>(null);

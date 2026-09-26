@@ -14,6 +14,8 @@ import { HistoryView } from './components/HistoryView';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { XPathPickerModal } from './components/XPathPickerModal';
 import { XPathTesterModal } from './components/XPathTesterModal';
+import { LoginScreen } from './components/LoginScreen';
+import { useEscapeKey } from './hooks/useEscapeKey';
 import {
   DashboardData,
   Product,
@@ -60,6 +62,11 @@ export default function App() {
   const [tableRevisionItems, setTableRevisionItems] = useState<TableRevisionItem[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
 
+  // Authentication State
+  const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('crawler_auth_token'));
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
+
   // Global Modals State
   const [importModal, setImportModal] = useState<{ isOpen: boolean; entityType: string; title: string } | null>(null);
   const [pickerModal, setPickerModal] = useState<{
@@ -71,6 +78,13 @@ export default function App() {
   } | null>(null);
   const [testerModal, setTesterModal] = useState<{ isOpen: boolean; url: string; xpath?: string; sourceId?: number; type?: 'PRICE' | 'DATE' } | null>(null);
 
+  // Close global modals on Escape key
+  useEscapeKey(() => {
+    if (testerModal) setTesterModal(null);
+    else if (pickerModal) setPickerModal(null);
+    else if (importModal) setImportModal(null);
+  }, Boolean(testerModal || pickerModal || importModal));
+
   // Toast Notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -80,6 +94,11 @@ export default function App() {
   };
 
   // Safe API Fetch Helpers
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    const token = authToken || localStorage.getItem('crawler_auth_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, [authToken]);
+
   const safeJson = async (res: Response) => {
     try {
       const text = await res.text();
@@ -91,8 +110,11 @@ export default function App() {
 
   const fetchJson = async <T,>(url: string, fallback: T): Promise<T> => {
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: getAuthHeaders() });
       if (!res.ok) {
+        if (res.status === 401) {
+          setIsAuthenticated(false);
+        }
         console.warn(`[API] Endpoint ${url} returned ${res.status}`);
         return fallback;
       }
@@ -181,14 +203,74 @@ export default function App() {
     }
   }, [selectedTable]);
 
+  // Check auth session validity on startup
   useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('crawler_auth_token');
+      if (!token) {
+        setIsAuthenticated(false);
+        setIsCheckingAuth(false);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/verify', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          setAuthToken(token);
+          setIsAuthenticated(true);
+        } else {
+          localStorage.removeItem('crawler_auth_token');
+          setAuthToken(null);
+          setIsAuthenticated(false);
+        }
+      } catch {
+        setIsAuthenticated(false);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  // Poll only when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return;
     loadAllData();
     // Auto polling every 20s
     const timer = setInterval(() => {
       loadAllData();
     }, 20000);
     return () => clearInterval(timer);
-  }, []);
+  }, [isAuthenticated, loadAllData]);
+
+  const handleLoginSuccess = (token: string) => {
+    localStorage.setItem('crawler_auth_token', token);
+    setAuthToken(token);
+    setIsAuthenticated(true);
+    showToast('ورود با موفقیت انجام شد');
+  };
+
+  const handleLogout = async () => {
+    try {
+      const token = authToken || localStorage.getItem('crawler_auth_token');
+      if (token) {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        });
+      }
+    } catch {}
+    localStorage.removeItem('crawler_auth_token');
+    setAuthToken(null);
+    setIsAuthenticated(false);
+    showToast('با موفقیت از سیستم خارج شدید.', 'info');
+  };
 
   // Action Handlers
   const handleRunTable = async (tableId: number) => {
@@ -570,6 +652,21 @@ export default function App() {
     });
   };
 
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center font-sans">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-400">در حال بررسی احراز هویت سامانه...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50/50 text-gray-900 flex flex-col font-sans selection:bg-slate-900 selection:text-white">
       {/* Toast Alert */}
@@ -599,6 +696,7 @@ export default function App() {
         openErrorsCount={dashboardData?.open_errors_count || 0}
         onRefresh={loadAllData}
         isRefreshing={isRefreshing}
+        onLogout={handleLogout}
       />
 
       {/* Main Application Container */}

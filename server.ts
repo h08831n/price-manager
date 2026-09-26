@@ -17,6 +17,19 @@ async function startServer() {
   app.use(express.json({ limit: '20mb' }));
   app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
+  // Strict anti-indexing headers to prevent any search engine from indexing the app
+  app.use((req, res, next) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
+    next();
+  });
+
+  // Explicit robots.txt route
+  app.get('/robots.txt', (req, res) => {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
+    res.send('User-agent: *\nDisallow: /\n');
+  });
+
   // Seed initial data if empty
   seedInitialDataIfEmpty();
 

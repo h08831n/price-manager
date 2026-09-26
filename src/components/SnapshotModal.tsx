@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, FileCode, Image as ImageIcon } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface SnapshotModalProps {
   type: 'html' | 'image';
@@ -14,6 +15,7 @@ export const SnapshotModal: React.FC<SnapshotModalProps> = ({
   title,
   onClose
 }) => {
+  useEscapeKey(onClose);
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
       <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">

@@ -302,7 +302,8 @@ export function getSeedDatabase(timestamp: string = '2026-09-21T08:19:39.381Z'):
       default_recheck: false,
       wordpress_url: process.env.WORDPRESS_URL || 'http://localhost:3000/api/mock-wordpress',
       wordpress_api_token: process.env.WORDPRESS_API_TOKEN || 'secure-test-token-xyz',
-      timezone: process.env.TZ || 'Asia/Tehran'
+      timezone: process.env.TZ || 'Asia/Tehran',
+      admin_password: process.env.ADMIN_PASSWORD || 'admin123'
     },
     runs: [],
     run_locks: [],

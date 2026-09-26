@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, MousePointerClick, Copy, Check, Code, Play } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface XPathPickerModalProps {
   url: string;
@@ -16,6 +17,7 @@ export const XPathPickerModal: React.FC<XPathPickerModalProps> = ({
   onSelectXPath,
   onClose
 }) => {
+  useEscapeKey(onClose);
   const [currentXPath, setCurrentXPath] = useState<string>('');
   const [selectedText, setSelectedText] = useState<string>('');
   const [copied, setCopied] = useState(false);

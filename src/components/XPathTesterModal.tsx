@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Play, CheckCircle2, AlertCircle, RefreshCw, Hash, Calendar } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface XPathTesterModalProps {
   initialUrl: string;
@@ -16,6 +17,7 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
   sourceId,
   onClose
 }) => {
+  useEscapeKey(onClose);
   const [url, setUrl] = useState(initialUrl);
   const [xpath, setXpath] = useState(initialXPath);
   const [testType, setTestType] = useState<'PRICE' | 'DATE'>(initialType);
