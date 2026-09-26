@@ -22,7 +22,8 @@ import {
   CheckCircle2,
   ExternalLink,
   MoveUp,
-  MoveDown
+  MoveDown,
+  AlertTriangle
 } from 'lucide-react';
 import {
   PriceTable,
@@ -51,6 +52,7 @@ interface PriceTableDetailViewProps {
   onRunTable: (tableId: number) => Promise<void>;
   onRunSource: (sourceId: number) => Promise<void>;
   onSaveTable?: (table: Partial<PriceTable>) => Promise<void>;
+  onDeleteTable?: (tableId: number) => Promise<void>;
   onSaveTableSource?: (data: Partial<TableSource> & { url?: string; new_url?: string }) => Promise<void>;
   onDeleteTableSource?: (id: number) => Promise<void>;
   onSaveSelector?: (tableSourceId: number, productId: number, data: { price_xpath?: string; update_time_xpath?: string; active?: boolean }) => Promise<void>;
@@ -76,6 +78,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   onRunTable,
   onRunSource,
   onSaveTable,
+  onDeleteTable,
   onSaveTableSource,
   onDeleteTableSource,
   onSaveSelector,
@@ -89,6 +92,8 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const [activeTab, setActiveTab] = useState<'sources' | 'settings'>('sources');
   const [isRunning, setIsRunning] = useState(false);
   const [runningSourceId, setRunningSourceId] = useState<number | null>(null);
+  const [isDeleteTableModalOpen, setIsDeleteTableModalOpen] = useState(false);
+  const [isDeletingTable, setIsDeletingTable] = useState(false);
 
   // General Table Settings state
   const [tableSettings, setTableSettings] = useState({
@@ -155,6 +160,13 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     active: true
   });
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+
+  // Modals for deleting a TableSource and reverting actions to site defaults
+  const [deletingSource, setDeletingSource] = useState<TableSource | null>(null);
+  const [isDeletingSource, setIsDeletingSource] = useState(false);
+  const [revertingSourceId, setRevertingSourceId] = useState<number | null>(null);
+  const [isRevertingSource, setIsRevertingSource] = useState(false);
+  const [addSourceError, setAddSourceError] = useState<string | null>(null);
 
   const tableSources = sources.filter((s) => s.price_table_id === table.id);
   const tableProducts = products.filter((p) => p.price_table_id === table.id);
@@ -290,20 +302,18 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     onOpenPicker(urlVal, source.id, onSelect, target);
   };
 
-  const handleDeleteSource = async (sourceId: number) => {
-    if (!onDeleteTableSource) return;
-    if (window.confirm('آیا از حذف این منبع و تمام سلکتورهای مرتبط با آن مطمئن هستید؟')) {
-      await onDeleteTableSource(sourceId);
-    }
+  const handleDeleteSource = (source: TableSource) => {
+    setDeletingSource(source);
   };
 
   const handleAddSourceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!onSaveTableSource) return;
     if (!newSourceForm.url.trim()) {
-      alert('لطفاً آدرس صفحه (URL) منبع را وارد نمایید.');
+      setAddSourceError('لطفاً آدرس صفحه (URL) منبع را وارد نمایید.');
       return;
     }
+    setAddSourceError(null);
 
     setIsSubmittingNewSource(true);
     try {
@@ -390,17 +400,8 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     }
   };
 
-  const handleRevertToSiteDefaults = async (sourceId: number) => {
-    if (window.confirm('آیا می‌خواهید دستورات اختصاصی این منبع حذف شوند و از دستورات پیش‌فرض سایت استفاده شود؟')) {
-      if (onClearTableSourceActions) {
-        await onClearTableSourceActions(sourceId);
-      } else if (onDeletePageAction) {
-        const overrides = getSourceOverrideActions(sourceId);
-        for (const act of overrides) {
-          await onDeletePageAction(act.id);
-        }
-      }
-    }
+  const handleRevertToSiteDefaults = (sourceId: number) => {
+    setRevertingSourceId(sourceId);
   };
 
   const handleMoveSourceAction = async (sourceId: number, index: number, direction: 'UP' | 'DOWN') => {
@@ -483,6 +484,18 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2">
+          {onDeleteTable && (
+            <button
+              type="button"
+              onClick={() => setIsDeleteTableModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition-colors shadow-xs"
+              title="حذف این جدول قیمت"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>حذف جدول</span>
+            </button>
+          )}
+
           <button
             id={`btn-run-full-table-${table.id}`}
             onClick={handleRunTable}
@@ -652,6 +665,30 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               </button>
             </div>
           </form>
+
+          {onDeleteTable && (
+            <div className="mt-8 pt-6 border-t border-rose-100">
+              <div className="p-4 bg-rose-50/60 rounded-lg border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    حذف این جدول قیمت
+                  </h4>
+                  <p className="text-[11px] text-rose-600 mt-0.5">
+                    با حذف جدول، کلیه منابع متصل، سلکتورها و تاریخچه نسخه‌های آن حذف خواهند شد.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteTableModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-md transition-colors shadow-xs shrink-0 self-start sm:self-auto"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>حذف جدول قیمت</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* Sources & Selectors Section */
@@ -779,7 +816,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                         {onDeleteTableSource && (
                           <button
                             type="button"
-                            onClick={() => handleDeleteSource(source.id)}
+                            onClick={() => handleDeleteSource(source)}
                             className="p-1.5 text-rose-500 hover:text-rose-700 border border-rose-200 rounded hover:bg-rose-50 transition-colors"
                             title="حذف این منبع"
                           >
@@ -1342,6 +1379,12 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               </button>
             </div>
 
+            {addSourceError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded">
+                {addSourceError}
+              </div>
+            )}
+
             <form onSubmit={handleAddSourceSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-gray-700 font-semibold mb-1">
@@ -1639,6 +1682,175 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Entire PriceTable Confirmation Modal */}
+      {isDeleteTableModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">تأیید حذف جدول قیمت</h3>
+                <p className="text-xs text-gray-500 mt-0.5">عملیات حذف جدول و منابع وابسته</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 space-y-1">
+              <p>
+                آیا از حذف کامل جدول قیمت <strong>«{table.name}»</strong> اطمینان دارید؟
+              </p>
+              <p className="text-[11px] text-rose-700 font-medium pt-1">
+                ⚠️ هشدار: با حذف این جدول، تمامی منابع استخراج، سلکتورهای محصولات و تاریخچه نسخه‌ها حذف خواهند شد!
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isDeletingTable}
+                onClick={() => setIsDeleteTableModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingTable}
+                onClick={async () => {
+                  if (!onDeleteTable) return;
+                  setIsDeletingTable(true);
+                  try {
+                    await onDeleteTable(table.id);
+                    setIsDeleteTableModalOpen(false);
+                    onBack();
+                  } finally {
+                    setIsDeletingTable(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingTable ? 'در حال حذف...' : 'حذف قطعی جدول'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Source Confirmation Modal */}
+      {deletingSource && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">تأیید حذف منبع قیمت</h3>
+                <p className="text-xs text-gray-500 mt-0.5">عملیات حذف وابسته (Cascade Delete)</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 space-y-1">
+              <p>
+                آیا از حذف منبع مربوط به سایت <strong>«{deletingSource.site_name || `سایت شماره ${deletingSource.site_id}`}»</strong> اطمینان دارید؟
+              </p>
+              <p className="text-[11px] text-rose-700 font-medium pt-1">
+                ⚠️ با حذف این منبع، تمام سلکتورهای استخراج و دستورات اختصاصی متصل به آن حذف خواهند شد.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isDeletingSource}
+                onClick={() => setDeletingSource(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingSource}
+                onClick={async () => {
+                  if (!onDeleteTableSource || !deletingSource) return;
+                  setIsDeletingSource(true);
+                  try {
+                    await onDeleteTableSource(deletingSource.id);
+                    setDeletingSource(null);
+                  } finally {
+                    setIsDeletingSource(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingSource ? 'در حال حذف...' : 'حذف قطعی منبع'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revert Actions to Site Defaults Modal */}
+      {revertingSourceId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <div className="p-2.5 bg-amber-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">بازنشانی دستورات به پیش‌فرض سایت</h3>
+                <p className="text-xs text-gray-500 mt-0.5">حذف دستورات سفارشی منبع</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700">
+              <p>
+                آیا می‌خواهید دستورات اختصاصی این منبع حذف شوند و فرایند استخراج از دستورات پیش‌فرض سایت استفاده کند؟
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isRevertingSource}
+                onClick={() => setRevertingSourceId(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isRevertingSource}
+                onClick={async () => {
+                  if (!revertingSourceId) return;
+                  setIsRevertingSource(true);
+                  try {
+                    if (onClearTableSourceActions) {
+                      await onClearTableSourceActions(revertingSourceId);
+                    } else if (onDeletePageAction) {
+                      const overrides = getSourceOverrideActions(revertingSourceId);
+                      for (const act of overrides) {
+                        await onDeletePageAction(act.id);
+                      }
+                    }
+                    setRevertingSourceId(null);
+                  } finally {
+                    setIsRevertingSource(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>{isRevertingSource ? 'در حال بازنشانی...' : 'تأیید بازنشانی'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

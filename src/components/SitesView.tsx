@@ -14,7 +14,8 @@ import {
   MousePointer,
   Scroll,
   Eye,
-  Info
+  Info,
+  AlertTriangle
 } from 'lucide-react';
 import { Site, PageAction, PageActionType } from '../types';
 
@@ -22,6 +23,7 @@ interface SitesViewProps {
   sites: Site[];
   pageActions: PageAction[];
   onSaveSite: (site: Partial<Site>) => Promise<void>;
+  onDeleteSite?: (id: number) => Promise<void>;
   onSavePageAction: (action: Partial<PageAction>) => Promise<void>;
   onDeletePageAction: (id: number) => Promise<void>;
 }
@@ -30,12 +32,17 @@ export const SitesView: React.FC<SitesViewProps> = ({
   sites,
   pageActions,
   onSaveSite,
+  onDeleteSite,
   onSavePageAction,
   onDeletePageAction
 }) => {
   const [selectedSiteId, setSelectedSiteId] = useState<number>(sites[0]?.id || 1);
   const [isSiteModalOpen, setIsSiteModalOpen] = useState(false);
   const [editingSite, setEditingSite] = useState<Partial<Site> | null>(null);
+
+  // Delete site modal state
+  const [deletingSite, setDeletingSite] = useState<Site | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Default Page Action Modal / Form state
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
@@ -230,16 +237,27 @@ export const SitesView: React.FC<SitesViewProps> = ({
                   {currentSite.base_url}
                 </a>
               </div>
-              <button
-                onClick={() => {
-                  setEditingSite({ ...currentSite });
-                  setIsSiteModalOpen(true);
-                }}
-                className="p-1.5 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100"
-                title="ویرایش اطلاعات سایت"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    setEditingSite({ ...currentSite });
+                    setIsSiteModalOpen(true);
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors"
+                  title="ویرایش اطلاعات سایت"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                {onDeleteSite && (
+                  <button
+                    onClick={() => setDeletingSite(currentSite)}
+                    className="p-1.5 text-gray-400 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors"
+                    title="حذف سایت رقیب"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-500" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="text-xs space-y-2.5 text-gray-600">
@@ -643,6 +661,64 @@ export const SitesView: React.FC<SitesViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Site Confirmation Modal */}
+      {deletingSite && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">تأیید حذف سایت رقیب</h3>
+                <p className="text-xs text-gray-500 mt-0.5">عملیات حذف وابسته (Cascade Delete)</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 space-y-1">
+              <p>
+                آیا از حذف سایت <strong>«{deletingSite.name}»</strong> ({deletingSite.base_url}) اطمینان دارید؟
+              </p>
+              <p className="text-[11px] text-rose-700 font-medium pt-1">
+                ⚠️ هشدار: با حذف سایت، تمام منابع جدول و دستورات استخراج مرتبط با این سایت نیز حذف خواهند شد!
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingSite(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  if (!onDeleteSite || !deletingSite) return;
+                  setIsDeleting(true);
+                  try {
+                    const remaining = sites.filter((s) => s.id !== deletingSite.id);
+                    await onDeleteSite(deletingSite.id);
+                    if (remaining.length > 0) {
+                      setSelectedSiteId(remaining[0].id);
+                    }
+                    setDeletingSite(null);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'در حال حذف...' : 'حذف قطعی سایت'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

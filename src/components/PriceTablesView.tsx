@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Play, Eye, Edit2, Upload, Download, FileSpreadsheet, Clock, ArrowLeft } from 'lucide-react';
+import { Plus, Play, Eye, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Clock, ArrowLeft } from 'lucide-react';
 import { PriceTable, Factory } from '../types';
 
 interface PriceTablesViewProps {
@@ -8,6 +8,7 @@ interface PriceTablesViewProps {
   onSelectTable: (table: PriceTable) => void;
   onRunTable: (tableId: number) => Promise<void>;
   onSaveTable: (table: Partial<PriceTable>) => Promise<void>;
+  onDeleteTable?: (tableId: number) => Promise<void>;
   onOpenImport: (entity: string) => void;
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
@@ -19,6 +20,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   onSelectTable,
   onRunTable,
   onSaveTable,
+  onDeleteTable,
   onOpenImport,
   onExport,
   onDownloadTemplate
@@ -34,6 +36,10 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
     active: true
   });
   const [runningId, setRunningId] = useState<number | null>(null);
+
+  // Delete modal state
+  const [deletingTable, setDeletingTable] = useState<PriceTable | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleOpenAdd = () => {
     setNewTable({
@@ -175,6 +181,20 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                         <Edit2 className="w-3.5 h-3.5 text-slate-700" />
                         <span>ویرایش و منابع</span>
                       </button>
+
+                      {onDeleteTable && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingTable(tbl);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition-colors"
+                          title="حذف جدول قیمت"
+                        >
+                          <Trash2 className="w-3 h-3 text-rose-500" />
+                          <span>حذف</span>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -305,6 +325,61 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingTable && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">تأیید حذف جدول قیمت</h3>
+                <p className="text-xs text-gray-500 mt-0.5">عملیات حذف جدول و منابع وابسته</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 space-y-1">
+              <p>
+                آیا از حذف جدول قیمت <strong>«{deletingTable.name}»</strong> (شناسه: {deletingTable.id}) اطمینان دارید؟
+              </p>
+              <p className="text-[11px] text-rose-700 font-medium pt-1">
+                ⚠️ هشدار: با حذف این جدول، تمام منابع استخراج متصل، سلکتورها و تاریخچه نسخه‌های این جدول حذف خواهند شد!
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingTable(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  if (!onDeleteTable || !deletingTable) return;
+                  setIsDeleting(true);
+                  try {
+                    await onDeleteTable(deletingTable.id);
+                    setDeletingTable(null);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'در حال حذف...' : 'حذف قطعی جدول قیمت'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

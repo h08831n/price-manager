@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Upload, Download, FileSpreadsheet, Factory as FactoryIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Factory as FactoryIcon } from 'lucide-react';
 import { Factory } from '../types';
 
 interface FactoriesViewProps {
   factories: Factory[];
   onSaveFactory: (factory: Partial<Factory>) => Promise<void>;
+  onDeleteFactory?: (id: number) => Promise<void>;
   onOpenImport: (entity: string) => void;
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
@@ -13,12 +14,17 @@ interface FactoriesViewProps {
 export const FactoriesView: React.FC<FactoriesViewProps> = ({
   factories,
   onSaveFactory,
+  onDeleteFactory,
   onOpenImport,
   onExport,
   onDownloadTemplate
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFactory, setEditingFactory] = useState<Partial<Factory> | null>(null);
+
+  // Delete modal state
+  const [deletingFactory, setDeletingFactory] = useState<Factory | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleOpenAdd = () => {
     setEditingFactory({ name: '', active: true });
@@ -110,13 +116,24 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center">
-                  <button
-                    onClick={() => handleOpenEdit(f)}
-                    className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                    title="ویرایش نام کارخانه"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      onClick={() => handleOpenEdit(f)}
+                      className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                      title="ویرایش نام کارخانه"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    {onDeleteFactory && (
+                      <button
+                        onClick={() => setDeletingFactory(f)}
+                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                        title="حذف کارخانه"
+                      >
+                        <Trash2 className="w-4 h-4 text-rose-500" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -175,6 +192,61 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Factory Confirmation Modal */}
+      {deletingFactory && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">تأیید حذف کارخانه</h3>
+                <p className="text-xs text-gray-500 mt-0.5">عملیات حذف وابسته (Cascade Delete)</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 space-y-1">
+              <p>
+                آیا از حذف کارخانه <strong>«{deletingFactory.name}»</strong> (شناسه: {deletingFactory.id}) اطمینان دارید؟
+              </p>
+              <p className="text-[11px] text-rose-700 font-medium pt-1">
+                ⚠️ هشدار: با حذف کارخانه، تمام جداول قیمت و محصولات مرتبط با آن نیز به صورت خودکار از سیستم حذف خواهند شد!
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingFactory(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  if (!onDeleteFactory || !deletingFactory) return;
+                  setIsDeleting(true);
+                  try {
+                    await onDeleteFactory(deletingFactory.id);
+                    setDeletingFactory(null);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'در حال حذف...' : 'حذف قطعی کارخانه'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -201,6 +201,22 @@ apiRouter.put('/products/:id', (req: Request, res: Response) => {
   res.json(prod);
 });
 
+apiRouter.delete('/products/:id', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const id = parseInt(req.params.id, 10);
+  const prod = schema.products.find((p) => p.id === id);
+  if (!prod) return res.status(404).json({ error: 'محصول یافت نشد.' });
+
+  schema.products = schema.products.filter((p) => p.id !== id);
+  schema.product_selectors = schema.product_selectors.filter((s) => s.product_id !== id);
+  schema.price_records = schema.price_records.filter((cp) => cp.product_id !== id);
+  schema.price_changes = schema.price_changes.filter((pc) => pc.product_id !== id);
+
+  db.logConfigChange('product', id, 'delete', prod.name, null);
+  db.save();
+  res.json({ success: true, message: 'محصول با موفقیت حذف گردید.' });
+});
+
 // ==========================================
 // 3. FACTORIES API (Requirement #49)
 // ==========================================
@@ -245,6 +261,44 @@ apiRouter.put('/factories/:id', (req: Request, res: Response) => {
   db.logConfigChange('factory', fac.id, 'update', null, fac.name);
   db.save();
   res.json(fac);
+});
+
+apiRouter.delete('/factories/:id', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const id = parseInt(req.params.id, 10);
+  const fac = schema.factories.find((f) => f.id === id);
+  if (!fac) return res.status(404).json({ error: 'کارخانه یافت نشد.' });
+
+  const linkedTables = schema.price_tables.filter((t) => t.factory_id === id);
+  const linkedTableIds = new Set(linkedTables.map((t) => t.id));
+  const linkedSources = schema.table_sources.filter((s) => linkedTableIds.has(s.price_table_id));
+  const linkedSourceIds = new Set(linkedSources.map((s) => s.id));
+
+  schema.factories = schema.factories.filter((f) => f.id !== id);
+
+  const linkedProducts = schema.products.filter(
+    (p) => p.factory_id === id || linkedTableIds.has(p.price_table_id)
+  );
+  const linkedProductIds = new Set(linkedProducts.map((p) => p.id));
+  schema.products = schema.products.filter((p) => !linkedProductIds.has(p.id));
+
+  schema.product_selectors = schema.product_selectors.filter(
+    (s) => !linkedSourceIds.has(s.table_source_id) && !linkedProductIds.has(s.product_id)
+  );
+
+  schema.page_actions = schema.page_actions.filter(
+    (a) => !a.table_source_id || !linkedSourceIds.has(a.table_source_id)
+  );
+
+  schema.table_sources = schema.table_sources.filter((s) => !linkedTableIds.has(s.price_table_id));
+  schema.price_tables = schema.price_tables.filter((t) => t.factory_id !== id);
+
+  schema.daily_table_runs = schema.daily_table_runs.filter((r) => !linkedTableIds.has(r.price_table_id));
+  schema.daily_source_runs = schema.daily_source_runs.filter((r) => !linkedSourceIds.has(r.table_source_id));
+
+  db.logConfigChange('factory', id, 'delete', fac.name, null);
+  db.save();
+  res.json({ success: true, message: 'کارخانه با موفقیت حذف گردید.' });
 });
 
 // ==========================================
@@ -318,6 +372,40 @@ apiRouter.put('/price-tables/:id', (req: Request, res: Response) => {
   res.json(table);
 });
 
+apiRouter.delete('/price-tables/:id', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const id = parseInt(req.params.id, 10);
+  const table = schema.price_tables.find((t) => t.id === id);
+  if (!table) return res.status(404).json({ error: 'جدول قیمت یافت نشد.' });
+
+  const linkedSources = schema.table_sources.filter((s) => s.price_table_id === id);
+  const linkedSourceIds = new Set(linkedSources.map((s) => s.id));
+  const linkedProducts = schema.products.filter((p) => p.price_table_id === id);
+  const linkedProductIds = new Set(linkedProducts.map((p) => p.id));
+
+  schema.price_tables = schema.price_tables.filter((t) => t.id !== id);
+  schema.products = schema.products.filter((p) => p.price_table_id !== id);
+  schema.price_records = schema.price_records.filter((cp) => !linkedProductIds.has(cp.product_id));
+  schema.price_changes = schema.price_changes.filter((pc) => !linkedProductIds.has(pc.product_id));
+  schema.table_sources = schema.table_sources.filter((s) => s.price_table_id !== id);
+
+  schema.product_selectors = schema.product_selectors.filter(
+    (s) => !linkedSourceIds.has(s.table_source_id) && !linkedProductIds.has(s.product_id)
+  );
+
+  schema.page_actions = schema.page_actions.filter(
+    (a) => !a.table_source_id || !linkedSourceIds.has(a.table_source_id)
+  );
+
+  schema.daily_table_runs = schema.daily_table_runs.filter((r) => r.price_table_id !== id);
+  schema.daily_source_runs = schema.daily_source_runs.filter((r) => !linkedSourceIds.has(r.table_source_id));
+  schema.table_revisions = schema.table_revisions.filter((r) => r.price_table_id !== id);
+
+  db.logConfigChange('price_table', id, 'delete', table.name, null);
+  db.save();
+  res.json({ success: true, message: 'جدول قیمت با موفقیت حذف گردید.' });
+});
+
 // Manual Run of Entire Table (Requirement #30, #50)
 apiRouter.post('/price-tables/:id/run', async (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
@@ -383,6 +471,31 @@ apiRouter.put('/sites/:id', (req: Request, res: Response) => {
   db.logConfigChange('site', site.id, 'update', null, site.name);
   db.save();
   res.json(site);
+});
+
+apiRouter.delete('/sites/:id', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const id = parseInt(req.params.id, 10);
+  const site = schema.sites.find((s) => s.id === id);
+  if (!site) return res.status(404).json({ error: 'سایت یافت نشد.' });
+
+  const linkedSources = schema.table_sources.filter((s) => s.site_id === id);
+  const linkedSourceIds = new Set(linkedSources.map((s) => s.id));
+
+  schema.sites = schema.sites.filter((s) => s.id !== id);
+  schema.table_sources = schema.table_sources.filter((s) => s.site_id !== id);
+  schema.source_pages = schema.source_pages.filter((sp) => sp.site_id !== id);
+
+  schema.page_actions = schema.page_actions.filter(
+    (a) => a.site_id !== id && (!a.table_source_id || !linkedSourceIds.has(a.table_source_id))
+  );
+
+  schema.product_selectors = schema.product_selectors.filter((s) => !linkedSourceIds.has(s.table_source_id));
+  schema.daily_source_runs = schema.daily_source_runs.filter((r) => !linkedSourceIds.has(r.table_source_id));
+
+  db.logConfigChange('site', id, 'delete', site.name, null);
+  db.save();
+  res.json({ success: true, message: 'سایت رقیب با موفقیت حذف گردید.' });
 });
 
 apiRouter.get('/source-pages', (req: Request, res: Response) => {

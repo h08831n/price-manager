@@ -7,6 +7,8 @@ import {
   Upload,
   Eye,
   Edit2,
+  Trash2,
+  AlertTriangle,
   CheckCircle2,
   XCircle,
   Filter
@@ -21,6 +23,7 @@ interface ProductsViewProps {
   selectors: ProductSelector[];
   priceChanges: PriceChange[];
   onSaveProduct: (product: Partial<Product>) => Promise<void>;
+  onDeleteProduct?: (id: number) => Promise<void>;
   onOpenImport: (entity: string) => void;
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
@@ -33,6 +36,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   selectors,
   priceChanges,
   onSaveProduct,
+  onDeleteProduct,
   onOpenImport,
   onExport,
   onDownloadTemplate
@@ -45,6 +49,10 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   // Edit/Add modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
+
+  // Delete modal state
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filter products
   const filteredProducts = products.filter((p) => {
@@ -245,6 +253,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
+                        {onDeleteProduct && (
+                          <button
+                            onClick={() => setDeletingProduct(p)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                            title="حذف محصول"
+                          >
+                            <Trash2 className="w-4 h-4 text-rose-500" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -390,6 +407,62 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingProduct && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">تأیید حذف محصول</h3>
+                <p className="text-xs text-gray-500 mt-0.5">این عملیات غیرقابل بازگشت است.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700 space-y-1">
+              <p>
+                آیا از حذف محصول <strong>«{deletingProduct.name}»</strong> (شناسه post_id:{' '}
+                <span className="font-mono font-bold text-slate-800">{deletingProduct.post_id}</span>) اطمینان دارید؟
+              </p>
+              <p className="text-[11px] text-gray-500 pt-1">
+                توجه: با حذف این محصول، تمام سلکتورهای استخراج و تاریخچه تغییرات قیمت مرتبط با آن حذف خواهند شد.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingProduct(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  if (!onDeleteProduct || !deletingProduct) return;
+                  setIsDeleting(true);
+                  try {
+                    await onDeleteProduct(deletingProduct.id);
+                    setDeletingProduct(null);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'در حال حذف...' : 'حذف قطعی محصول'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -432,6 +432,57 @@ export default function App() {
     }
   };
 
+  const handleDeleteProduct = async (id: number) => {
+    try {
+      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || 'خطا در حذف محصول');
+      showToast('محصول با موفقیت حذف گردید');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleDeleteFactory = async (id: number) => {
+    try {
+      const res = await fetch(`/api/factories/${id}`, { method: 'DELETE' });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || 'خطا در حذف کارخانه');
+      showToast('کارخانه با موفقیت حذف گردید');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleDeletePriceTable = async (id: number) => {
+    try {
+      const res = await fetch(`/api/price-tables/${id}`, { method: 'DELETE' });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || 'خطا در حذف جدول');
+      showToast('جدول قیمت با موفقیت حذف گردید');
+      if (selectedTable?.id === id) {
+        setSelectedTable(null);
+      }
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleDeleteSite = async (id: number) => {
+    try {
+      const res = await fetch(`/api/sites/${id}`, { method: 'DELETE' });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || 'خطا در حذف سایت');
+      showToast('سایت با موفقیت حذف گردید');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
   const handleResolveError = async (id: number) => {
     try {
       const res = await fetch(`/api/errors/${id}/resolve`, { method: 'POST' });
@@ -568,6 +619,7 @@ export default function App() {
             onRunTable={handleRunTable}
             onRunSource={handleRunSource}
             onSaveTable={handleSavePriceTable}
+            onDeleteTable={handleDeletePriceTable}
             onSaveTableSource={handleSaveTableSource}
             onDeleteTableSource={handleDeleteTableSource}
             onSaveSelector={handleSaveSelector}
@@ -601,6 +653,7 @@ export default function App() {
                 selectors={selectors}
                 priceChanges={priceChanges}
                 onSaveProduct={handleSaveProduct}
+                onDeleteProduct={handleDeleteProduct}
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
@@ -611,6 +664,7 @@ export default function App() {
               <FactoriesView
                 factories={factories}
                 onSaveFactory={handleSaveFactory}
+                onDeleteFactory={handleDeleteFactory}
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
@@ -624,6 +678,7 @@ export default function App() {
                 onSelectTable={(table) => setSelectedTable(table)}
                 onRunTable={handleRunTable}
                 onSaveTable={handleSavePriceTable}
+                onDeleteTable={handleDeletePriceTable}
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
@@ -635,6 +690,7 @@ export default function App() {
                 sites={sites}
                 pageActions={pageActions}
                 onSaveSite={handleSaveSite}
+                onDeleteSite={handleDeleteSite}
                 onSavePageAction={handleSavePageAction}
                 onDeletePageAction={handleDeletePageAction}
               />
