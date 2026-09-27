@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, MousePointerClick, Copy, Check, Code, Play } from 'lucide-react';
+import { X, MousePointerClick, Copy, Check, Code, Play, RefreshCw, Zap } from 'lucide-react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface XPathPickerModalProps {
@@ -21,6 +21,8 @@ export const XPathPickerModal: React.FC<XPathPickerModalProps> = ({
   const [currentXPath, setCurrentXPath] = useState<string>('');
   const [selectedText, setSelectedText] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [refreshKey, setRefreshKey] = useState<number>(0);
+  const [isBypassingCache, setIsBypassingCache] = useState<boolean>(false);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {

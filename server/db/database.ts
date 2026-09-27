@@ -53,6 +53,7 @@ export interface DailySourceRun {
   last_check_at?: string;
   last_price_fetch_at?: string;
   recheck_count: number;
+  last_error?: string;
 }
 
 export interface DatabaseSchema {

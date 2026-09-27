@@ -288,11 +288,31 @@ export default function App() {
 
   const handleRunSource = async (sourceId: number) => {
     try {
-      showToast('اجرای منبع آغاز شد...', 'info');
-      const res = await fetch(`/api/table-sources/${sourceId}/run`, { method: 'POST' });
+      showToast('در حال اجرای تست استخراج این منبع...', 'info');
+      const res = await fetch(`/api/table-sources/${sourceId}/run`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.error || 'خطا در اجرای منبع');
-      showToast('اجرای منبع با موفقیت انجام شد');
+      if (!res.ok) throw new Error(data.error || 'خطا در برقراری ارتباط با سرور');
+
+      if (!data.success || data.source_status === 'FAILED') {
+        const errMsg = data.last_error || data.error || 'المان‌های قیمت یا تاریخ استخراج نشدند';
+        showToast(`خطا در استخراج منبع: ${errMsg}`, 'error');
+      } else if (data.source_status === 'NOT_UPDATED' || !data.fresh) {
+        showToast(
+          `صفحه بررسی شد اما تاریخ بروزرسانی امروز نیست (${data.last_update_text || 'تاریخ قدیمی'})`,
+          'info'
+        );
+      } else {
+        const count = data.products_extracted ?? 0;
+        showToast(
+          count > 0
+            ? `استخراج منبع با موفقیت انجام شد (${count} محصول بروزرسانی شد)`
+            : 'استخراج منبع با موفقیت انجام شد',
+          'success'
+        );
+      }
       loadAllData();
     } catch (err: any) {
       showToast(err.message, 'error');

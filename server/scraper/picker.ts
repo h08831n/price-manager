@@ -88,7 +88,18 @@ export function generateRobustXPath(element: any): string {
 }
 
 // Inject interactive picker client script into HTML for live visual element selection
-export function injectPickerScript(html: string): string {
+export function injectPickerScript(
+  html: string,
+  cacheInfo?: { isCached: boolean; remainingMinutes?: number; ageSeconds?: number }
+): string {
+  const isCached = cacheInfo?.isCached || false;
+  const remainingMin = cacheInfo?.remainingMinutes ?? 60;
+  const bannerText = isCached
+    ? `⚡ این صفحه از حافظه موقت (کش ۱ ساعته • مانده: ${remainingMin} دقیقه) باز شده است. روی المان کلیک کنید.`
+    : `🎯 حالت انتخاب تعاملی XPath فعال است. روی المان مورد نظر کلیک نمایید (صفحه برای ۱ ساعت ذخیره شد).`;
+  const bannerBg = isCached ? '#0f172a' : '#1e293b';
+  const bannerBorder = isCached ? '1px solid #38bdf8' : 'none';
+
   const pickerScript = `
 <script>
 (function() {
@@ -108,16 +119,18 @@ export function injectPickerScript(html: string): string {
   banner.style.top = '10px';
   banner.style.left = '50%';
   banner.style.transform = 'translateX(-50%)';
-  banner.style.background = '#1e293b';
+  banner.style.background = '${bannerBg}';
+  banner.style.border = '${bannerBorder}';
   banner.style.color = '#fff';
   banner.style.padding = '8px 16px';
   banner.style.borderRadius = '8px';
   banner.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
   banner.style.zIndex = '1000000';
-  banner.style.fontSize = '13px';
+  banner.style.fontSize = '12px';
+  banner.style.fontWeight = '500';
   banner.style.fontFamily = 'system-ui, sans-serif';
   banner.style.direction = 'rtl';
-  banner.innerHTML = '🎯 حالت انتخاب XPath فعال است. روی المان مورد نظر کلیک نمایید.';
+  banner.innerHTML = '${bannerText}';
   document.body.appendChild(banner);
 
   function getXPath(el) {

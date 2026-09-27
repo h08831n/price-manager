@@ -784,7 +784,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                             source.today_status === 'DONE' || source.today_status === 'UPDATED'
                               ? 'bg-emerald-100 text-emerald-800'
                               : source.today_status === 'FAILED'
-                              ? 'bg-rose-100 text-rose-800'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
                               : 'bg-gray-100 text-gray-700'
                           }`}
                         >
@@ -794,6 +794,15 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                             ? 'خطا در استخراج'
                             : 'در انتظار'}
                         </span>
+
+                        {source.today_status === 'FAILED' && source.last_error && (
+                          <span
+                            className="text-[11px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 font-medium max-w-sm truncate"
+                            title={source.last_error}
+                          >
+                            علت خطا: {source.last_error}
+                          </span>
+                        )}
 
                         {source.last_update_text && (
                           <span className="text-xs text-gray-500 mr-2">
@@ -946,6 +955,11 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                 </button>
                               )}
                             </div>
+                            {source.today_status === 'FAILED' && source.last_error?.includes('المان تاریخ') && (
+                              <p className="text-[11px] text-rose-600 mt-1.5 leading-relaxed bg-rose-50/70 p-1.5 rounded border border-rose-200/70">
+                                ⚠️ المان تاریخ با این XPath در صفحه پیدا نشد. می‌توانید با دکمه انتخابگر (موس) آن را دوباره انتخاب کنید یا در صورت عدم نیاز به اعتبارسنجی تاریخ، این فیلد را پاک کرده و ذخیره نمایید.
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -307,11 +307,28 @@ export async function loadSourcePage(
         }
         const loaded = new PlaywrightLoadedPage(url, currentHtml, page, context);
         (err as any).loadedPage = loaded;
+        throw err;
       } else {
         // Clean up in case of error during page setup
         if (page) await page.close().catch(() => {});
         if (context) await context.close().catch(() => {});
       }
+
+      // If browser failed to launch or executable missing, gracefully fallback to FETCH
+      const errMsg = err?.message || '';
+      const isBrowserLaunchFailure =
+        errMsg.includes('browserType.launch') ||
+        errMsg.includes('Executable doesn\'t exist') ||
+        errMsg.includes('Failed to launch Playwright') ||
+        errMsg.includes('closed') ||
+        errMsg.includes('spawn');
+
+      if (isBrowserLaunchFailure) {
+        console.warn(`[PageLoader] مرورگر Playwright در دسترس نیست (${errMsg.split('\n')[0]}). جابجایی خودکار به روش FETCH برای ${url}`);
+        const html = preloadedHtml || (await fetchHtmlForUrl(url, timeoutMs));
+        return new FetchLoadedPage(url, html);
+      }
+
       throw err;
     }
   } else {

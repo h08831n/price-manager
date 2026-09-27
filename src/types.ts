@@ -130,6 +130,7 @@ export interface TableSource {
   attempt_count?: number;
   last_check_at?: string;
   last_update_text?: string;
+  last_error?: string;
 }
 
 export interface ProductSelector {

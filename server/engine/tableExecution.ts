@@ -150,6 +150,10 @@ export async function executePriceTable(
 
       if (!res.success && (res.errors.length > 0 || res.structuredErrors?.length > 0)) {
         dailySource.status = 'FAILED';
+        dailySource.last_error =
+          res.structuredErrors?.[0]?.message ||
+          res.errors[0] ||
+          'خطا در استخراج مقادیر یا المان‌های صفحه';
         // Create error in error center with rich structured details
         if (res.structuredErrors && res.structuredErrors.length > 0) {
           for (const sErr of res.structuredErrors) {
@@ -199,8 +203,10 @@ export async function executePriceTable(
         }
       } else if (!res.fresh) {
         dailySource.status = 'NOT_UPDATED';
+        dailySource.last_error = undefined;
       } else {
         dailySource.status = 'UPDATED';
+        dailySource.last_error = undefined;
         dailySource.last_price_fetch_at = new Date().toISOString();
       }
 
@@ -439,7 +445,17 @@ export async function executePriceTable(
       );
     }
 
-    runRecord.status = 'DONE';
+    if (options.specificSourceId && scrapeResults.length > 0) {
+      const singleRes = scrapeResults[0].res;
+      if (!singleRes.success && (singleRes.errors.length > 0 || singleRes.structuredErrors?.length > 0)) {
+        runRecord.status = 'FAILED';
+        runRecord.error_count = singleRes.errors.length || 1;
+      } else {
+        runRecord.status = 'DONE';
+      }
+    } else {
+      runRecord.status = 'DONE';
+    }
     runRecord.finished_at = new Date().toISOString();
     runRecord.duration_ms = Date.now() - startTime;
   } catch (err: any) {

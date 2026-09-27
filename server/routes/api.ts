@@ -10,6 +10,11 @@ import { fetchHtmlForUrl } from '../scraper/engine';
 import { evaluateFreshness } from '../scraper/freshness';
 import { parseProductPrice } from '../scraper/priceParser';
 import { injectPickerScript } from '../scraper/picker';
+import {
+  getCachedPickerPage,
+  saveCachedPickerPage,
+  invalidatePickerCache
+} from '../scraper/pickerCache';
 import { excelService } from '../excel/excelService';
 import { publishTableToWordPress } from '../wordpress/client';
 import { FIXTURE_PAGES } from '../fixtures/fixtures';
@@ -626,9 +631,10 @@ apiRouter.get('/table-sources', (req: Request, res: Response) => {
     const pt = schema.price_tables.find((t) => t.id === ts.price_table_id);
     const site = schema.sites.find((s) => s.id === ts.site_id);
     const sp = schema.source_pages.find((p) => p.id === ts.source_page_id);
-    const daily = schema.daily_source_runs.find(
-      (d) => d.table_source_id === ts.id && d.run_date === todayStr
-    );
+    const daily = schema.daily_source_runs
+      .slice()
+      .reverse()
+      .find((d) => d.table_source_id === ts.id && d.run_date === todayStr);
     const actionsInfo = getTableSourcePageActionsInfo(ts.id);
 
     return {
@@ -645,7 +651,8 @@ apiRouter.get('/table-sources', (req: Request, res: Response) => {
       fresh: daily?.fresh || false,
       attempt_count: daily?.attempt_count || 0,
       last_check_at: daily?.last_check_at,
-      last_update_text: daily?.raw_update_text
+      last_update_text: daily?.raw_update_text,
+      last_error: daily?.status === 'FAILED' ? (daily?.last_error || 'خطا در استخراج') : undefined
     };
   });
 
@@ -944,7 +951,33 @@ apiRouter.post('/table-sources/:id/run', async (req: Request, res: Response) => 
       triggerType: 'MANUAL_SOURCE',
       specificSourceId: id
     });
-    res.json({ success: true, run });
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dailySource = schema.daily_source_runs
+      .slice()
+      .reverse()
+      .find((ds) => ds.table_source_id === id && ds.run_date === todayStr);
+
+    const isSuccess = dailySource?.status === 'UPDATED' || dailySource?.status === 'DONE';
+    const isNotUpdated = dailySource?.status === 'NOT_UPDATED';
+    const isFailed = dailySource?.status === 'FAILED' || (!isSuccess && !isNotUpdated);
+    const errorMsg = isFailed
+      ? (dailySource?.last_error || 'خطا در استخراج مقادیر یا المان‌های این منبع')
+      : undefined;
+
+    const extractedProducts = schema.price_records.filter(
+      (r) => r.table_source_id === id && r.run_id === run.id && r.status === 'VALID'
+    ).length;
+
+    res.json({
+      success: isSuccess,
+      source_status: dailySource?.status || (isSuccess ? 'UPDATED' : 'FAILED'),
+      fresh: dailySource?.fresh || false,
+      products_extracted: extractedProducts,
+      last_error: errorMsg,
+      last_update_text: dailySource?.raw_update_text,
+      run
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1471,8 +1504,26 @@ apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
   const targetUrl = String(req.query.url || '');
   const siteId = req.query.site_id ? parseInt(String(req.query.site_id), 10) : null;
   const tableSourceId = req.query.table_source_id ? parseInt(String(req.query.table_source_id), 10) : null;
+  const forceRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
   if (!targetUrl) return res.status(400).send('URL is required');
 
+  // 1. Check 1-hour persistent cache on system first unless explicitly requested to bypass
+  if (!forceRefresh) {
+    const cached = getCachedPickerPage(targetUrl, tableSourceId);
+    if (cached) {
+      const injected = injectPickerScript(cached.html, {
+        isCached: true,
+        remainingMinutes: cached.remainingMinutes,
+        ageSeconds: cached.ageSeconds
+      });
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Picker-Cache', 'HIT');
+      res.setHeader('X-Picker-Cache-Remaining-Min', String(cached.remainingMinutes));
+      return res.send(injected);
+    }
+  }
+
+  // 2. Not cached, expired, or refresh requested: load live page and save to 1-hour cache
   const schema = db.getSchema();
   let site: Site | undefined = undefined;
   let actions: PageAction[] = [];
@@ -1514,8 +1565,17 @@ apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
   try {
     loadedPage = await loadSourcePage(targetUrl, effectiveSite, actions, 30000);
     const rawHtml = loadedPage.content;
-    const injected = injectPickerScript(rawHtml);
+
+    // Cache page on system for 1 hour (3600000 ms) so repeated picker interactions never re-request the external site
+    saveCachedPickerPage(targetUrl, rawHtml, tableSourceId, 3600 * 1000);
+
+    const injected = injectPickerScript(rawHtml, {
+      isCached: false,
+      remainingMinutes: 60,
+      ageSeconds: 0
+    });
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('X-Picker-Cache', 'MISS');
     res.send(injected);
   } catch (err: any) {
     res.status(500).send(`Error loading page: ${err.message}`);
@@ -1524,6 +1584,13 @@ apiRouter.get('/picker/inspect', async (req: Request, res: Response) => {
       await loadedPage.close().catch(() => {});
     }
   }
+});
+
+apiRouter.post('/picker/cache/clear', (req: Request, res: Response) => {
+  const targetUrl = req.body?.url ? String(req.body.url) : undefined;
+  const tableSourceId = req.body?.table_source_id ? parseInt(String(req.body.table_source_id), 10) : undefined;
+  invalidatePickerCache(targetUrl, tableSourceId);
+  res.json({ success: true, message: 'حافظه موقت صفحه با موفقیت پاک شد.' });
 });
 
 // ==========================================
