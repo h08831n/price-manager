@@ -53,9 +53,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       <div className="absolute bottom-1/4 -left-20 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-8 space-y-6 relative z-10 animate-in fade-in zoom-in-95 duration-200">
-        {/* Icon Only */}
-        <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center mx-auto shadow-md shadow-slate-900/20">
-          <Lock className="w-7 h-7 text-blue-400" />
+        {/* Icon Only with fresh blue-indigo gradient */}
+        <div className="w-16 h-16 bg-gradient-to-tr from-blue-600 to-indigo-500 text-white rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/25 ring-4 ring-blue-500/10">
+          <Lock className="w-8 h-8 text-white drop-shadow-sm" />
         </div>
 
         {/* Error Notification if any */}
@@ -79,7 +79,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 if (error) setError(null);
               }}
               placeholder="رمز عبور..."
-              className="w-full pl-10 pr-3.5 py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all text-center tracking-widest font-mono"
+              className="w-full pl-10 pr-3.5 py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition-all text-center tracking-widest font-mono"
             />
             <button
               type="button"
@@ -95,7 +95,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] disabled:opacity-60 text-white text-sm font-semibold rounded-xl shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             {isLoading ? (
               <>
