@@ -14,17 +14,19 @@ export async function getPlaywrightBrowser(): Promise<Browser> {
   }
 
   launchPromise = (async () => {
+    const launchArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions'
+    ];
+    const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+
     try {
-      const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
       const browser = await chromium.launch({
         headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-extensions'
-        ],
+        args: launchArgs,
         executablePath
       });
 
@@ -37,6 +39,38 @@ export async function getPlaywrightBrowser(): Promise<Browser> {
       browserInstance = browser;
       return browser;
     } catch (err: any) {
+      const errMsg = err?.message || '';
+      const isMissingExecutable =
+        errMsg.includes('Executable doesn\'t exist') ||
+        errMsg.includes('Please run the following command') ||
+        errMsg.includes('playwright install');
+
+      if (isMissingExecutable) {
+        console.warn('Playwright Chromium executable not found. Attempting automatic installation...');
+        try {
+          const { execSync } = await import('child_process');
+          execSync('npx playwright install chromium', { stdio: 'inherit' });
+          console.log('Playwright Chromium installed successfully. Retrying browser launch...');
+
+          const browser = await chromium.launch({
+            headless: true,
+            args: launchArgs,
+            executablePath
+          });
+
+          browser.on('disconnected', () => {
+            console.warn('Playwright browser disconnected; clearing instance');
+            browserInstance = null;
+            launchPromise = null;
+          });
+
+          browserInstance = browser;
+          return browser;
+        } catch (installErr: any) {
+          console.error('Failed to auto-install Playwright Chromium:', installErr);
+        }
+      }
+
       console.error('Failed to launch Playwright Chromium browser:', err);
       launchPromise = null;
       throw err;
