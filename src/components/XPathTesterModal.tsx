@@ -7,6 +7,7 @@ interface XPathTesterModalProps {
   initialXPath?: string;
   initialType?: 'PRICE' | 'DATE';
   sourceId?: number;
+  onApply?: (xpath: string) => void;
   onClose: () => void;
 }
 
@@ -15,6 +16,7 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
   initialXPath = '',
   initialType = 'PRICE',
   sourceId,
+  onApply,
   onClose
 }) => {
   useEscapeKey(onClose);
@@ -214,10 +216,25 @@ export const XPathTesterModal: React.FC<XPathTesterModalProps> = ({
         )}
 
         {/* Footer */}
-        <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end">
+        <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
+          {onApply ? (
+            <button
+              onClick={() => {
+                onApply(xpath);
+                onClose();
+              }}
+              disabled={!xpath.trim()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg transition-colors shadow-xs"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>اعمال این XPath در فرم</span>
+            </button>
+          ) : (
+            <div />
+          )}
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded"
+            className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             بستن
           </button>

@@ -110,6 +110,8 @@ export class PlaywrightLoadedPage implements LoadedPage {
     try {
       // Use Playwright page locator for XPath
       const locator = this.page.locator(`xpath=${xpathQuery}`);
+      // Wait briefly for element to appear if it is rendering dynamically
+      await locator.first().waitFor({ state: 'attached', timeout: 3000 }).catch(() => {});
       const count = await locator.count();
 
       if (count > 0) {
@@ -282,6 +284,13 @@ export async function loadSourcePage(
         await page.setContent(preloadedHtml, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
       } else {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      }
+
+      // Try waiting for networkidle to let dynamic SPAs (Next.js, React) finish client hydration
+      try {
+        await page.waitForLoadState('networkidle', { timeout: Math.min(timeoutMs, 5000) });
+      } catch {
+        // networkidle timeout is non-fatal
       }
 
       // If site has wait_after_load

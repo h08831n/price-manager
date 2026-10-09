@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { ProductsView } from './components/ProductsView';
@@ -15,6 +15,7 @@ import { ExcelImportModal } from './components/ExcelImportModal';
 import { XPathPickerModal } from './components/XPathPickerModal';
 import { XPathTesterModal } from './components/XPathTesterModal';
 import { LoginScreen } from './components/LoginScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEscapeKey } from './hooks/useEscapeKey';
 import {
   DashboardData,
@@ -40,6 +41,7 @@ import {
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedTable, setSelectedTable] = useState<PriceTable | null>(null);
+  const selectedTableRef = useRef<PriceTable | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Core Data State
@@ -76,7 +78,14 @@ export default function App() {
     target?: 'TABLE_UPDATE' | 'PRODUCT_UPDATE' | 'PRODUCT_PRICE';
     onSelect?: (xpath: string) => void;
   } | null>(null);
-  const [testerModal, setTesterModal] = useState<{ isOpen: boolean; url: string; xpath?: string; sourceId?: number; type?: 'PRICE' | 'DATE' } | null>(null);
+  const [testerModal, setTesterModal] = useState<{
+    isOpen: boolean;
+    url: string;
+    xpath?: string;
+    sourceId?: number;
+    type?: 'PRICE' | 'DATE';
+    onApply?: (xpath: string) => void;
+  } | null>(null);
 
   // Close global modals on Escape key
   useEscapeKey(() => {
@@ -190,10 +199,13 @@ export default function App() {
       if (Array.isArray(revRes)) setTableRevisions(revRes);
       if (settRes) setSettings(settRes);
 
-      // Keep selectedTable in sync if open
-      if (selectedTable && Array.isArray(tblRes)) {
-        const refreshedTbl = tblRes.find((t: PriceTable) => t.id === selectedTable.id);
-        if (refreshedTbl) setSelectedTable(refreshedTbl);
+      // Keep selectedTable in sync only if currently open
+      if (selectedTableRef.current && Array.isArray(tblRes)) {
+        const refreshedTbl = tblRes.find((t: PriceTable) => t.id === selectedTableRef.current?.id);
+        if (refreshedTbl && selectedTableRef.current) {
+          setSelectedTable(refreshedTbl);
+          selectedTableRef.current = refreshedTbl;
+        }
       }
     } catch (err: any) {
       console.error('Error loading data:', err);
@@ -201,7 +213,7 @@ export default function App() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [selectedTable]);
+  }, []);
 
   // Check auth session validity on startup
   useEffect(() => {
@@ -708,8 +720,9 @@ export default function App() {
 
       {/* Main Header */}
       <Header
-        activeTab={selectedTable ? 'price_tables' : activeTab}
+        activeTab={activeTab}
         setActiveTab={(tab) => {
+          selectedTableRef.current = null;
           setSelectedTable(null);
           setActiveTab(tab);
         }}
@@ -721,39 +734,50 @@ export default function App() {
 
       {/* Main Application Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
-        {/* If a price table detail is selected */}
-        {selectedTable ? (
-          <PriceTableDetailView
-            table={selectedTable}
-            sources={tableSources}
-            products={products}
-            selectors={selectors}
-            revisions={tableRevisions}
-            revisionItems={tableRevisionItems}
-            sites={sites}
-            pageActions={pageActions}
-            factories={factories}
-            onBack={() => setSelectedTable(null)}
-            onRunTable={handleRunTable}
-            onRunSource={handleRunSource}
-            onSaveTable={handleSavePriceTable}
-            onDeleteTable={handleDeletePriceTable}
-            onSaveTableSource={handleSaveTableSource}
-            onDeleteTableSource={handleDeleteTableSource}
-            onSaveSelector={handleSaveSelector}
-            onSavePageAction={handleSavePageAction}
-            onDeletePageAction={handleDeletePageAction}
-            onClearTableSourceActions={handleClearTableSourceActions}
-            onOpenPicker={(url, sourceId, onSelect, target) =>
-              setPickerModal({ isOpen: true, url, sourceId, onSelect, target })
-            }
-            onOpenTester={(sourceId, url, xpath, type) =>
-              setTesterModal({ isOpen: true, sourceId, url, xpath, type })
-            }
-            onRetryPublish={handleRetryPublish}
-          />
-        ) : (
-          <>
+        <ErrorBoundary
+          onReset={() => {
+            selectedTableRef.current = null;
+            setSelectedTable(null);
+            setActiveTab('dashboard');
+            loadAllData();
+          }}
+        >
+          {/* If price_tables tab is active and a table is selected */}
+          {activeTab === 'price_tables' && selectedTable ? (
+            <PriceTableDetailView
+              table={selectedTable}
+              sources={tableSources}
+              products={products}
+              selectors={selectors}
+              revisions={tableRevisions}
+              revisionItems={tableRevisionItems}
+              sites={sites}
+              pageActions={pageActions}
+              factories={factories}
+              onBack={() => {
+                selectedTableRef.current = null;
+                setSelectedTable(null);
+              }}
+              onRunTable={handleRunTable}
+              onRunSource={handleRunSource}
+              onSaveTable={handleSavePriceTable}
+              onDeleteTable={handleDeletePriceTable}
+              onSaveTableSource={handleSaveTableSource}
+              onDeleteTableSource={handleDeleteTableSource}
+              onSaveSelector={handleSaveSelector}
+              onSavePageAction={handleSavePageAction}
+              onDeletePageAction={handleDeletePageAction}
+              onClearTableSourceActions={handleClearTableSourceActions}
+              onOpenPicker={(url, sourceId, onSelect, target) =>
+                setPickerModal({ isOpen: true, url, sourceId, onSelect, target })
+              }
+              onOpenTester={(sourceId, url, xpath, type, onApply) =>
+                setTesterModal({ isOpen: true, sourceId, url, xpath, type, onApply })
+              }
+              onRetryPublish={handleRetryPublish}
+            />
+          ) : (
+            <>
             {activeTab === 'dashboard' && (
               <DashboardView
                 data={dashboardData}
@@ -775,7 +799,7 @@ export default function App() {
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
-                onReload={loadData}
+                onReload={loadAllData}
               />
             )}
 
@@ -794,7 +818,11 @@ export default function App() {
               <PriceTablesView
                 tables={priceTables}
                 factories={factories}
-                onSelectTable={(table) => setSelectedTable(table)}
+                onSelectTable={(table) => {
+                  selectedTableRef.current = table;
+                  setSelectedTable(table);
+                  setActiveTab('price_tables');
+                }}
                 onRunTable={handleRunTable}
                 onSaveTable={handleSavePriceTable}
                 onDeleteTable={handleDeletePriceTable}
@@ -842,6 +870,7 @@ export default function App() {
             )}
           </>
         )}
+        </ErrorBoundary>
       </main>
 
       {/* Global Excel Import Modal */}
@@ -881,6 +910,7 @@ export default function App() {
           initialXPath={testerModal.xpath}
           initialType={testerModal.type || 'PRICE'}
           sourceId={testerModal.sourceId}
+          onApply={testerModal.onApply}
           onClose={() => setTesterModal(null)}
         />
       )}

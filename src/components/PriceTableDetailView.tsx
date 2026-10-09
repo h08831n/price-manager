@@ -63,7 +63,7 @@ interface PriceTableDetailViewProps {
   onDeletePageAction?: (id: number) => Promise<void>;
   onClearTableSourceActions?: (tableSourceId: number) => Promise<void>;
   onOpenPicker: (url: string, sourceId?: number, onSelect?: (xpath: string) => void, target?: 'TABLE_UPDATE' | 'PRODUCT_UPDATE' | 'PRODUCT_PRICE') => void;
-  onOpenTester: (sourceId: number, url: string, xpath?: string, type?: 'PRICE' | 'DATE') => void;
+  onOpenTester: (sourceId: number, url: string, xpath?: string, type?: 'PRICE' | 'DATE', onApply?: (xpath: string) => void) => void;
   onRetryPublish: (revisionId: number) => Promise<void>;
 }
 
@@ -246,6 +246,50 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const handleRunSource = async (sourceId: number) => {
     setRunningSourceId(sourceId);
     try {
+      // 1. Auto-save source configuration if modified in UI
+      const source = sources.find((s) => s.id === sourceId);
+      if (source && onSaveTableSource) {
+        const siteIdVal = getSourceSiteId(source);
+        const urlVal = getSourceUrl(source).trim();
+        const xpathVal = getSourceUpdateXPath(source).trim();
+
+        const isSourceDirty =
+          siteIdVal !== source.site_id ||
+          urlVal !== (source.url || source.source_page_url || '').trim() ||
+          xpathVal !== (source.update_time_xpath || '').trim();
+
+        if (isSourceDirty) {
+          await onSaveTableSource({
+            id: source.id,
+            site_id: siteIdVal,
+            url: urlVal,
+            update_time_xpath: xpathVal
+          });
+        }
+      }
+
+      // 2. Auto-save any modified product selectors for this source
+      if (onSaveSelector) {
+        for (const product of tableProducts) {
+          const key = `${sourceId}_${product.id}`;
+          const pending = editingSelectors[key];
+          if (pending) {
+            const existing = getSelectorForProduct(sourceId, product.id);
+            const isSelectorDirty =
+              pending.price_xpath.trim() !== (existing?.price_xpath || '').trim() ||
+              pending.update_time_xpath.trim() !== (existing?.update_time_xpath || '').trim();
+
+            if (isSelectorDirty) {
+              await onSaveSelector(sourceId, product.id, {
+                price_xpath: pending.price_xpath.trim(),
+                update_time_xpath: pending.update_time_xpath.trim() || undefined
+              });
+            }
+          }
+        }
+      }
+
+      // 3. Now execute source run
       await onRunSource(sourceId);
     } finally {
       setRunningSourceId(null);
@@ -305,7 +349,9 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
 
   const handleOpenSourceTester = async (source: TableSource, xpathVal?: string, type: 'PRICE' | 'DATE' = 'DATE') => {
     const { urlVal } = await ensureSourceSavedBeforeInspect(source);
-    onOpenTester(source.id, urlVal, xpathVal || undefined, type);
+    onOpenTester(source.id, urlVal, xpathVal || undefined, type, (appliedXPath) => {
+      setSourceUpdateXPaths((prev) => ({ ...prev, [source.id]: appliedXPath }));
+    });
   };
 
   const handleOpenSourcePicker = async (
@@ -1645,7 +1691,18 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                           type="button"
                                           onClick={async () => {
                                             const { urlVal } = await ensureSourceSavedBeforeInspect(source);
-                                            onOpenTester(source.id, urlVal, inputVals.price_xpath || undefined, 'PRICE');
+                                            onOpenTester(
+                                              source.id,
+                                              urlVal,
+                                              inputVals.price_xpath || undefined,
+                                              'PRICE',
+                                              (appliedXPath) => {
+                                                setEditingSelectors((prev) => ({
+                                                  ...prev,
+                                                  [key]: { ...inputVals, price_xpath: appliedXPath }
+                                                }));
+                                              }
+                                            );
                                           }}
                                           className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"
                                           title="تست استخراج قیمت"
@@ -1705,7 +1762,13 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                               source.id,
                                               urlVal,
                                               inputVals.update_time_xpath || undefined,
-                                              'DATE'
+                                              'DATE',
+                                              (appliedXPath) => {
+                                                setEditingSelectors((prev) => ({
+                                                  ...prev,
+                                                  [key]: { ...inputVals, update_time_xpath: appliedXPath }
+                                                }));
+                                              }
                                             );
                                           }}
                                           className="p-1.5 text-gray-600 hover:text-slate-900 border border-gray-200 rounded hover:bg-gray-100"

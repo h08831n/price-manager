@@ -17,6 +17,30 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
+            set -e
             cd /opt/price-collector
-            git pull origin main
+            
+            # 1. Backup server's live database before pulling
+            mkdir -p /opt/price-collector/data_backup
+            if [ -f data/database.json ]; then
+              cp -f data/database.json /opt/price-collector/data_backup/database.json.bak
+            fi
+            
+            # 2. Clean up git state and fetch latest code
+            git stash --include-untracked 2>/dev/null || true
+            git fetch origin main
+            git reset --hard origin/main
+            
+            # 3. Restore the server's live database (preserving all live products and settings)
+            if [ -f /opt/price-collector/data_backup/database.json.bak ]; then
+              cp -f /opt/price-collector/data_backup/database.json.bak data/database.json
+            fi
+            
+            # 4. Mark database.json as skip-worktree so git ignores runtime edits
+            git update-index --skip-worktree data/database.json 2>/dev/null || true
+            
+            # 5. Rebuild and restart docker containers with latest code
+            docker compose down
             docker compose up -d --build
+            docker image prune -f
+

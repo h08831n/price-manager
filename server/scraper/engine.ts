@@ -131,8 +131,8 @@ export async function scrapeTableSource(
   );
   const actions = resolveEffectivePageActions(tableSource.id);
 
-  const url = sourcePage?.url || (tableSource as any).source_page_url || site.base_url || '';
-  const timeoutMs = (tableSource.timeout_override || site.timeout || 30) * 1000;
+  const url = sourcePage?.url || (tableSource as any).url || (tableSource as any).source_page_url || site?.base_url || '';
+  const timeoutMs = (tableSource.timeout_override || site?.timeout || 30) * 1000;
 
   const result: SourceScrapeResult = {
     table_source_id: tableSource.id,
@@ -173,8 +173,8 @@ export async function scrapeTableSource(
   try {
     db.log(
       'INFO',
-      `بارگذاری صفحه منبع: ${url} (روش: ${site.scrape_method})`,
-      { url, table_source_id: tableSource.id, scrape_method: site.scrape_method },
+      `بارگذاری صفحه منبع: ${url} (روش: ${site?.scrape_method || 'FETCH'})`,
+      { url, table_source_id: tableSource.id, scrape_method: site?.scrape_method },
       { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
     );
 
@@ -189,6 +189,7 @@ export async function scrapeTableSource(
         result.htmlSnapshotPath = snapshot.htmlPath;
         result.screenshotPath = snapshot.screenshotPath;
         const msg = `المان تاریخ و زمان بروزرسانی جدول با XPath (${tableSource.update_time_xpath}) یافت نشد`;
+        result.errors.push(msg);
         result.structuredErrors.push({
           type: 'UPDATE_XPATH_NOT_FOUND',
           message: msg,
@@ -197,24 +198,26 @@ export async function scrapeTableSource(
           source_page_id: tableSource.source_page_id,
           xpath: tableSource.update_time_xpath
         });
-        throw new Error(msg);
-      }
+        if (selectors.length === 0) {
+          throw new Error(msg);
+        }
+      } else {
+        result.updateResult = evaluateFreshness(updateExtraction.firstValue);
+        result.fresh = result.updateResult.fresh;
 
-      result.updateResult = evaluateFreshness(updateExtraction.firstValue);
-      result.fresh = result.updateResult.fresh;
+        db.log(
+          result.fresh ? 'INFO' : 'WARNING',
+          `بررسی تازگی جدول منبع: ${result.updateResult.raw_text} -> ${result.fresh ? 'بروز (امروز)' : 'قدیمی'} (${result.updateResult.reason})`,
+          result.updateResult,
+          { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
+        );
 
-      db.log(
-        result.fresh ? 'INFO' : 'WARNING',
-        `بررسی تازگی جدول منبع: ${result.updateResult.raw_text} -> ${result.fresh ? 'بروز (امروز)' : 'قدیمی'} (${result.updateResult.reason})`,
-        result.updateResult,
-        { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
-      );
-
-      // If table-level update is stale: mark NOT_UPDATED and do not extract products
-      if (!result.fresh) {
-        result.success = true; // Completed without crash, but not updated yet today
-        result.duration_ms = Date.now() - startTime;
-        return result;
+        // If table-level update is stale: mark NOT_UPDATED and do not extract products
+        if (!result.fresh) {
+          result.success = true; // Completed without crash, but not updated yet today
+          result.duration_ms = Date.now() - startTime;
+          return result;
+        }
       }
     } else {
       // Table update XPath not configured: proceed directly to products
