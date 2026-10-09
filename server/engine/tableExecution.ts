@@ -237,7 +237,7 @@ export async function executePriceTable(
     db.save();
 
     // 3. Collect ALL valid observations for today from ALL updated sources (including previous attempts)
-    // Requirement #19 & #81:
+    // 3. Collect ALL valid observations from ALL table sources (Requirement #19, #81, lowest market price)
     const allValidTodayObservations: Array<{
       table_source_id: number;
       site_id: number;
@@ -247,45 +247,60 @@ export async function executePriceTable(
       valid: boolean;
     }> = [];
 
-    for (const source of activeSources) {
-      // Find latest valid price records from today for this source
+    // Check all active sources of this table (not just the single source that was manually triggered)
+    const allTableActiveSources = schema.table_sources.filter(
+      (ts) => ts.price_table_id === priceTableId && ts.active
+    );
+
+    for (const source of allTableActiveSources) {
       for (const prod of tableProducts) {
-        const latestRecord = schema.price_records
+        // Find latest valid record for this source (prioritize today, then latest ever)
+        const records = schema.price_records
           .filter(
             (r) =>
               r.price_table_id === priceTableId &&
               r.table_source_id === source.id &&
               r.product_id === prod.id &&
               r.status === 'VALID' &&
-              r.extracted_at.startsWith(todayStr)
+              r.parsed_price > 0
           )
-          .sort((a, b) => new Date(b.extracted_at).getTime() - new Date(a.extracted_at).getTime())[0];
+          .sort((a, b) => new Date(b.extracted_at).getTime() - new Date(a.extracted_at).getTime());
 
-        if (latestRecord) {
+        let bestRecord = records.find((r) => r.extracted_at.startsWith(todayStr)) || records[0];
+
+        // Also check if selector has valid last extracted price
+        const sel = schema.product_selectors.find(
+          (s) => s.table_source_id === source.id && s.product_id === prod.id && s.last_status === 'VALID'
+        );
+        const selPrice = sel?.last_parsed_price || (sel?.last_extracted_value ? parseInt(sel.last_extracted_value.replace(/[^0-9]/g, ''), 10) : 0);
+
+        let parsedPrice = bestRecord?.parsed_price || (selPrice > 0 ? selPrice : 0);
+
+        if (parsedPrice > 0) {
           allValidTodayObservations.push({
             table_source_id: source.id,
             site_id: source.site_id,
             product_id: prod.id,
             post_id: prod.post_id,
-            parsed_price: latestRecord.parsed_price,
+            parsed_price: parsedPrice,
             valid: true
           });
         }
       }
     }
 
-    // Check if at least one source was updated today
+    // Count distinct sources that contributed valid prices
     const updatedSourcesCount = new Set(allValidTodayObservations.map((o) => o.table_source_id)).size;
 
     if (updatedSourcesCount > 0) {
       db.log(
         'INFO',
-        `تعداد ${updatedSourcesCount} منبع بروز شده برای محاسبه حداقل قیمت یافت شد. محاسبه حداقل و Price Guard...`,
+        `تعداد ${updatedSourcesCount} منبع معتبر برای محاسبه کمترین قیمت یافت شد. محاسبه کمترین قیمت و اعمال تعدیل (Offset)...`,
         { updatedSourcesCount },
         { run_id: runId, price_table_id: priceTableId }
       );
 
-      // 4. Calculate minimum prices
+      // 4. Calculate minimum prices across competitor sources
       const minPricesMap = calculateMinimumPrices(tableProducts, allValidTodayObservations);
 
       // 5. Price Guard evaluation & Revision Items construction
@@ -299,7 +314,7 @@ export async function executePriceTable(
         revision_number: revisionNumber,
         calculated_at: new Date().toISOString(),
         source_count_used: updatedSourcesCount,
-        pending_source_count: activeSources.length - updatedSourcesCount,
+        pending_source_count: allTableActiveSources.length - updatedSourcesCount,
         failed_source_count: 0,
         wordpress_status: 'PENDING',
         run_id: runId,
@@ -313,7 +328,14 @@ export async function executePriceTable(
         const minData = minPricesMap.get(prod.id);
         if (!minData) continue;
 
-        const calculatedPrice = minData.minPrice;
+        const rawMinPrice = minData.minPrice;
+        // Priority: Product-level price_adjustment first, then PriceTable default_price_adjustment, else 0
+        const effectiveAdjustment =
+          prod.price_adjustment !== undefined && prod.price_adjustment !== null
+            ? prod.price_adjustment
+            : (priceTable.default_price_adjustment || 0);
+
+        const calculatedPrice = Math.max(0, rawMinPrice + effectiveAdjustment);
         const previousPrice = prod.current_price || prod.previous_price || 0;
 
         // Price Guard check
@@ -326,6 +348,8 @@ export async function executePriceTable(
           post_id: prod.post_id,
           product_name: prod.name,
           calculated_price: calculatedPrice,
+          raw_min_price: rawMinPrice,
+          price_adjustment: effectiveAdjustment,
           previous_price: previousPrice,
           is_blocked_by_price_guard: guardResult.blocked,
           status: (guardResult.blocked ? 'BLOCKED' : 'PUBLISHED') as any
@@ -371,7 +395,18 @@ export async function executePriceTable(
             { run_id: runId, price_table_id: priceTableId, product_id: prod.id }
           );
         } else {
-          // Allowed: Send to WordPress
+          // Update local product prices with lowest raw price + applied offset
+          const targetProd = schema.products.find((p) => p.id === prod.id);
+          if (targetProd) {
+            targetProd.previous_price = previousPrice;
+            targetProd.raw_min_price = rawMinPrice;
+            targetProd.price_adjustment = prod.price_adjustment ?? null;
+            targetProd.effective_adjustment = effectiveAdjustment;
+            targetProd.current_price = calculatedPrice;
+            targetProd.updated_at = new Date().toISOString();
+          }
+
+          // Send adjusted final price to WordPress
           wpProductsPayload.push({
             post_id: prod.post_id,
             price: calculatedPrice
@@ -407,18 +442,6 @@ export async function executePriceTable(
           revision.wordpress_status = wpResponse.success ? 'SUCCESS' : 'FAILED';
           revision.wordpress_response = wpResponse;
           revision.published_at = new Date().toISOString();
-
-          // Update local product prices ONLY after successful WordPress sync
-          if (wpResponse.success) {
-            for (const item of wpProductsPayload) {
-              const targetProd = schema.products.find((p) => p.post_id === item.post_id);
-              if (targetProd) {
-                targetProd.previous_price = targetProd.current_price;
-                targetProd.current_price = item.price;
-                targetProd.updated_at = new Date().toISOString();
-              }
-            }
-          }
         } catch (wpErr: any) {
           revision.wordpress_status = 'FAILED';
           revision.wordpress_response = { error: wpErr.message };
@@ -506,3 +529,64 @@ function createErrorRecord(data: Partial<AppError>) {
   db.save();
   return errorRecord;
 }
+
+export function recalculateProductPrices(productId?: number, priceTableId?: number): number {
+  const schema = db.getSchema();
+  let productsToUpdate = schema.products;
+  if (productId) {
+    productsToUpdate = productsToUpdate.filter((p) => p.id === productId);
+  } else if (priceTableId) {
+    productsToUpdate = productsToUpdate.filter((p) => p.price_table_id === priceTableId);
+  }
+
+  let updatedCount = 0;
+  for (const prod of productsToUpdate) {
+    const table = schema.price_tables.find((t) => t.id === prod.price_table_id);
+    const activeSources = schema.table_sources.filter(
+      (ts) => ts.price_table_id === prod.price_table_id && ts.active
+    );
+    const sourceIds = new Set(activeSources.map((s) => s.id));
+
+    // Find all valid prices from selectors or price_records
+    const validPrices: number[] = [];
+    for (const sel of schema.product_selectors) {
+      if (sel.product_id === prod.id && sourceIds.has(sel.table_source_id) && sel.last_status === 'VALID') {
+        const p = sel.last_parsed_price || (sel.last_extracted_value ? parseInt(sel.last_extracted_value.replace(/[^0-9]/g, ''), 10) : 0);
+        if (p > 0) validPrices.push(p);
+      }
+    }
+
+    for (const sourceId of sourceIds) {
+      const rec = schema.price_records
+        .filter((r) => r.product_id === prod.id && r.table_source_id === sourceId && r.status === 'VALID' && r.parsed_price > 0)
+        .sort((a, b) => new Date(b.extracted_at).getTime() - new Date(a.extracted_at).getTime())[0];
+      if (rec && rec.parsed_price > 0) {
+        validPrices.push(rec.parsed_price);
+      }
+    }
+
+    if (validPrices.length > 0) {
+      const rawMin = Math.min(...validPrices);
+      const adjustment =
+        prod.price_adjustment !== undefined && prod.price_adjustment !== null
+          ? prod.price_adjustment
+          : (table?.default_price_adjustment || 0);
+
+      const finalPrice = Math.max(0, rawMin + adjustment);
+      prod.raw_min_price = rawMin;
+      prod.effective_adjustment = adjustment;
+      if (prod.current_price !== finalPrice) {
+        prod.previous_price = prod.current_price || finalPrice;
+        prod.current_price = finalPrice;
+        prod.updated_at = new Date().toISOString();
+        updatedCount++;
+      }
+    }
+  }
+
+  if (updatedCount > 0) {
+    db.save();
+  }
+  return updatedCount;
+}
+

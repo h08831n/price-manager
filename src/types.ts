@@ -22,6 +22,7 @@ export interface PriceTable {
   retry_interval_minutes: number; // e.g. 30
   max_attempts: number; // e.g. 5
   price_guard_percent: number; // e.g. 30
+  default_price_adjustment?: number; // e.g. -100 or +100 Tomans table-wide default
   working_days?: string;
   recheck_default?: boolean;
   created_at: string;
@@ -49,6 +50,9 @@ export interface Product {
   price_table_name?: string;
   current_price: number;
   previous_price?: number;
+  raw_min_price?: number; // Lowest price extracted from sources before adjustment
+  price_adjustment?: number | null; // Specific override adjustment in Tomans (highest priority)
+  effective_adjustment?: number; // Resulting applied adjustment in Tomans
   active: boolean;
   attributes: Record<string, any>; // e.g. { pa_size: "16", pa_grade: "A3" }
   created_at: string;
@@ -148,6 +152,7 @@ export interface ProductSelector {
   last_update_time?: string | null;
   last_fresh?: boolean | null;
   last_extracted_value?: string | null;
+  last_parsed_price?: number | null;
   last_status?: 'VALID' | 'INVALID' | 'BLOCKED' | 'NOT_FOUND' | 'NOT_UPDATED' | null;
   last_extracted_at?: string | null;
   created_at: string;
@@ -311,6 +316,8 @@ export interface TableRevisionItem {
   post_id: number;
   product_name?: string;
   calculated_price: number;
+  raw_min_price?: number;
+  price_adjustment?: number;
   previous_price: number;
   is_blocked_by_price_guard: boolean;
   status: 'PUBLISHED' | 'BLOCKED' | 'FAILED';

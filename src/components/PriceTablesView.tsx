@@ -34,6 +34,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
     retry_interval_minutes: 30,
     max_attempts: 5,
     price_guard_percent: 30,
+    default_price_adjustment: 0,
     active: true
   });
   const [runningId, setRunningId] = useState<number | null>(null);
@@ -56,6 +57,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
       retry_interval_minutes: 30,
       max_attempts: 5,
       price_guard_percent: 30,
+      default_price_adjustment: 0,
       active: true
     });
     setIsAddModalOpen(true);
@@ -301,6 +303,30 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                     className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                   />
                 </div>
+              </div>
+
+              <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-lg">
+                <label className="block text-slate-900 font-semibold mb-1">
+                  تعدیل پیش‌فرض قیمت جدول (تومان)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="مثلاً 100- یا 200+ (پیش‌فرض: 0)"
+                    value={newTable.default_price_adjustment || ''}
+                    onChange={(e) =>
+                      setNewTable({
+                        ...newTable,
+                        default_price_adjustment: e.target.value === '' ? 0 : parseFloat(e.target.value)
+                      })
+                    }
+                    className="flex-1 px-3 py-1.5 bg-white border border-blue-300 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-xs"
+                  />
+                  <span className="text-xs text-blue-900 font-medium">تومان</span>
+                </div>
+                <p className="text-[11px] text-blue-800/80 mt-1">
+                  مقدار اضافه (+) یا کسر (-) به تومان از کمترین نرخ بازار برای تمام کالاهای این جدول.
+                </p>
               </div>
 
               <div className="flex items-center gap-2 pt-2">

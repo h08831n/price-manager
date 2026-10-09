@@ -11,7 +11,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  Filter
+  Filter,
+  RefreshCw
 } from 'lucide-react';
 import { Product, Factory, PriceTable, ProductSelector, PriceChange } from '../types';
 import { ProductDetailModal } from './ProductDetailModal';
@@ -28,6 +29,7 @@ interface ProductsViewProps {
   onOpenImport: (entity: string) => void;
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
+  onReload?: () => Promise<void> | void;
 }
 
 export const ProductsView: React.FC<ProductsViewProps> = ({
@@ -40,12 +42,14 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   onDeleteProduct,
   onOpenImport,
   onExport,
-  onDownloadTemplate
+  onDownloadTemplate,
+  onReload
 }) => {
   const [search, setSearch] = useState('');
   const [selectedFactory, setSelectedFactory] = useState<string>('ALL');
   const [selectedTable, setSelectedTable] = useState<string>('ALL');
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   // Edit/Add modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -103,6 +107,24 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     setEditingProduct(null);
   };
 
+  const handleRecalculatePrices = async () => {
+    setIsRecalculating(true);
+    try {
+      const res = await fetch('/api/products/recalculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (res.ok) {
+        if (onReload) await onReload();
+      }
+    } catch (err) {
+      console.error('Failed to recalculate prices:', err);
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Action Bar & Controls */}
@@ -122,6 +144,17 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleRecalculatePrices}
+            disabled={isRecalculating}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-800 bg-blue-50/70 border border-blue-200 hover:bg-blue-100 disabled:opacity-50 rounded-md transition-colors cursor-pointer"
+            title="محاسبه مجدد تمام قیمت‌ها بر اساس کمترین نرخ سورس‌ها و اعمال تعدیل (Offset)"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-700 ${isRecalculating ? 'animate-spin' : ''}`} />
+            <span>{isRecalculating ? 'در حال محاسبه...' : 'محاسبه مجدد قیمت‌ها'}</span>
+          </button>
+
           <button
             id="btn-add-product"
             onClick={handleOpenAdd}
@@ -208,35 +241,81 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           <table className="w-full text-right text-xs">
             <thead className="bg-gray-50/80 text-gray-500 font-medium border-b border-gray-200">
               <tr>
-                <th className="py-3 px-4 w-28">post_id</th>
-                <th className="py-3 px-4">نام محصول</th>
-                <th className="py-3 px-4">SKU</th>
-                <th className="py-3 px-4">کارخانه</th>
-                <th className="py-3 px-4">جدول قیمت</th>
-                <th className="py-3 px-4">قیمت فعلی (تومان)</th>
-                <th className="py-3 px-4 text-center w-24">وضعیت</th>
-                <th className="py-3 px-4 text-center w-28">عملیات</th>
+                <th className="py-3 px-3 w-20 font-mono">post_id</th>
+                <th className="py-3 px-3">نام محصول</th>
+                <th className="py-3 px-3 w-24">SKU</th>
+                <th className="py-3 px-3 w-28">کارخانه</th>
+                <th className="py-3 px-3 w-28">جدول قیمت</th>
+                <th className="py-3 px-3 w-32 bg-emerald-50/60 text-emerald-950 font-bold">کمترین سورس بازار</th>
+                <th className="py-3 px-3 w-28 text-center bg-purple-50/50 text-purple-950 font-bold">تعدیل (افست)</th>
+                <th className="py-3 px-3 w-32 bg-blue-50/60 text-blue-950 font-bold">قیمت نهایی سامانه</th>
+                <th className="py-3 px-3 text-center w-20">وضعیت</th>
+                <th className="py-3 px-3 text-center w-24">عملیات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-400">
+                  <td colSpan={10} className="py-12 text-center text-gray-400">
                     محصولی با این مشخصات یافت نشد.
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="py-3 px-4 font-mono font-medium text-slate-700">{p.post_id}</td>
-                    <td className="py-3 px-4 font-medium text-gray-900">{p.name}</td>
-                    <td className="py-3 px-4 font-mono text-gray-500">{p.sku || '—'}</td>
-                    <td className="py-3 px-4 text-gray-600">{p.factory_name || '—'}</td>
-                    <td className="py-3 px-4 text-gray-600">{p.price_table_name || '—'}</td>
-                    <td className="py-3 px-4 font-semibold text-gray-900">
-                      {p.current_price > 0 ? p.current_price.toLocaleString('fa-IR') : '—'}
+                    <td className="py-3 px-3 font-mono font-medium text-slate-700">{p.post_id}</td>
+                    <td className="py-3 px-3 font-medium text-gray-900">{p.name}</td>
+                    <td className="py-3 px-3 font-mono text-gray-500">{p.sku || '—'}</td>
+                    <td className="py-3 px-3 text-gray-600">{p.factory_name || '—'}</td>
+                    <td className="py-3 px-3 text-gray-600">{p.price_table_name || '—'}</td>
+
+                    {/* Lowest Scraped Price */}
+                    <td className="py-3 px-3 font-mono text-emerald-800 bg-emerald-50/20 font-semibold">
+                      {p.raw_min_price && p.raw_min_price > 0 ? (
+                        <span>
+                          {p.raw_min_price.toLocaleString('fa-IR')} <span className="text-[10px] text-emerald-600 font-normal">تومان</span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 font-normal text-[11px]">—</span>
+                      )}
                     </td>
-                    <td className="py-3 px-4 text-center">
+
+                    {/* Price Adjustment Offset */}
+                    <td className="py-3 px-3 text-center font-mono bg-purple-50/10">
+                      {(() => {
+                        const hasCustom = p.price_adjustment !== undefined && p.price_adjustment !== null;
+                        const effAdj = p.effective_adjustment !== undefined ? p.effective_adjustment : (hasCustom ? p.price_adjustment! : 0);
+                        if (effAdj === 0) {
+                          return <span className="text-gray-300 text-[11px] font-normal">۰</span>;
+                        }
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                              effAdj < 0
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}
+                            title={hasCustom ? 'تنظیم اختصاصی کالا (اولویت اول)' : 'ارث‌بری از تنظیم جدول قیمت'}
+                          >
+                            <span>{effAdj > 0 ? `+${effAdj.toLocaleString('fa-IR')}` : effAdj.toLocaleString('fa-IR')}</span>
+                            <span className="text-[9px] font-normal text-gray-500">({hasCustom ? 'تک' : 'جدول'})</span>
+                          </span>
+                        );
+                      })()}
+                    </td>
+
+                    {/* Final System Price */}
+                    <td className="py-3 px-3 font-bold text-slate-900 font-mono bg-blue-50/20">
+                      {p.current_price > 0 ? (
+                        <span>
+                          {p.current_price.toLocaleString('fa-IR')} <span className="text-[10px] text-gray-500 font-normal">تومان</span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 font-normal text-[11px]">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-3 text-center">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
                           p.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500'
@@ -245,7 +324,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                         {p.active ? 'فعال' : 'غیرفعال'}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-3 px-3 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => setSelectedProductForDetail(p)}
@@ -374,15 +453,62 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 </div>
               </div>
 
+              <div className="p-3.5 bg-purple-50/70 border border-purple-200/90 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-purple-950 font-bold text-xs">
+                    تعدیل اختصاصی قیمت این محصول (افست به تومان)
+                  </label>
+                  <span className="text-[10px] text-purple-800 bg-white px-2 py-0.5 rounded border border-purple-300 font-semibold">
+                    ★ اولویت اول نسبت به جدول قیمت
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="مثلاً 100- برای کسر یا 200+ برای افزایش (خالی = ارث‌بری از جدول)"
+                    value={editingProduct.price_adjustment ?? ''}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        price_adjustment: e.target.value === '' ? null : parseFloat(e.target.value)
+                      })
+                    }
+                    className="flex-1 px-3 py-2 bg-white border border-purple-300 rounded focus:bg-white focus:outline-none focus:border-purple-600 font-mono text-xs"
+                  />
+                  <span className="text-xs text-purple-900 font-medium">تومان</span>
+                </div>
+                <p className="text-[11px] text-purple-900/80 leading-relaxed">
+                  مقدار اضافه (+) یا کسر (-) به تومان از کمترین قیمت استخراج‌شده بین سورس‌ها. اگر خالی بماند، به صورت پیش‌فرض از تنظیم جدول قیمت ارث‌بری خواهد کرد.
+                </p>
+                {editingProduct.raw_min_price && editingProduct.raw_min_price > 0 && (
+                  <div className="pt-1.5 border-t border-purple-200/60 flex items-center justify-between text-xs text-purple-950">
+                    <span>کمترین نرخ بازار: <strong className="font-mono">{editingProduct.raw_min_price.toLocaleString('fa-IR')}</strong> تومان</span>
+                    <span>
+                      قیمت نهایی جدید:{' '}
+                      <strong className="font-mono font-bold text-emerald-800">
+                        {Math.max(
+                          0,
+                          editingProduct.raw_min_price +
+                            (editingProduct.price_adjustment !== null && editingProduct.price_adjustment !== undefined
+                              ? editingProduct.price_adjustment
+                              : (priceTables.find((t) => t.id === editingProduct.price_table_id)?.default_price_adjustment || 0))
+                        ).toLocaleString('fa-IR')}{' '}
+                        تومان
+                      </strong>
+                    </span>
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label className="block text-gray-700 font-medium mb-1">قیمت فعلی (تومان)</label>
+                <label className="block text-gray-700 font-medium mb-1">قیمت فعلی سیستم (تومان)</label>
                 <input
                   type="number"
                   value={editingProduct.current_price || ''}
                   onChange={(e) =>
                     setEditingProduct({ ...editingProduct, current_price: parseFloat(e.target.value) || 0 })
                   }
-                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-xs"
                 />
               </div>
 

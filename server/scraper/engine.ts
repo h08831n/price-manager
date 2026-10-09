@@ -370,6 +370,7 @@ export async function scrapeTableSource(
 
       // Update selector status in DB
       selector.last_extracted_value = parsed.raw;
+      selector.last_parsed_price = parsed.valid ? parsed.price : null;
       selector.last_status = parsed.valid ? 'VALID' : 'INVALID';
       selector.last_extracted_at = new Date().toISOString();
     }

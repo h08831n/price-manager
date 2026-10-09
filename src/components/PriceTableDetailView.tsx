@@ -23,7 +23,9 @@ import {
   ExternalLink,
   MoveUp,
   MoveDown,
-  AlertTriangle
+  AlertTriangle,
+  Table,
+  Search
 } from 'lucide-react';
 import {
   PriceTable,
@@ -90,7 +92,8 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   onOpenTester,
   onRetryPublish
 }) => {
-  const [activeTab, setActiveTab] = useState<'sources' | 'settings'>('sources');
+  const [activeTab, setActiveTab] = useState<'sources' | 'prices' | 'settings'>('sources');
+  const [priceSearchTerm, setPriceSearchTerm] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [runningSourceId, setRunningSourceId] = useState<number | null>(null);
   const [isDeleteTableModalOpen, setIsDeleteTableModalOpen] = useState(false);
@@ -104,6 +107,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     retry_interval_minutes: table.retry_interval_minutes || 30,
     max_attempts: table.max_attempts || 5,
     price_guard_percent: table.price_guard_percent || 30,
+    default_price_adjustment: table.default_price_adjustment ?? 0,
     active: table.active ?? true
   });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -539,6 +543,22 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
 
         <button
           type="button"
+          onClick={() => setActiveTab('prices')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-colors ${
+            activeTab === 'prices'
+              ? 'border-slate-900 text-slate-900 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
+          }`}
+        >
+          <Table className="w-4 h-4 text-slate-700" />
+          <span>جدول مقایسه لحظه‌ای منابع و قیمت نهایی</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-mono font-bold">
+            {tableProducts.length} کالا
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('settings')}
           className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-colors ${
             activeTab === 'settings'
@@ -651,6 +671,30 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                 />
               </div>
+
+              <div className="md:col-span-2 p-3 bg-blue-50/60 border border-blue-200/80 rounded-lg">
+                <label className="block text-slate-900 font-bold mb-1">
+                  تعدیل پیش‌فرض قیمت جدول (تومان)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="مثلاً 100- یا 200+ (پیش‌فرض: 0)"
+                    value={tableSettings.default_price_adjustment || ''}
+                    onChange={(e) =>
+                      setTableSettings((prev) => ({
+                        ...prev,
+                        default_price_adjustment: e.target.value === '' ? 0 : parseFloat(e.target.value)
+                      }))
+                    }
+                    className="flex-1 px-3 py-2 bg-white border border-blue-300 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-xs"
+                  />
+                  <span className="text-xs text-blue-900 font-medium">تومان</span>
+                </div>
+                <p className="text-[11px] text-blue-800/80 mt-1.5 leading-relaxed">
+                  مقدار اضافه یا کسر برای تمام کالاهای این جدول (مثلاً <strong>100-</strong> برای کسر ۱۰۰ تومان از کمترین قیمت بازار، یا <strong>150+</strong> برای افزایش). در صورتی که برای کالایی تعدیل اختصاصی در فرم ویرایش محصول تنظیم شده باشد، اولویت با تنظیم تکی آن کالا خواهد بود.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 pt-2">
@@ -700,6 +744,300 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               </div>
             </div>
           )}
+        </div>
+      ) : activeTab === 'prices' ? (
+        /* Prices Matrix & Source Comparison Section */
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {/* Header & Filter Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-lg border border-gray-200 shadow-xs">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <Table className="w-4 h-4 text-slate-800" />
+                <span>جدول مقایسه لحظه‌ای قیمت‌ها بین تمام منابع ({table.name})</span>
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                مقایسه شفاف آخرین قیمت‌های استخراج‌شده از هر سورس به همراه محاسبه حداقل قیمت (کمترین نرخ بازار) و قیمت جاری سیستم
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={priceSearchTerm}
+                  onChange={(e) => setPriceSearchTerm(e.target.value)}
+                  placeholder="جستجو در کالاها یا سایز..."
+                  className="pl-3 pr-8 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-800 w-48 sm:w-56"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRunTable}
+                disabled={isRunning}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-md transition-colors shadow-xs shrink-0 cursor-pointer"
+              >
+                <Play className={`w-3 h-3 ${isRunning ? 'animate-spin' : ''}`} />
+                <span>{isRunning ? 'در حال پایش...' : 'بروزرسانی مجدد قیمت‌ها'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-xs">
+              <span className="text-gray-500 block text-[11px]">تعداد کل کالاهای جدول</span>
+              <span className="font-bold text-slate-900 text-sm font-mono mt-0.5 block">{tableProducts.length} کالا</span>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-xs">
+              <span className="text-gray-500 block text-[11px]">منابع استخراج فعال</span>
+              <span className="font-bold text-slate-900 text-sm font-mono mt-0.5 block">{tableSources.length} منبع رقیب</span>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-xs">
+              <span className="text-gray-500 block text-[11px]">منابع بروزرسانی شده امروز</span>
+              <span className="font-bold text-emerald-700 text-sm font-mono mt-0.5 block">
+                {tableSources.filter((s) => s.today_status === 'UPDATED' || s.today_status === 'DONE').length} از {tableSources.length}
+              </span>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-xs">
+              <span className="text-gray-500 block text-[11px]">وضعیت پایش سراسری</span>
+              <span className="font-bold text-slate-800 text-xs mt-1 block">
+                {table.today_status === 'COMPLETED' ? '✓ کامل شده امروز' : 'در حال انتظار یا پایش'}
+              </span>
+            </div>
+          </div>
+
+          {/* Price Matrix Table */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-gray-200 text-gray-600 font-semibold">
+                    <th className="py-3 px-3 w-10 text-center">#</th>
+                    <th className="py-3 px-3 min-w-[140px]">نام محصول</th>
+                    <th className="py-3 px-3 w-20 text-center">کد WP</th>
+                    <th className="py-3 px-3 w-20 text-center">سایز</th>
+
+                    {/* Columns for each active source */}
+                    {tableSources.map((source) => (
+                      <th key={source.id} className="py-3 px-3 min-w-[130px] border-r border-gray-200/80 bg-slate-100/40">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-bold text-slate-900 truncate" title={source.site_name || `منبع #${source.id}`}>
+                            {source.site_name || `منبع #${source.id}`}
+                          </span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded w-fit font-medium ${
+                              source.today_status === 'UPDATED' || source.today_status === 'DONE'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : source.today_status === 'FAILED'
+                                ? 'bg-rose-100 text-rose-800'
+                                : source.today_status === 'NOT_UPDATED'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-gray-200 text-gray-700'
+                            }`}
+                          >
+                            {source.today_status === 'UPDATED' || source.today_status === 'DONE'
+                              ? 'بروز'
+                              : source.today_status === 'FAILED'
+                              ? 'خطا'
+                              : source.today_status === 'NOT_UPDATED'
+                              ? 'قدیمی'
+                              : 'در انتظار'}
+                          </span>
+                        </div>
+                      </th>
+                    ))}
+
+                    <th className="py-3 px-3 min-w-[120px] bg-emerald-50 text-emerald-950 font-bold border-r border-emerald-200">
+                      کمترین قیمت بازار ★
+                    </th>
+                    <th className="py-3 px-3 min-w-[100px] bg-purple-50 text-purple-950 font-bold border-r border-purple-200 text-center">
+                      تعدیل قیمت (افست)
+                    </th>
+                    <th className="py-3 px-3 min-w-[130px] bg-blue-50 text-blue-950 font-bold border-r border-blue-200">
+                      قیمت نهایی قابل انتشار
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {tableProducts
+                    .filter((p) => {
+                      if (!priceSearchTerm.trim()) return true;
+                      const term = priceSearchTerm.toLowerCase();
+                      return (
+                        p.name.toLowerCase().includes(term) ||
+                        String(p.post_id).includes(term) ||
+                        (p.sku && p.sku.toLowerCase().includes(term)) ||
+                        (p.attributes?.pa_size && String(p.attributes.pa_size).toLowerCase().includes(term))
+                      );
+                    })
+                    .map((product, idx) => {
+                      // Collect all extracted valid prices for this product across sources
+                      const sourceObservations = tableSources.map((source) => {
+                        const sel = getSelectorForProduct(source.id, product.id);
+                        const raw = sel?.last_extracted_value;
+                        const num = sel?.last_parsed_price || (raw ? parseInt(raw.replace(/[^0-9]/g, ''), 10) : 0);
+                        const isValid = sel?.last_status === 'VALID' && num > 0;
+                        return {
+                          sourceId: source.id,
+                          selector: sel,
+                          raw,
+                          num,
+                          isValid
+                        };
+                      });
+
+                      const validPrices = sourceObservations.filter((s) => s.isValid).map((s) => s.num);
+                      const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
+
+                      return (
+                        <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
+                          <td className="py-3 px-3 text-center text-gray-400 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="py-3 px-3 font-semibold text-gray-900">{product.name}</td>
+                          <td className="py-3 px-3 text-center font-mono text-gray-500 text-[11px]">{product.post_id}</td>
+                          <td className="py-3 px-3 text-center text-gray-600 font-mono">
+                            {product.attributes?.pa_size || '—'}
+                          </td>
+
+                          {/* Source values */}
+                          {sourceObservations.map((obs) => {
+                            const isMinWinner = obs.isValid && minPrice !== null && obs.num === minPrice;
+
+                            return (
+                              <td
+                                key={obs.sourceId}
+                                className={`py-3 px-3 border-r border-gray-100 ${
+                                  isMinWinner ? 'bg-emerald-50/40' : ''
+                                }`}
+                              >
+                                {obs.raw ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1">
+                                      <strong
+                                        className={`font-mono font-bold text-xs ${
+                                          isMinWinner ? 'text-emerald-700' : 'text-gray-900'
+                                        }`}
+                                      >
+                                        {obs.raw}
+                                      </strong>
+                                      <span className="text-[10px] text-gray-400">تومان</span>
+                                      {isMinWinner && (
+                                        <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1 py-0.2 rounded shrink-0">
+                                          کمترین ★
+                                        </span>
+                                      )}
+                                    </div>
+                                    {obs.selector?.last_extracted_at && (
+                                      <span
+                                        className="text-[9px] text-gray-400 truncate"
+                                        title={new Date(obs.selector.last_extracted_at).toLocaleString('fa-IR')}
+                                      >
+                                        {new Date(obs.selector.last_extracted_at).toLocaleTimeString('fa-IR', {
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        })}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-300 text-xs">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+
+                          {/* Minimum Calculated Price */}
+                          <td className="py-3 px-3 border-r border-emerald-100 bg-emerald-50/20">
+                            {minPrice !== null ? (
+                              <div className="flex items-center gap-1 font-bold text-emerald-800 font-mono">
+                                <span>{minPrice.toLocaleString('fa-IR')}</span>
+                                <span className="text-[10px] text-emerald-600 font-normal">تومان</span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-xs italic">در انتظار استخراج</span>
+                            )}
+                          </td>
+
+                          {/* Price Adjustment (Offset) */}
+                          <td className="py-3 px-3 border-r border-purple-100 bg-purple-50/10 text-center font-mono">
+                            {(() => {
+                              const hasCustom = product.price_adjustment !== undefined && product.price_adjustment !== null;
+                              const effectiveAdj = hasCustom
+                                ? product.price_adjustment!
+                                : (table.default_price_adjustment || 0);
+
+                              if (effectiveAdj === 0) {
+                                return <span className="text-gray-400 text-[11px]">بدون تغییر (۰)</span>;
+                              }
+
+                              return (
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${
+                                    effectiveAdj < 0
+                                      ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  }`}
+                                  title={hasCustom ? 'تنظیم اختصاصی این کالا' : 'ارث‌بری از تنظیم جدول'}
+                                >
+                                  <span>{effectiveAdj > 0 ? `+${effectiveAdj.toLocaleString('fa-IR')}` : effectiveAdj.toLocaleString('fa-IR')}</span>
+                                  <span className="text-[9px] font-normal">{hasCustom ? 'تک' : 'جدول'}</span>
+                                </span>
+                              );
+                            })()}
+                          </td>
+
+                          {/* Final Published / System Price */}
+                          <td className="py-3 px-3 border-r border-blue-100 bg-blue-50/20">
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1 font-bold text-slate-900 font-mono">
+                                <span>
+                                  {product.current_price > 0
+                                    ? product.current_price.toLocaleString('fa-IR')
+                                    : minPrice !== null
+                                    ? (
+                                        Math.max(
+                                          0,
+                                          minPrice +
+                                            (product.price_adjustment !== undefined && product.price_adjustment !== null
+                                              ? product.price_adjustment
+                                              : (table.default_price_adjustment || 0))
+                                        )
+                                      ).toLocaleString('fa-IR')
+                                    : '—'}
+                                </span>
+                                <span className="text-[10px] text-gray-500 font-normal">تومان</span>
+                              </div>
+                              {product.previous_price && product.previous_price !== product.current_price && (
+                                <span
+                                  className={`text-[9px] font-mono ${
+                                    product.current_price > product.previous_price
+                                      ? 'text-rose-600'
+                                      : 'text-emerald-600'
+                                  }`}
+                                >
+                                  {product.current_price > product.previous_price ? '▲ افزایشی' : '▼ کاهشی'} (قبلی:{' '}
+                                  {product.previous_price.toLocaleString('fa-IR')})
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                  {tableProducts.length === 0 && (
+                    <tr>
+                      <td colSpan={6 + tableSources.length} className="py-8 text-center text-gray-400 text-xs">
+                        هیچ کالایی برای این جدول قیمت یافت نشد.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       ) : (
         /* Sources & Selectors Section */
@@ -1226,14 +1564,57 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                       )}
                                     </div>
 
-                                    <div className="flex items-center gap-3 text-xs">
-                                      <span className="text-gray-500">
-                                        قیمت فعلی:{' '}
-                                        <strong className="text-slate-900 font-mono">
-                                          {product.current_price?.toLocaleString('fa-IR')}
-                                        </strong>{' '}
-                                        تومان
-                                      </span>
+                                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                                      {/* Last Extracted Price From THIS Source */}
+                                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50/70 border border-emerald-200/80 rounded-md">
+                                        <span className="text-[11px] text-emerald-800 font-medium">آخرین قیمت استخراج‌شده این منبع:</span>
+                                        {(() => {
+                                          const sel = getSelectorForProduct(source.id, product.id);
+                                          if (sel?.last_extracted_value) {
+                                            return (
+                                              <span className="inline-flex items-center gap-1">
+                                                <strong className="font-bold text-emerald-900 font-mono text-xs">
+                                                  {sel.last_extracted_value}
+                                                </strong>
+                                                <span className="text-[10px] text-emerald-700">تومان</span>
+                                                {sel.last_status === 'VALID' && (
+                                                  <span className="text-[10px] text-emerald-700 font-semibold bg-white px-1 py-0.5 rounded border border-emerald-300">
+                                                    ✓ بروز و معتبر
+                                                  </span>
+                                                )}
+                                                {sel.last_status === 'INVALID' && (
+                                                  <span className="text-[10px] text-rose-700 font-semibold bg-rose-50 px-1 py-0.5 rounded border border-rose-200">
+                                                    نامعتبر
+                                                  </span>
+                                                )}
+                                                {sel.last_status === 'NOT_UPDATED' && (
+                                                  <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                                                    قدیمی
+                                                  </span>
+                                                )}
+                                                {sel.last_extracted_at && (
+                                                  <span className="text-[10px] text-gray-400 mr-1" title={new Date(sel.last_extracted_at).toLocaleString('fa-IR')}>
+                                                    ({new Date(sel.last_extracted_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })})
+                                                  </span>
+                                                )}
+                                              </span>
+                                            );
+                                          }
+                                          return (
+                                            <span className="text-[11px] text-gray-500 italic bg-white px-1.5 py-0.5 rounded border border-gray-200">
+                                              هنوز استخراج نشده
+                                            </span>
+                                          );
+                                        })()}
+                                      </div>
+
+                                      {/* Overall Current Price in System */}
+                                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-md">
+                                        <span className="text-[11px] text-gray-500 font-medium">قیمت نهایی جدول:</span>
+                                        <strong className="text-slate-800 font-mono text-xs">
+                                          {product.current_price > 0 ? `${product.current_price.toLocaleString('fa-IR')} تومان` : '—'}
+                                        </strong>
+                                      </div>
                                     </div>
                                   </div>
 

@@ -4,7 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { db } from '../db/database';
-import { executePriceTable } from '../engine/tableExecution';
+import { executePriceTable, recalculateProductPrices } from '../engine/tableExecution';
 import { extractXPathFromHtml } from '../scraper/xpathExtractor';
 import { fetchHtmlForUrl } from '../scraper/engine';
 import { evaluateFreshness } from '../scraper/freshness';
@@ -218,14 +218,23 @@ apiRouter.get('/products', (req: Request, res: Response) => {
     );
   }
 
-  // Join table and factory names
+  // Join table and factory names & enrich with adjustment details
   const enriched = list.map((p) => {
     const f = schema.factories.find((fac) => fac.id === p.factory_id);
     const t = schema.price_tables.find((tbl) => tbl.id === p.price_table_id);
+    const tableDefaultAdj = t?.default_price_adjustment || 0;
+    const effectiveAdj =
+      p.price_adjustment !== undefined && p.price_adjustment !== null
+        ? p.price_adjustment
+        : tableDefaultAdj;
+
     return {
       ...p,
       factory_name: f?.name,
-      price_table_name: t?.name
+      price_table_name: t?.name,
+      table_default_adjustment: tableDefaultAdj,
+      effective_adjustment: effectiveAdj,
+      has_custom_adjustment: p.price_adjustment !== undefined && p.price_adjustment !== null
     };
   });
 
@@ -234,7 +243,7 @@ apiRouter.get('/products', (req: Request, res: Response) => {
 
 apiRouter.post('/products', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { post_id, name, sku, factory_id, price_table_id, current_price, active, attributes } = req.body;
+  const { post_id, name, sku, factory_id, price_table_id, current_price, price_adjustment, active, attributes } = req.body;
 
   if (!post_id || isNaN(parseInt(post_id, 10))) {
     return res.status(400).json({ error: 'شناسه post_id ووکامرس الزامی است.' });
@@ -245,6 +254,11 @@ apiRouter.post('/products', (req: Request, res: Response) => {
     return res.status(400).json({ error: `محصولی با post_id = ${post_id} از قبل در سیستم وجود دارد.` });
   }
 
+  const parsedAdj =
+    price_adjustment !== undefined && price_adjustment !== null && price_adjustment !== ''
+      ? parseFloat(price_adjustment)
+      : null;
+
   const newProd = {
     id: db.getNextId('products'),
     post_id: parseInt(post_id, 10),
@@ -253,6 +267,7 @@ apiRouter.post('/products', (req: Request, res: Response) => {
     factory_id: parseInt(factory_id, 10) || 1,
     price_table_id: parseInt(price_table_id, 10) || 1,
     current_price: parseFloat(current_price) || 0,
+    price_adjustment: parsedAdj,
     active: active !== undefined ? Boolean(active) : true,
     attributes: attributes || {},
     created_at: new Date().toISOString(),
@@ -262,6 +277,10 @@ apiRouter.post('/products', (req: Request, res: Response) => {
   schema.products.push(newProd);
   db.logConfigChange('product', newProd.id, 'create', null, newProd.name);
   db.save();
+
+  // Recalculate price if sources exist
+  recalculateProductPrices(newProd.id);
+
   res.json(newProd);
 });
 
@@ -271,19 +290,37 @@ apiRouter.put('/products/:id', (req: Request, res: Response) => {
   const prod = schema.products.find((p) => p.id === id);
   if (!prod) return res.status(404).json({ error: 'محصول یافت نشد.' });
 
-  const { name, sku, factory_id, price_table_id, current_price, active, attributes } = req.body;
+  const { name, sku, factory_id, price_table_id, current_price, price_adjustment, active, attributes } = req.body;
   if (name !== undefined) prod.name = name;
   if (sku !== undefined) prod.sku = sku;
   if (factory_id !== undefined) prod.factory_id = parseInt(factory_id, 10);
   if (price_table_id !== undefined) prod.price_table_id = parseInt(price_table_id, 10);
   if (current_price !== undefined) prod.current_price = parseFloat(current_price);
+  if (price_adjustment !== undefined) {
+    prod.price_adjustment =
+      price_adjustment === null || price_adjustment === ''
+        ? null
+        : parseFloat(price_adjustment);
+  }
   if (active !== undefined) prod.active = Boolean(active);
   if (attributes !== undefined) prod.attributes = attributes;
   prod.updated_at = new Date().toISOString();
 
+  // Recalculate based on raw lowest price + adjustment
+  recalculateProductPrices(prod.id);
+
   db.logConfigChange('product', prod.id, 'update', null, prod.name);
   db.save();
   res.json(prod);
+});
+
+// Manual bulk recalculate endpoint
+apiRouter.post('/products/recalculate', (req: Request, res: Response) => {
+  const tableId = req.body.price_table_id ? parseInt(String(req.body.price_table_id), 10) : undefined;
+  const productId = req.body.product_id ? parseInt(String(req.body.product_id), 10) : undefined;
+
+  const count = recalculateProductPrices(productId, tableId);
+  res.json({ success: true, updated_count: count });
 });
 
 apiRouter.delete('/products/:id', (req: Request, res: Response) => {
@@ -414,7 +451,7 @@ apiRouter.get('/price-tables', (req: Request, res: Response) => {
 
 apiRouter.post('/price-tables', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { name, factory_id, start_time, retry_interval_minutes, max_attempts, price_guard_percent, active } = req.body;
+  const { name, factory_id, start_time, retry_interval_minutes, max_attempts, price_guard_percent, default_price_adjustment, active } = req.body;
 
   if (!name || !name.trim()) return res.status(400).json({ error: 'نام جدول قیمت الزامی است.' });
 
@@ -426,6 +463,7 @@ apiRouter.post('/price-tables', (req: Request, res: Response) => {
     retry_interval_minutes: parseInt(retry_interval_minutes, 10) || 30,
     max_attempts: parseInt(max_attempts, 10) || 5,
     price_guard_percent: parseFloat(price_guard_percent) || 30,
+    default_price_adjustment: parseFloat(default_price_adjustment) || 0,
     active: active !== undefined ? Boolean(active) : true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -449,8 +487,14 @@ apiRouter.put('/price-tables/:id', (req: Request, res: Response) => {
   if (req.body.retry_interval_minutes !== undefined) table.retry_interval_minutes = parseInt(req.body.retry_interval_minutes, 10);
   if (req.body.max_attempts !== undefined) table.max_attempts = parseInt(req.body.max_attempts, 10);
   if (req.body.price_guard_percent !== undefined) table.price_guard_percent = parseFloat(req.body.price_guard_percent);
+  if (req.body.default_price_adjustment !== undefined) {
+    table.default_price_adjustment = parseFloat(req.body.default_price_adjustment) || 0;
+  }
   if (req.body.active !== undefined) table.active = Boolean(req.body.active);
   table.updated_at = new Date().toISOString();
+
+  // Recalculate prices for products of this table
+  recalculateProductPrices(undefined, table.id);
 
   db.logConfigChange('price_table', table.id, 'update', null, table.name);
   db.save();

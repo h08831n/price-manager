@@ -49,32 +49,52 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6">
           {/* Top Quick Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 rounded-lg bg-gray-50 border border-gray-100">
-              <span className="text-xs text-gray-500">قیمت فعلی سیستم</span>
-              <div className="text-lg font-bold text-gray-900 mt-1">
-                {product.current_price.toLocaleString('fa-IR')} <span className="text-xs font-normal text-gray-500">تومان</span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
+              <span className="text-[11px] text-emerald-800 font-medium">کمترین قیمت استخراج‌شده</span>
+              <div className="text-base font-bold text-emerald-950 mt-1 font-mono">
+                {product.raw_min_price && product.raw_min_price > 0
+                  ? `${product.raw_min_price.toLocaleString('fa-IR')} تومان`
+                  : '—'}
               </div>
             </div>
 
-            <div className="p-4 rounded-lg bg-gray-50 border border-gray-100">
-              <span className="text-xs text-gray-500">کد محصول (SKU)</span>
-              <div className="text-base font-bold text-gray-900 mt-1 font-mono">
-                {product.sku || '—'}
+            <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200">
+              <span className="text-[11px] text-purple-800 font-medium">تعدیل اعمال‌شده (افست)</span>
+              <div className="text-base font-bold text-purple-950 mt-1 font-mono">
+                {(() => {
+                  const hasCustom = product.price_adjustment !== undefined && product.price_adjustment !== null;
+                  const eff = product.effective_adjustment !== undefined ? product.effective_adjustment : (hasCustom ? product.price_adjustment! : 0);
+                  if (eff === 0) return <span className="text-gray-400 text-xs font-normal">۰ (بدون تغییر)</span>;
+                  return (
+                    <span className={eff < 0 ? 'text-rose-700' : 'text-emerald-700'}>
+                      {eff > 0 ? `+${eff.toLocaleString('fa-IR')}` : eff.toLocaleString('fa-IR')}{' '}
+                      <span className="text-[10px] text-gray-500 font-normal">({hasCustom ? 'اختصاصی' : 'ارث‌بری جدول'})</span>
+                    </span>
+                  );
+                })()}
               </div>
             </div>
 
-            <div className="p-4 rounded-lg bg-gray-50 border border-gray-100">
-              <span className="text-xs text-gray-500">وضعیت پایش</span>
-              <div className="mt-1">
+            <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200">
+              <span className="text-[11px] text-blue-800 font-medium">قیمت نهایی قابل انتشار</span>
+              <div className="text-base font-bold text-blue-950 mt-1 font-mono">
+                {product.current_price.toLocaleString('fa-IR')} <span className="text-xs font-normal text-blue-700">تومان</span>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200">
+              <span className="text-[11px] text-gray-500">کد محصول (SKU) / پایش</span>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-sm font-bold text-gray-900 font-mono">{product.sku || '—'}</span>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                     product.active
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                       : 'bg-gray-200 text-gray-700'
                   }`}
                 >
-                  {product.active ? 'فعال در جدول' : 'غیرفعال'}
+                  {product.active ? 'فعال' : 'غیرفعال'}
                 </span>
               </div>
             </div>
@@ -117,8 +137,19 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 productSelectors.map((sel) => (
                   <div key={sel.id} className="p-3 text-xs flex items-center justify-between hover:bg-gray-50">
                     <div>
-                      <div className="font-medium text-gray-900">{sel.site_name || `منبع #${sel.table_source_id}`}</div>
-                      <div className="font-mono text-[11px] text-slate-600 dir-ltr text-right mt-1 bg-gray-100 px-2 py-1 rounded inline-block">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{sel.site_name || `منبع #${sel.table_source_id}`}</span>
+                        {sel.last_extracted_value ? (
+                          <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            آخرین قیمت استخراج‌شده: {sel.last_extracted_value} تومان
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-gray-400 italic">
+                            هنوز استخراج نشده
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-mono text-[11px] text-slate-600 dir-ltr text-right mt-1.5 bg-gray-100 px-2 py-1 rounded inline-block">
                         {sel.price_xpath}
                       </div>
                     </div>

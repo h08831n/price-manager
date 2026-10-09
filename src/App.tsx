@@ -775,6 +775,7 @@ export default function App() {
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
+                onReload={loadData}
               />
             )}
 
