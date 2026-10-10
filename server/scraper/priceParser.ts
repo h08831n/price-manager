@@ -23,13 +23,34 @@ export function parseProductPrice(rawValue: string | number | null | undefined):
 
   // Remove common currency and non-numeric labels: تومان, ریال, irr, toman, commas, spaces, etc.
   // Keep only digits and decimal dot
-  const cleaned = ascii
+  let cleaned = ascii
     .replace(/[,\s_]/g, '')
     .replace(/(تومان|ریال|toman|rial|irr)/gi, '')
     .trim();
 
   // Match numeric value
-  const numMatch = cleaned.match(/^[-+]?[0-9]+(\.[0-9]+)?$/);
+  let numMatch = cleaned.match(/^[-+]?[0-9]+(\.[0-9]+)?$/);
+
+  // If not direct clean number, gracefully strip badge words (بدون تغییر, افزایش, کاهش, etc.)
+  if (!numMatch) {
+    const stripped = ascii
+      .replace(/(بدون تغییر|بدون‌تغییر|ثابت|افزایش|کاهش|تغییر|تماس بگیرید|استعلام|قیمت|تومان|ریال|toman|rial|irr)/gi, ' ')
+      .trim();
+    const nums = stripped
+      .split(/\s+/)
+      .map((s) => s.replace(/[,\s_]/g, ''))
+      .filter((s) => /^\d+(\.\d+)?$/.test(s));
+
+    if (nums.length > 0) {
+      const parsedNums = nums.map((n) => parseFloat(n)).filter((n) => !isNaN(n) && n > 0);
+      const mainPrice = parsedNums.find((n) => n >= 1000) || parsedNums[parsedNums.length - 1];
+      if (mainPrice) {
+        cleaned = String(mainPrice);
+        numMatch = cleaned.match(/^[-+]?[0-9]+(\.[0-9]+)?$/);
+      }
+    }
+  }
+
   if (!numMatch) {
     return {
       valid: false,

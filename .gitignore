@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+data/picker_cache/
+data/snapshots/
+data/screenshots/
+data/backups/
+data_backup/
+*.tmp

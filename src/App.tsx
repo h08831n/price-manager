@@ -308,14 +308,14 @@ export default function App() {
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در برقراری ارتباط با سرور');
 
-      if (!data.success || data.source_status === 'FAILED') {
-        const errMsg = data.last_error || data.error || 'المان‌های قیمت یا تاریخ استخراج نشدند';
-        showToast(`خطا در استخراج منبع: ${errMsg}`, 'error');
-      } else if (data.source_status === 'NOT_UPDATED' || !data.fresh) {
+      if (data.source_status === 'NOT_UPDATED' || (!data.fresh && data.source_status !== 'FAILED')) {
         showToast(
-          `صفحه بررسی شد اما تاریخ بروزرسانی امروز نیست (${data.last_update_text || 'تاریخ قدیمی'})`,
+          `صفحه بررسی شد اما تاریخ بروزرسانی منبع امروز نیست (${data.last_update_text || 'تاریخ قدیمی'})`,
           'info'
         );
+      } else if (!data.success || data.source_status === 'FAILED') {
+        const errMsg = data.last_error || data.error || 'المان‌های قیمت یا تاریخ استخراج نشدند';
+        showToast(`خطا در استخراج منبع: ${errMsg}`, 'error');
       } else {
         const count = data.products_extracted ?? 0;
         showToast(

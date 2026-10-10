@@ -22,6 +22,8 @@ import {
   ImportHistory
 } from '../../src/types';
 
+import { executeMigrations } from './migrations';
+
 export interface RunLock {
   key: string;
   locked_at: string;
@@ -78,6 +80,8 @@ export interface DatabaseSchema {
   logs: AppLog[];
   config_history: ConfigHistory[];
   import_history: ImportHistory[];
+  schema_version?: number;
+  schema_migrations?: Array<{ version: number; name: string; description: string; applied_at: string }>;
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -284,7 +288,7 @@ export class DatabaseManager {
         }));
         const source_pages = parsed.source_pages || [];
         const page_actions = migratePageActions(parsed.page_actions || [], table_sources, source_pages);
-        return {
+        const loadedSchema: DatabaseSchema = {
           factories: parsed.factories || [],
           price_tables: parsed.price_tables || [],
           products: parsed.products || [],
@@ -305,8 +309,22 @@ export class DatabaseManager {
           errors: parsed.errors || [],
           logs: parsed.logs || [],
           config_history: parsed.config_history || [],
-          import_history: parsed.import_history || []
+          import_history: parsed.import_history || [],
+          schema_version: parsed.schema_version,
+          schema_migrations: parsed.schema_migrations
         };
+
+        const backupDir = path.join(path.dirname(this.dbFile), 'backups');
+        const migrationResult = executeMigrations(loadedSchema, backupDir);
+        if (migrationResult.applied.length > 0) {
+          try {
+            fs.writeFileSync(this.dbFile, JSON.stringify(loadedSchema, null, 2), 'utf-8');
+            console.log(`💾 [DB Migration] Saved updated database schema to ${this.dbFile}`);
+          } catch (err) {
+            console.warn('⚠️ Could not persist migrated database immediately:', err);
+          }
+        }
+        return loadedSchema;
       } catch (e) {
         console.error(`Error loading ${this.dbFile}, initializing fresh data store:`, e);
       }
@@ -333,9 +351,12 @@ export class DatabaseManager {
       errors: [],
       logs: [],
       config_history: [],
-      import_history: []
+      import_history: [],
+      schema_version: 5,
+      schema_migrations: []
     };
 
+    executeMigrations(initial);
     this.persistSync(initial);
     return initial;
   }

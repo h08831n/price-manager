@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -15,39 +16,67 @@ import {
 } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-  openErrorsCount: number;
-  onRefresh: () => void;
-  isRefreshing: boolean;
+  activeTab?: string;
+  setActiveTab?: (tab: string) => void;
+  openErrorsCount?: number;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
   onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  activeTab,
+  activeTab: propActiveTab,
   setActiveTab,
-  openErrorsCount,
+  openErrorsCount = 0,
   onRefresh,
-  isRefreshing,
+  isRefreshing = false,
   onLogout
 }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const getActiveTabFromLocation = (): string => {
+    const path = location.pathname;
+    if (path === '/' || path === '') return 'dashboard';
+    if (path.startsWith('/products')) return 'products';
+    if (path.startsWith('/factories')) return 'factories';
+    if (path.startsWith('/price-tables')) return 'price_tables';
+    if (path.startsWith('/sites')) return 'sites';
+    if (path.startsWith('/runs')) return 'runs';
+    if (path.startsWith('/errors')) return 'errors';
+    if (path.startsWith('/logs')) return 'logs';
+    if (path.startsWith('/settings')) return 'settings';
+    if (path.startsWith('/history')) return 'history';
+    return propActiveTab || 'dashboard';
+  };
+
+  const currentTab = getActiveTabFromLocation();
+
   const navItems = [
-    { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
-    { id: 'products', label: 'محصولات', icon: Package },
-    { id: 'factories', label: 'کارخانه‌ها', icon: Factory },
-    { id: 'price_tables', label: 'جداول قیمت', icon: TableProperties },
-    { id: 'sites', label: 'سایت‌ها / منابع', icon: Globe },
-    { id: 'runs', label: 'اجراها', icon: PlayCircle },
+    { id: 'dashboard', path: '/', label: 'داشبورد', icon: LayoutDashboard },
+    { id: 'products', path: '/products', label: 'محصولات', icon: Package },
+    { id: 'factories', path: '/factories', label: 'کارخانه‌ها', icon: Factory },
+    { id: 'price_tables', path: '/price-tables', label: 'جداول قیمت', icon: TableProperties },
+    { id: 'sites', path: '/sites', label: 'سایت‌ها / منابع', icon: Globe },
+    { id: 'runs', path: '/runs', label: 'اجراها', icon: PlayCircle },
     {
       id: 'errors',
+      path: '/errors',
       label: 'خطاها',
       icon: AlertOctagon,
       badge: openErrorsCount > 0 ? openErrorsCount : undefined
     },
-    { id: 'logs', label: 'لاگ‌ها', icon: FileText },
-    { id: 'settings', label: 'تنظیمات', icon: Settings },
-    { id: 'history', label: 'تاریخچه', icon: History }
+    { id: 'logs', path: '/logs', label: 'لاگ‌ها', icon: FileText },
+    { id: 'settings', path: '/settings', label: 'تنظیمات', icon: Settings },
+    { id: 'history', path: '/history', label: 'تاریخچه', icon: History }
   ];
+
+  const handleNavClick = (item: typeof navItems[0]) => {
+    navigate(item.path);
+    if (setActiveTab) {
+      setActiveTab(item.id);
+    }
+  };
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
@@ -99,12 +128,12 @@ export const Header: React.FC<HeaderProps> = ({
         <nav className="flex space-x-reverse space-x-1 overflow-x-auto py-1 scrollbar-none border-t border-gray-100">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = currentTab === item.id;
             return (
               <button
                 key={item.id}
                 id={`nav-btn-${item.id}`}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleNavClick(item)}
                 className={`relative flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   isActive
                     ? 'bg-slate-900 text-white'

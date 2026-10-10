@@ -136,6 +136,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const [sourceUrls, setSourceUrls] = useState<Record<number, string>>({});
   const [sourceUpdateXPaths, setSourceUpdateXPaths] = useState<Record<number, string>>({});
   const [savingSourceId, setSavingSourceId] = useState<number | null>(null);
+  const [sourceTestReports, setSourceTestReports] = useState<Record<number, any>>({});
 
   // Expanded states for accordions
   const [expandedProducts, setExpandedProducts] = useState<Record<number, boolean>>({});
@@ -290,7 +291,10 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
       }
 
       // 3. Now execute source run
-      await onRunSource(sourceId);
+      const report = await onRunSource(sourceId);
+      if (report) {
+        setSourceTestReports((prev) => ({ ...prev, [sourceId]: report }));
+      }
     } finally {
       setRunningSourceId(null);
     }
@@ -1229,6 +1233,82 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                         )}
                       </div>
                     </div>
+
+                    {/* Live Test Extraction Feedback Report */}
+                    {sourceTestReports[source.id] && (
+                      <div className="p-4 bg-slate-50 border-b border-gray-200 text-xs space-y-3 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {sourceTestReports[source.id].success ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            ) : (
+                              <AlertCircle className="w-4 h-4 text-amber-600" />
+                            )}
+                            <span className="font-bold text-gray-900">
+                              گزارش تست استخراج: {sourceTestReports[source.id].message || (sourceTestReports[source.id].success ? 'موفق' : 'ناموفق')}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSourceTestReports((prev) => {
+                              const next = { ...prev };
+                              delete next[source.id];
+                              return next;
+                            })}
+                            className="text-gray-400 hover:text-gray-600 text-[11px] p-1 font-semibold"
+                          >
+                            بستن گزارش ✕
+                          </button>
+                        </div>
+
+                        {/* Date Evaluation */}
+                        <div className="flex items-center gap-2 text-[11px] bg-white p-2.5 rounded border border-gray-200">
+                          <span className="text-gray-500 font-medium">تاریخ خوانده شده از صفحه:</span>
+                          <span className="font-semibold text-gray-800">
+                            {sourceTestReports[source.id].last_update_text || 'خوانده نشد یا تعیین نشده است'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            sourceTestReports[source.id].fresh ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {sourceTestReports[source.id].fresh ? 'بروز امروز' : 'قدیمی یا نامشخص'}
+                          </span>
+                        </div>
+
+                        {/* Product Results */}
+                        {Array.isArray(sourceTestReports[source.id].product_results) &&
+                         sourceTestReports[source.id].product_results.length > 0 && (
+                          <div className="bg-white rounded border border-gray-200 overflow-hidden">
+                            <div className="px-3 py-2 bg-gray-50 font-semibold text-gray-700 text-[11px] border-b border-gray-200 flex justify-between">
+                              <span>وضعیت سلکتورهای کالاهای این منبع:</span>
+                              <span className="text-emerald-700 font-bold">
+                                {sourceTestReports[source.id].products_extracted} موفق از {sourceTestReports[source.id].product_results.length} کالا
+                              </span>
+                            </div>
+                            <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                              {sourceTestReports[source.id].product_results.map((pr: any) => (
+                                <div key={pr.product_id} className="p-2.5 flex items-center justify-between text-[11px]">
+                                  <div className="space-y-0.5">
+                                    <span className="font-bold text-gray-800 block">{pr.product_name}</span>
+                                    <span className="font-mono text-[10px] text-gray-400 dir-ltr block">{pr.price_xpath}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {pr.success ? (
+                                      <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono">
+                                        {Number(pr.extracted_price).toLocaleString('fa-IR')} تومان
+                                      </span>
+                                    ) : (
+                                      <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 font-medium">
+                                        المان با این XPath یافت نشد
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                       {/* Source Site, URL & Table Update XPath Form */}
                       <div className="p-4 border-b border-gray-100 space-y-4">

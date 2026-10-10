@@ -197,6 +197,150 @@ apiRouter.get('/dashboard', (req: Request, res: Response) => {
 });
 
 // ==========================================
+// 1B. CONSOLIDATED BOOTSTRAP API (Single-request initialization to eliminate network flooding)
+// ==========================================
+apiRouter.get('/bootstrap', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const openErrors = schema.errors.filter((e) => e.status === 'OPEN');
+  const runningJobs = schema.runs.filter((r) => r.status === 'RUNNING');
+  const totalTables = schema.price_tables.filter((t) => t.active).length;
+  const completedTables = schema.daily_table_runs.filter(
+    (d) => d.run_date === todayStr && d.status === 'COMPLETED'
+  ).length;
+
+  const blockedPricesToday = schema.price_records.filter(
+    (pr) => pr.status === 'BLOCKED_BY_PRICE_GUARD' && pr.extracted_at.startsWith(todayStr)
+  ).length;
+
+  const failedSourcesToday = schema.daily_source_runs.filter(
+    (ds) => ds.run_date === todayStr && ds.status === 'FAILED'
+  ).length;
+
+  const activeSources = schema.table_sources.filter((s) => s.active);
+  const pendingSources = activeSources.filter((source) => {
+    const ds = schema.daily_source_runs.find(
+      (d) => d.table_source_id === source.id && d.run_date === todayStr
+    );
+    if (!ds) return true;
+    return ds.status === 'PENDING' || ds.status === 'NOT_UPDATED';
+  });
+
+  const lastRevision = schema.table_revisions
+    .filter((r) => r.wordpress_status === 'SUCCESS' || r.wordpress_status === 'FAILED')
+    .sort((a, b) => new Date(b.calculated_at).getTime() - new Date(a.calculated_at).getTime())[0];
+
+  const pendingUpdates = schema.price_tables
+    .filter((t) => t.active)
+    .map((table) => {
+      const pSources = schema.table_sources.filter((ts) => ts.price_table_id === table.id && ts.active);
+      const remaining = pSources.filter((source) => {
+        const ds = schema.daily_source_runs.find(
+          (d) => d.price_table_id === table.id && d.table_source_id === source.id && d.run_date === todayStr
+        );
+        return !ds || ds.status === 'PENDING' || ds.status === 'NOT_UPDATED';
+      });
+
+      const dailyRun = schema.daily_table_runs.find(
+        (d) => d.price_table_id === table.id && d.run_date === todayStr
+      );
+
+      return {
+        price_table_id: table.id,
+        price_table_name: table.name,
+        pending_sources_count: remaining.length,
+        next_run_at: table.start_time,
+        attempt_number: dailyRun?.attempt_count || 1,
+        max_attempts: table.max_attempts
+      };
+    })
+    .filter((p) => p.pending_sources_count > 0);
+
+  const dashboardData: DashboardData = {
+    open_errors_count: openErrors.length,
+    running_jobs_count: runningJobs.length,
+    pending_sources_count: pendingSources.length,
+    completed_tables_today: completedTables,
+    total_tables_today: totalTables,
+    blocked_prices_today: blockedPricesToday,
+    failed_sources_today: failedSourcesToday,
+    last_wordpress_publish: lastRevision
+      ? {
+          table_name: lastRevision.price_table_name || 'جدول قیمت',
+          published_at: lastRevision.published_at || lastRevision.calculated_at,
+          products_count: lastRevision.items?.length || 0,
+          status: lastRevision.wordpress_status === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
+          message: lastRevision.wordpress_status === 'SUCCESS' ? 'ارسال با موفقیت انجام شد' : 'خطا در ارتباط با وردپرس'
+        }
+      : null,
+    recent_errors: openErrors.slice(0, 8),
+    active_runs: runningJobs.slice(0, 5),
+    pending_updates: pendingUpdates.slice(0, 5)
+  };
+
+  const enrichedSources = schema.table_sources.map((ts) => {
+    const site = schema.sites.find((s) => s.id === ts.site_id);
+    const page = schema.source_pages.find((p) => p.id === ts.source_page_id);
+    const actionsInfo = getTableSourcePageActionsInfo(ts.id);
+    const daily = schema.daily_source_runs.find((d) => d.table_source_id === ts.id && d.run_date === todayStr);
+    return {
+      ...ts,
+      site_name: site?.name,
+      url: page?.url || (ts as any).url || (ts as any).source_page_url || '',
+      source_page_url: page?.url || (ts as any).url || (ts as any).source_page_url || '',
+      today_status: daily?.status || 'PENDING',
+      today_fresh: daily?.fresh || false,
+      last_check_at: daily?.last_check_at,
+      last_error: daily?.last_error,
+      has_action_override: actionsInfo.hasOverride,
+      action_override_count: actionsInfo.overrideActions.length,
+      site_default_action_count: actionsInfo.siteDefaultActions.length,
+      effective_action_count: actionsInfo.effectiveActions.length
+    };
+  });
+
+  const enrichedSelectors = schema.product_selectors.map((sel) => {
+    const prod = schema.products.find((p) => p.id === sel.product_id);
+    const tableSource = schema.table_sources.find((ts) => ts.id === sel.table_source_id);
+    const site = schema.sites.find((s) => s.id === tableSource?.site_id);
+    return {
+      ...sel,
+      product_name: prod ? `${prod.name} (${prod.factory_name})` : '',
+      site_name: site?.name || '',
+      price_table_id: tableSource?.price_table_id
+    };
+  });
+
+  res.json({
+    dashboard: dashboardData,
+    products: schema.products,
+    factories: schema.factories,
+    price_tables: schema.price_tables,
+    sites: schema.sites,
+    source_pages: schema.source_pages,
+    table_sources: enrichedSources,
+    selectors: enrichedSelectors,
+    page_actions: schema.page_actions,
+    settings: schema.global_settings,
+    schema_version: schema.schema_version || 5,
+    schema_migrations: schema.schema_migrations || [],
+    open_errors_count: openErrors.length
+  });
+});
+
+apiRouter.get('/system/schema-status', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  res.json({
+    schema_version: schema.schema_version || 5,
+    schema_migrations: schema.schema_migrations || [],
+    total_products: schema.products.length,
+    total_price_tables: schema.price_tables.length,
+    total_sources: schema.table_sources.length
+  });
+});
+
+// ==========================================
 // 2. PRODUCTS API (Requirement #3, #4, #48)
 // ==========================================
 apiRouter.get('/products', (req: Request, res: Response) => {
@@ -1002,28 +1146,63 @@ apiRouter.post('/table-sources/:id/run', async (req: Request, res: Response) => 
       .reverse()
       .find((ds) => ds.table_source_id === id && ds.run_date === todayStr);
 
-    const isSuccess = dailySource?.status === 'UPDATED' || dailySource?.status === 'DONE';
-    const isNotUpdated = dailySource?.status === 'NOT_UPDATED';
-    const isFailed = dailySource?.status === 'FAILED' || (!isSuccess && !isNotUpdated);
-    const errorMsg = isFailed
-      ? (dailySource?.last_error || 'خطا در استخراج مقادیر یا المان‌های این منبع')
-      : undefined;
-
-    const extractedProducts = schema.price_records.filter(
+    const extractedRecords = schema.price_records.filter(
       (r) => r.table_source_id === id && r.run_id === run.id && r.status === 'VALID'
-    ).length;
+    );
+
+    const relevantSelectors = schema.product_selectors.filter(
+      (s) => s.table_source_id === id && s.active
+    );
+
+    // Detailed per-product status breakdown
+    const productResults = relevantSelectors.map((sel) => {
+      const prod = schema.products.find((p) => p.id === sel.product_id);
+      const rec = extractedRecords.find((r) => r.product_id === sel.product_id);
+      return {
+        product_id: sel.product_id,
+        product_name: prod ? `${prod.name} (${prod.factory_name})` : `محصول ${sel.product_id}`,
+        price_xpath: sel.price_xpath,
+        extracted_price: rec ? rec.parsed_price : sel.last_parsed_price,
+        raw_value: rec ? rec.raw_value : sel.last_extracted_value,
+        status: rec ? 'VALID' : (sel.last_status || 'NOT_FOUND'),
+        success: Boolean(rec && rec.parsed_price > 0)
+      };
+    });
+
+    const successCount = extractedRecords.length;
+    const failCount = Math.max(0, relevantSelectors.length - successCount);
+    const isSuccess = successCount > 0;
+    const isPartial = successCount > 0 && failCount > 0;
+
+    let summaryMessage = '';
+    if (successCount === relevantSelectors.length && relevantSelectors.length > 0) {
+      summaryMessage = `استخراج با موفقیت انجام شد (${successCount} کالا استخراج شد).`;
+    } else if (isPartial) {
+      summaryMessage = `استخراج تا حدی موفق بود (${successCount} کالا استخراج شد، ${failCount} کالا با سلکتور فعلی یافت نشد).`;
+    } else if (relevantSelectors.length === 0) {
+      summaryMessage = 'منبع بررسی شد، اما هنوز هیچ کالایی برای استخراج در این منبع تعریف نشده است.';
+    } else {
+      summaryMessage = dailySource?.last_error || 'المان‌های قیمت با XPath‌های تعیین‌شده در صفحه یافت نشدند.';
+    }
 
     res.json({
       success: isSuccess,
       source_status: dailySource?.status || (isSuccess ? 'UPDATED' : 'FAILED'),
       fresh: dailySource?.fresh || false,
-      products_extracted: extractedProducts,
-      last_error: errorMsg,
+      products_extracted: successCount,
+      products_failed: failCount,
+      product_results: productResults,
+      last_error: isSuccess ? undefined : summaryMessage,
+      message: summaryMessage,
       last_update_text: dailySource?.raw_update_text,
       run
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      message: `خطا در اجرای استخراج: ${err.message}`
+    });
   }
 });
 
