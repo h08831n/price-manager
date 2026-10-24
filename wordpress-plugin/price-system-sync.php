@@ -437,58 +437,84 @@ class PriceSystemSyncPlugin {
     }
 
     /**
-     * Handle Fetch Destination Data (Products, Factories, and Tables)
+     * Handle Fetch Destination Data (Products, Factories, and Price Tables)
+     * Supports full server-side pagination so collectors can stream thousands of products without memory exhaustion.
      * Automatically returns products with active = false as requested by user.
      */
     public function handle_fetch_destination_data($request) {
         $params = $request->get_params();
-        $limit = isset($params['limit']) ? intval($params['limit']) : 500;
+        $per_page = isset($params['per_page']) ? intval($params['per_page']) : (isset($params['limit']) ? intval($params['limit']) : 250);
+        if ($per_page <= 0) $per_page = 250;
         $page = isset($params['page']) ? intval($params['page']) : 1;
+        if ($page <= 0) $page = 1;
 
-        // 1. Fetch Factories / Brands
+        // 1. Fetch Factories / Producers / Brands (Multi-Taxonomy Detection)
         $factories = array();
-        if (taxonomy_exists('pa_factory')) {
-            $terms = get_terms(array(
-                'taxonomy'   => 'pa_factory',
-                'hide_empty' => false,
-            ));
-            if (!is_wp_error($terms) && !empty($terms)) {
-                foreach ($terms as $t) {
-                    $factories[] = array(
-                        'id' => $t->term_id,
-                        'name' => $t->name,
-                        'slug' => $t->slug,
-                        'count' => $t->count
-                    );
+        $factory_taxonomies = array('pa_factory', 'pa_producer', 'pa_karhane', 'pa_brand', 'product_brand', 'yith_product_brand', 'pwb-brand');
+        $seen_factory_names = array();
+
+        foreach ($factory_taxonomies as $tax) {
+            if (taxonomy_exists($tax)) {
+                $terms = get_terms(array(
+                    'taxonomy'   => $tax,
+                    'hide_empty' => false,
+                ));
+                if (!is_wp_error($terms) && !empty($terms)) {
+                    foreach ($terms as $t) {
+                        $norm_name = trim($t->name);
+                        if (isset($seen_factory_names[$norm_name])) continue;
+                        $seen_factory_names[$norm_name] = true;
+                        $factories[] = array(
+                            'id'             => $t->term_id,
+                            'destination_id' => $t->term_id,
+                            'name'           => html_entity_decode($t->name, ENT_QUOTES, 'UTF-8'),
+                            'slug'           => $t->slug,
+                            'count'          => $t->count
+                        );
+                    }
                 }
             }
         }
-        if (empty($factories) && taxonomy_exists('product_brand')) {
-            $terms = get_terms(array(
-                'taxonomy'   => 'product_brand',
+
+        // 2. Fetch Price Tables (WooCommerce Product Categories represent Price Tables in metal/steel commerce)
+        $price_tables = array();
+        if (taxonomy_exists('product_cat')) {
+            $cat_terms = get_terms(array(
+                'taxonomy'   => 'product_cat',
                 'hide_empty' => false,
             ));
-            if (!is_wp_error($terms) && !empty($terms)) {
-                foreach ($terms as $t) {
-                    $factories[] = array(
-                        'id' => $t->term_id,
-                        'name' => $t->name,
-                        'slug' => $t->slug,
-                        'count' => $t->count
+            if (!is_wp_error($cat_terms) && !empty($cat_terms)) {
+                foreach ($cat_terms as $ct) {
+                    if ($ct->slug === 'uncategorized' || $ct->name === 'دسته‌بندی نشده') continue;
+                    $price_tables[] = array(
+                        'id'             => $ct->term_id,
+                        'destination_id' => $ct->term_id,
+                        'name'           => html_entity_decode($ct->name, ENT_QUOTES, 'UTF-8'),
+                        'slug'           => $ct->slug,
+                        'count'          => $ct->count
                     );
                 }
             }
         }
 
-        // 2. Fetch Products
+        // 3. Query Products Count & Paginated Items
+        $count_query = new WP_Query(array(
+            'post_type'      => array('product', 'product_variation'),
+            'post_status'    => array('publish', 'draft', 'pending'),
+            'posts_per_page' => 1,
+            'fields'         => 'ids'
+        ));
+        $total_found = $count_query->found_posts;
+        $total_pages = $total_found > 0 ? ceil($total_found / $per_page) : 1;
+
         $products = array();
         $query_args = array(
             'post_type'      => array('product', 'product_variation'),
             'post_status'    => array('publish', 'draft', 'pending'),
-            'posts_per_page' => $limit > 0 ? $limit : 500,
-            'paged'          => $page > 0 ? $page : 1,
+            'posts_per_page' => $per_page,
+            'paged'          => $page,
             'orderby'        => 'ID',
-            'order'          => 'DESC'
+            'order'          => 'ASC'
         );
 
         $posts = get_posts($query_args);
@@ -498,47 +524,70 @@ class PriceSystemSyncPlugin {
             $reg_price = get_post_meta($post_id, '_regular_price', true);
             $curr_price = get_post_meta($post_id, '_price', true);
             $price = !empty($reg_price) ? floatval($reg_price) : (!empty($curr_price) ? floatval($curr_price) : 0);
-            
+
+            // Determine factory
             $factory_name = '';
             $factory_id = 0;
-            if (taxonomy_exists('pa_factory')) {
-                $p_terms = wp_get_post_terms($post_id, 'pa_factory');
-                if (!empty($p_terms) && !is_wp_error($p_terms)) {
-                    $factory_name = $p_terms[0]->name;
-                    $factory_id = $p_terms[0]->term_id;
+            foreach ($factory_taxonomies as $tax) {
+                if (taxonomy_exists($tax)) {
+                    $p_terms = wp_get_post_terms($post_id, $tax);
+                    if (!empty($p_terms) && !is_wp_error($p_terms)) {
+                        $factory_name = html_entity_decode($p_terms[0]->name, ENT_QUOTES, 'UTF-8');
+                        $factory_id = $p_terms[0]->term_id;
+                        break;
+                    }
                 }
             }
 
+            // Determine categories / price table
             $cat_names = array();
+            $table_name = '';
+            $table_id = 0;
             if (taxonomy_exists('product_cat')) {
                 $c_terms = wp_get_post_terms($post_id, 'product_cat');
                 if (!empty($c_terms) && !is_wp_error($c_terms)) {
                     foreach ($c_terms as $ct) {
-                        $cat_names[] = $ct->name;
+                        if ($ct->slug === 'uncategorized' || $ct->name === 'دسته‌بندی نشده') continue;
+                        $dec_name = html_entity_decode($ct->name, ENT_QUOTES, 'UTF-8');
+                        $cat_names[] = $dec_name;
+                        if (empty($table_name)) {
+                            $table_name = $dec_name;
+                            $table_id = $ct->term_id;
+                        }
                     }
                 }
             }
 
             $products[] = array(
-                'post_id'        => $post_id,
-                'name'           => html_entity_decode($post->post_title, ENT_QUOTES, 'UTF-8'),
-                'sku'            => $sku ? $sku : '',
-                'current_price'  => $price,
-                'factory_name'   => $factory_name,
-                'factory_id'     => $factory_id,
-                'categories'     => $cat_names,
-                'stock_status'   => get_post_meta($post_id, '_stock_status', true) ?: 'instock',
-                'active'         => false // Default to false (inactive) per user requirement
+                'post_id'          => $post_id,
+                'name'             => html_entity_decode($post->post_title, ENT_QUOTES, 'UTF-8'),
+                'sku'              => $sku ? $sku : '',
+                'current_price'    => $price,
+                'factory_name'     => $factory_name,
+                'factory_id'       => $factory_id,
+                'price_table_name' => $table_name,
+                'price_table_id'   => $table_id,
+                'categories'       => $cat_names,
+                'stock_status'     => get_post_meta($post_id, '_stock_status', true) ?: 'instock',
+                'active'           => false // Default to false (inactive) per user requirement
             );
         }
 
+        $has_more = $page < $total_pages && count($products) > 0;
+
         return rest_ensure_response(array(
             'success'         => true,
-            'total_products'  => count($products),
+            'page'            => $page,
+            'per_page'        => $per_page,
+            'total_products'  => $total_found,
+            'total_pages'     => $total_pages,
+            'has_more'        => $has_more,
             'total_factories' => count($factories),
+            'total_tables'    => count($price_tables),
             'factories'       => $factories,
+            'price_tables'    => $price_tables,
             'products'        => $products,
-            'message'         => "تعداد " . count($products) . " محصول و " . count($factories) . " کارخانه با موفقیت استخراج شد."
+            'message'         => "صفحه {$page} از {$total_pages} استخراج شد (" . count($products) . " محصول)."
         ));
     }
 

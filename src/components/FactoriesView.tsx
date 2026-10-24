@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Factory as FactoryIcon, Globe } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Factory as FactoryIcon, Globe, Search, X, DownloadCloud } from 'lucide-react';
 import { Factory } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -11,6 +11,18 @@ interface FactoriesViewProps {
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
   onSyncWithDestination?: () => Promise<any>;
+  onPullFromDestination?: () => Promise<any>;
+}
+
+function normalizePersian(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/۰/g, '0').replace(/۱/g, '1').replace(/۲/g, '2').replace(/۳/g, '3').replace(/۴/g, '4')
+    .replace(/۵/g, '5').replace(/۶/g, '6').replace(/۷/g, '7').replace(/۸/g, '8').replace(/۹/g, '9')
+    .trim();
 }
 
 export const FactoriesView: React.FC<FactoriesViewProps> = ({
@@ -20,11 +32,14 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
   onOpenImport,
   onExport,
   onDownloadTemplate,
-  onSyncWithDestination
+  onSyncWithDestination,
+  onPullFromDestination
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFactory, setEditingFactory] = useState<Partial<Factory> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Delete modal state
   const [deletingFactory, setDeletingFactory] = useState<Factory | null>(null);
@@ -38,6 +53,17 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
       setEditingFactory(null);
     }
   }, Boolean(deletingFactory || isModalOpen));
+
+  const filteredFactories = useMemo(() => {
+    if (!searchQuery.trim()) return factories;
+    const q = normalizePersian(searchQuery);
+    return factories.filter((f) => {
+      const nameMatch = normalizePersian(f.name).includes(q);
+      const idMatch = String(f.id).includes(q);
+      const destMatch = String(f.destination_id ?? '').includes(q);
+      return nameMatch || idMatch || destMatch;
+    });
+  }, [factories, searchQuery]);
 
   const handleOpenAdd = () => {
     setEditingFactory({ name: '', destination_id: undefined, active: true });
@@ -59,13 +85,35 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Header & Main Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-lg border border-gray-200 shadow-xs">
         <div>
           <h2 className="text-sm font-bold text-gray-900">مدیریت کارخانجات و تولیدکنندگان</h2>
-          <p className="text-xs text-gray-500 mt-0.5">دسته‌بندی مبنای جداول قیمت و محصولات فولادی</p>
+          <p className="text-xs text-gray-500 mt-0.5">دسته‌بندی مبنای جداول قیمت و محصولات فولادی ({factories.length} کارخانه ثبت شده)</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onPullFromDestination && (
+            <button
+              id="btn-pull-factories-destination"
+              type="button"
+              onClick={async () => {
+                setIsPulling(true);
+                try {
+                  await onPullFromDestination();
+                } finally {
+                  setIsPulling(false);
+                }
+              }}
+              disabled={isPulling}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
+              title="دریافت خودکار همه کارخانه‌ها، برندها و تولیدکنندگان از سایت مقصد (WordPress)"
+            >
+              <DownloadCloud className={`w-3.5 h-3.5 text-purple-700 ${isPulling ? 'animate-bounce' : ''}`} />
+              <span>{isPulling ? 'در حال دریافت از مقصد...' : 'دریافت از سایت مقصد'}</span>
+            </button>
+          )}
+
           {onSyncWithDestination && (
             <button
               id="btn-sync-factories-destination"
@@ -83,7 +131,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
               title="همگام‌سازی دسته‌ای و خودکار کارخانه‌ها با سایت مقصد (WordPress) بدون ایجاد ترافیک یا بار اضافی"
             >
               <Globe className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'در حال ارسال بسته‌ای به مقصد...' : 'همگام‌سازی با سایت مقصد'}</span>
+              <span>{isSyncing ? 'در حال ارسال بسته‌ای به مقصد...' : 'ارسال به سایت مقصد'}</span>
             </button>
           )}
 
@@ -121,6 +169,33 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between gap-3">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="جستجوی سریع کارخانه بر اساس نام یا آیدی مقصد..."
+            className="w-full pl-9 pr-9 py-2 text-xs border border-gray-200 rounded-md focus:border-slate-800 focus:outline-hidden transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+              title="پاک کردن جستجو"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="text-xs text-gray-500 whitespace-nowrap font-mono">
+          نمایش {filteredFactories.length} از {factories.length}
+        </div>
+      </div>
+
+      {/* Factories Table */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
         <table className="w-full text-right text-xs">
           <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
@@ -135,53 +210,61 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {factories.map((f) => (
-              <tr key={f.id} className="hover:bg-gray-50/80 transition-colors">
-                <td className="py-3 px-4 font-mono font-bold text-slate-800 text-center bg-slate-50/50">#{f.id}</td>
-                <td className="py-3 px-4 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
-                  <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه کارخانه در سایت مقصد">
-                    {f.destination_id ?? f.id}
-                  </span>
-                </td>
-                <td className="py-3 px-4 font-bold text-gray-900">{f.name}</td>
-                <td className="py-3 px-4 text-center font-mono">{f.table_count || 0} جدول</td>
-                <td className="py-3 px-4 text-center font-mono">{f.product_count || 0} کالا</td>
-                <td className="py-3 px-4 text-center">
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        f.sync_status === 'SYNCED'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : 'bg-amber-50 text-amber-800 border border-amber-200'
-                      }`}
-                    >
-                      {f.sync_status === 'SYNCED' ? 'متصل به مقصد' : 'نیازمند همگام‌سازی'}
-                    </span>
-                    <span className="text-[9px] text-gray-400">{f.active ? 'فعال' : 'غیرفعال'}</span>
-                  </div>
-                </td>
-                <td className="py-3 px-4 text-center">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <button
-                      onClick={() => handleOpenEdit(f)}
-                      className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                      title="ویرایش نام کارخانه"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    {onDeleteFactory && (
-                      <button
-                        onClick={() => setDeletingFactory(f)}
-                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                        title="حذف کارخانه"
-                      >
-                        <Trash2 className="w-4 h-4 text-rose-500" />
-                      </button>
-                    )}
-                  </div>
+            {filteredFactories.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-8 text-center text-gray-400">
+                  {searchQuery ? 'هیچ کارخانه‌ای با عبارت جستجو شده مطابقت ندارد.' : 'هیچ کارخانه‌ای در سیستم ثبت نشده است.'}
                 </td>
               </tr>
-            ))}
+            ) : (
+              filteredFactories.map((f) => (
+                <tr key={f.id} className="hover:bg-gray-50/80 transition-colors">
+                  <td className="py-3 px-4 font-mono font-bold text-slate-800 text-center bg-slate-50/50">#{f.id}</td>
+                  <td className="py-3 px-4 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
+                    <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه کارخانه در سایت مقصد">
+                      {f.destination_id ?? f.id}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 font-bold text-gray-900">{f.name}</td>
+                  <td className="py-3 px-4 text-center font-mono">{f.table_count || 0} جدول</td>
+                  <td className="py-3 px-4 text-center font-mono">{f.product_count || 0} کالا</td>
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          f.sync_status === 'SYNCED'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                        }`}
+                      >
+                        {f.sync_status === 'SYNCED' ? 'متصل به مقصد' : 'نیازمند همگام‌سازی'}
+                      </span>
+                      <span className="text-[9px] text-gray-400">{f.active ? 'فعال' : 'غیرفعال'}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={() => handleOpenEdit(f)}
+                        className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                        title="ویرایش نام کارخانه"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      {onDeleteFactory && (
+                        <button
+                          onClick={() => setDeletingFactory(f)}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="حذف کارخانه"
+                        >
+                          <Trash2 className="w-4 h-4 text-rose-500" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

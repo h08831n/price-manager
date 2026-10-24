@@ -33,6 +33,14 @@
       "active": true,
       "created_at": "2026-10-24T21:19:40.217Z",
       "updated_at": "2026-10-24T21:19:40.217Z"
+    },
+    {
+      "id": 5,
+      "name": "فولاد نیشابور",
+      "destination_id": 104,
+      "active": true,
+      "created_at": "2026-10-24T21:38:02.686Z",
+      "updated_at": "2026-10-24T21:38:02.686Z"
     }
   ],
   "price_tables": [
@@ -55,6 +63,66 @@
       "destination_id": 1,
       "sync_status": "SYNCED",
       "last_synced_at": "2026-10-24T19:55:48.017Z"
+    },
+    {
+      "id": 2,
+      "name": "تیرآهن",
+      "factory_id": 1,
+      "destination_id": 201,
+      "active": true,
+      "start_time": "11:00",
+      "retry_interval_minutes": 30,
+      "max_attempts": 5,
+      "price_guard_percent": 30,
+      "default_price_adjustment": 0,
+      "sync_status": "SYNCED",
+      "created_at": "2026-10-24T21:38:02.686Z",
+      "updated_at": "2026-10-24T21:38:02.686Z"
+    },
+    {
+      "id": 3,
+      "name": "میلگرد",
+      "factory_id": 1,
+      "destination_id": 202,
+      "active": true,
+      "start_time": "11:00",
+      "retry_interval_minutes": 30,
+      "max_attempts": 5,
+      "price_guard_percent": 30,
+      "default_price_adjustment": 0,
+      "sync_status": "SYNCED",
+      "created_at": "2026-10-24T21:38:02.686Z",
+      "updated_at": "2026-10-24T21:38:02.686Z"
+    },
+    {
+      "id": 4,
+      "name": "ورق سیاه",
+      "factory_id": 1,
+      "destination_id": 203,
+      "active": true,
+      "start_time": "11:00",
+      "retry_interval_minutes": 30,
+      "max_attempts": 5,
+      "price_guard_percent": 30,
+      "default_price_adjustment": 0,
+      "sync_status": "SYNCED",
+      "created_at": "2026-10-24T21:38:02.686Z",
+      "updated_at": "2026-10-24T21:38:02.686Z"
+    },
+    {
+      "id": 5,
+      "name": "نبشی و ناودانی",
+      "factory_id": 1,
+      "destination_id": 204,
+      "active": true,
+      "start_time": "11:00",
+      "retry_interval_minutes": 30,
+      "max_attempts": 5,
+      "price_guard_percent": 30,
+      "default_price_adjustment": 0,
+      "sync_status": "SYNCED",
+      "created_at": "2026-10-24T21:38:02.686Z",
+      "updated_at": "2026-10-24T21:38:02.686Z"
     }
   ],
   "products": [
@@ -177,13 +245,13 @@
       "name": "تیرآهن ۱۴ ذوب آهن (سایت مقصد)",
       "sku": "TIR-14-ESF",
       "factory_id": 3,
-      "price_table_id": 1,
+      "price_table_id": 2,
       "current_price": 48500,
       "active": true,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T21:19:40.217Z",
+      "last_synced_at": "2026-10-24T21:38:02.686Z",
       "created_at": "2026-10-24T21:19:40.217Z",
-      "updated_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
     },
     {
@@ -193,13 +261,13 @@
       "name": "ورق سیاه ۲ میل مبارکه (سایت مقصد)",
       "sku": "ST37-2MM",
       "factory_id": 2,
-      "price_table_id": 1,
+      "price_table_id": 4,
       "current_price": 36200,
       "active": true,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T21:19:40.217Z",
+      "last_synced_at": "2026-10-24T21:38:02.686Z",
       "created_at": "2026-10-24T21:19:40.217Z",
-      "updated_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
     },
     {
@@ -209,13 +277,29 @@
       "name": "میلگرد ۲۰ فولاد خوزستان (سایت مقصد)",
       "sku": "REBAR-20-KHZ",
       "factory_id": 4,
-      "price_table_id": 1,
+      "price_table_id": 3,
       "current_price": 29800,
       "active": false,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T21:19:40.217Z",
+      "last_synced_at": "2026-10-24T21:38:02.686Z",
       "created_at": "2026-10-24T21:19:40.217Z",
-      "updated_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:38:02.686Z",
+      "attributes": {}
+    },
+    {
+      "id": 8,
+      "post_id": 2004,
+      "destination_id": 2004,
+      "name": "میلگرد ۱۴ نیشابور (سایت مقصد)",
+      "sku": "REBAR-14-NISH",
+      "factory_id": 5,
+      "price_table_id": 3,
+      "current_price": 28900,
+      "active": false,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T21:38:02.686Z",
+      "created_at": "2026-10-24T21:38:02.686Z",
+      "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
     }
   ],
@@ -3256,6 +3340,76 @@
     }
   ],
   "logs": [
+    {
+      "id": 110,
+      "level": "INFO",
+      "message": "دریافت با موفقیت انجام شد: 1 محصول جدید (به صورت پیش‌فرض غیرفعال)، 3 محصول بروزرسانی، 1 کارخانه و 4 جدول قیمت از سایت مقصد وارد شدند.",
+      "metadata": {
+        "result": {
+          "success": true,
+          "message": "دریافت با موفقیت انجام شد: 1 محصول جدید (به صورت پیش‌فرض غیرفعال)، 3 محصول بروزرسانی، 1 کارخانه و 4 جدول قیمت از سایت مقصد وارد شدند.",
+          "products_imported": 1,
+          "products_updated": 3,
+          "factories_imported": 1,
+          "tables_imported": 4,
+          "total_fetched": 4,
+          "items": [
+            {
+              "id": 5,
+              "post_id": 2001,
+              "name": "تیرآهن ۱۴ ذوب آهن (سایت مقصد)",
+              "is_new": false,
+              "active": true
+            },
+            {
+              "id": 6,
+              "post_id": 2002,
+              "name": "ورق سیاه ۲ میل مبارکه (سایت مقصد)",
+              "is_new": false,
+              "active": true
+            },
+            {
+              "id": 7,
+              "post_id": 2003,
+              "name": "میلگرد ۲۰ فولاد خوزستان (سایت مقصد)",
+              "is_new": false,
+              "active": false
+            },
+            {
+              "id": 8,
+              "post_id": 2004,
+              "name": "میلگرد ۱۴ نیشابور (سایت مقصد)",
+              "is_new": true,
+              "active": false
+            }
+          ]
+        }
+      },
+      "created_at": "2026-10-24T21:38:02.690Z"
+    },
+    {
+      "id": 109,
+      "level": "INFO",
+      "message": "دریافت اطلاعات با موفقیت انجام شد: 1 محصول جدید (غیرفعال جهت بررسی)، 3 محصول بروزرسانی، 1 کارخانه و 4 جدول قیمت افزوده شد.",
+      "metadata": {
+        "productsImported": 1,
+        "productsUpdated": 3,
+        "factoriesImported": 1,
+        "tablesImported": 4,
+        "totalFetched": 4
+      },
+      "created_at": "2026-10-24T21:38:02.688Z"
+    },
+    {
+      "id": 108,
+      "level": "INFO",
+      "message": "آغاز دریافت هوشمند داده‌ها (محصولات، جداول قیمت، کارخانه‌ها) از سایت مقصد (http://localhost:3000/api/mock-wordpress)...",
+      "metadata": {
+        "baseEndpointUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/fetch-destination-data",
+        "perPage": 200
+      },
+      "created_at": "2026-10-24T21:38:02.684Z"
+    },
     {
       "id": 107,
       "level": "INFO",

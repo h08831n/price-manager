@@ -968,6 +968,7 @@ export default function App() {
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
                 onSyncWithDestination={handleSyncFactories}
+                onPullFromDestination={handlePullFromDestination}
               />
             )}
 
@@ -987,6 +988,7 @@ export default function App() {
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
                 onSyncWithDestination={handleSyncPriceTables}
+                onPullFromDestination={handlePullFromDestination}
               />
             )}
 

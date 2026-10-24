@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Play, Eye, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Clock, ArrowLeft, Globe } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Play, Eye, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Clock, ArrowLeft, Globe, Search, X, DownloadCloud } from 'lucide-react';
 import { PriceTable, Factory } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -14,6 +14,18 @@ interface PriceTablesViewProps {
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
   onSyncWithDestination?: () => Promise<any>;
+  onPullFromDestination?: () => Promise<any>;
+}
+
+function normalizePersian(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/۰/g, '0').replace(/۱/g, '1').replace(/۲/g, '2').replace(/۳/g, '3').replace(/۴/g, '4')
+    .replace(/۵/g, '5').replace(/۶/g, '6').replace(/۷/g, '7').replace(/۸/g, '8').replace(/۹/g, '9')
+    .trim();
 }
 
 export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
@@ -26,7 +38,8 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   onOpenImport,
   onExport,
   onDownloadTemplate,
-  onSyncWithDestination
+  onSyncWithDestination,
+  onPullFromDestination
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTable, setNewTable] = useState<Partial<PriceTable>>({
@@ -42,6 +55,9 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   });
   const [runningId, setRunningId] = useState<number | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<number | null>(null);
 
   // Delete modal state
   const [deletingTable, setDeletingTable] = useState<PriceTable | null>(null);
@@ -52,6 +68,21 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
     if (deletingTable) setDeletingTable(null);
     else if (isAddModalOpen) setIsAddModalOpen(false);
   }, Boolean(deletingTable || isAddModalOpen));
+
+  const filteredTables = useMemo(() => {
+    return tables.filter((tbl) => {
+      if (selectedFactoryFilter && tbl.factory_id !== selectedFactoryFilter) {
+        return false;
+      }
+      if (!searchQuery.trim()) return true;
+      const q = normalizePersian(searchQuery);
+      const nameMatch = normalizePersian(tbl.name).includes(q);
+      const factoryMatch = tbl.factory_name && normalizePersian(tbl.factory_name).includes(q);
+      const idMatch = String(tbl.id).includes(q);
+      const destMatch = String(tbl.destination_id ?? '').includes(q);
+      return nameMatch || factoryMatch || idMatch || destMatch;
+    });
+  }, [tables, searchQuery, selectedFactoryFilter]);
 
   const handleOpenAdd = () => {
     setNewTable({
@@ -92,11 +123,32 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
         <div>
           <h2 className="text-sm font-bold text-gray-900">مدیریت جداول قیمت کارخانجات</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            پایش زمان‌بندی‌شده، محاسبه حداقل قیمت در منابع رقیب و انتشار به ووکامرس
+            پایش زمان‌بندی‌شده، محاسبه حداقل قیمت در منابع رقیب و انتشار به ووکامرس ({tables.length} جدول ثبت شده)
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onPullFromDestination && (
+            <button
+              id="btn-pull-tables-destination"
+              type="button"
+              onClick={async () => {
+                setIsPulling(true);
+                try {
+                  await onPullFromDestination();
+                } finally {
+                  setIsPulling(false);
+                }
+              }}
+              disabled={isPulling}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
+              title="دریافت خودکار همه دسته‌بندی‌ها و جداول قیمت از سایت مقصد (WooCommerce)"
+            >
+              <DownloadCloud className={`w-3.5 h-3.5 text-purple-700 ${isPulling ? 'animate-bounce' : ''}`} />
+              <span>{isPulling ? 'در حال دریافت از مقصد...' : 'دریافت از سایت مقصد'}</span>
+            </button>
+          )}
+
           {onSyncWithDestination && (
             <button
               id="btn-sync-tables-destination"
@@ -114,7 +166,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
               title="همگام‌سازی دسته‌ای و خودکار جداول قیمت با سایت مقصد (WordPress) بدون ایجاد بار روی سرور"
             >
               <Globe className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'در حال ارسال بسته‌ای به مقصد...' : 'همگام‌سازی با سایت مقصد'}</span>
+              <span>{isSyncing ? 'در حال ارسال بسته‌ای به مقصد...' : 'ارسال به سایت مقصد'}</span>
             </button>
           )}
 
@@ -152,6 +204,48 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
         </div>
       </div>
 
+      {/* Search and Factory Filter Bar */}
+      <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative flex-1 w-full">
+          <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="جستجوی جدول قیمت بر اساس نام، نام کارخانه، یا شناسه مقصد..."
+            className="w-full pl-9 pr-9 py-2 text-xs border border-gray-200 rounded-md focus:border-slate-800 focus:outline-hidden transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+              title="پاک کردن جستجو"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <select
+            value={selectedFactoryFilter || ''}
+            onChange={(e) => setSelectedFactoryFilter(e.target.value ? Number(e.target.value) : null)}
+            className="text-xs border border-gray-200 rounded-md px-3 py-2 bg-white text-gray-700 focus:border-slate-800 focus:outline-hidden transition-colors"
+          >
+            <option value="">همه کارخانجات</option>
+            {factories.map((fac) => (
+              <option key={fac.id} value={fac.id}>
+                {fac.name}
+              </option>
+            ))}
+          </select>
+
+          <div className="text-xs text-gray-500 whitespace-nowrap font-mono px-2 py-1 bg-gray-50 rounded border border-gray-100">
+            نمایش {filteredTables.length} از {tables.length}
+          </div>
+        </div>
+      </div>
+
       {/* Tables List */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -173,80 +267,88 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {tables.map((tbl) => (
-                <tr
-                  key={tbl.id}
-                  onClick={() => onSelectTable(tbl)}
-                  className="hover:bg-gray-50/80 cursor-pointer transition-colors"
-                >
-                  <td className="py-3 px-4 font-mono font-bold text-slate-800 text-center bg-slate-50/50">#{tbl.id}</td>
-                  <td className="py-3 px-4 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
-                    <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه جدول در سایت مقصد">
-                      {tbl.destination_id ?? tbl.id}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 font-bold text-gray-900">{tbl.name}</td>
-                  <td className="py-3 px-4 text-gray-600">{tbl.factory_name}</td>
-                  <td className="py-3 px-4 text-center font-mono">{tbl.source_count} منبع</td>
-                  <td className="py-3 px-4 text-center font-mono">{tbl.product_count} کالا</td>
-                  <td className="py-3 px-4 text-center font-mono text-slate-700 font-semibold">{tbl.start_time}</td>
-                  <td className="py-3 px-4 text-center">{tbl.retry_interval_minutes} دقیقه</td>
-                  <td className="py-3 px-4 text-center">{tbl.max_attempts} بار</td>
-                  <td className="py-3 px-4 text-center font-mono">{tbl.price_guard_percent}٪</td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          tbl.sync_status === 'SYNCED'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-800 border border-amber-200'
-                        }`}
-                      >
-                        {tbl.sync_status === 'SYNCED' ? 'متصل به مقصد' : 'نیازمند همگام‌سازی'}
-                      </span>
-                      <span className="text-[9px] text-gray-400">
-                        {tbl.today_status === 'COMPLETED' ? 'پایش امروز انجام شد' : 'در انتظار پایش'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={(e) => handleRun(tbl.id, e)}
-                        disabled={runningId === tbl.id}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
-                        title="اجرای دستی کل جدول"
-                      >
-                        <Play className={`w-3 h-3 ${runningId === tbl.id ? 'animate-spin' : ''}`} />
-                        <span>اجرا</span>
-                      </button>
-
-                      <button
-                        onClick={() => onSelectTable(tbl)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded transition-colors"
-                        title="ویرایش کامل جدول و مدیریت منابع و سلکتورها"
-                      >
-                        <Edit2 className="w-3.5 h-3.5 text-slate-700" />
-                        <span>ویرایش و منابع</span>
-                      </button>
-
-                      {onDeleteTable && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeletingTable(tbl);
-                          }}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition-colors"
-                          title="حذف جدول قیمت"
-                        >
-                          <Trash2 className="w-3 h-3 text-rose-500" />
-                          <span>حذف</span>
-                        </button>
-                      )}
-                    </div>
+              {filteredTables.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="py-8 text-center text-gray-400">
+                    {searchQuery || selectedFactoryFilter ? 'هیچ جدول قیمتی با فیلتر انتخابی یافت نشد.' : 'هیچ جدول قیمتی در سیستم ثبت نشده است.'}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredTables.map((tbl) => (
+                  <tr
+                    key={tbl.id}
+                    onClick={() => onSelectTable(tbl)}
+                    className="hover:bg-gray-50/80 cursor-pointer transition-colors"
+                  >
+                    <td className="py-3 px-4 font-mono font-bold text-slate-800 text-center bg-slate-50/50">#{tbl.id}</td>
+                    <td className="py-3 px-4 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
+                      <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه جدول در سایت مقصد">
+                        {tbl.destination_id ?? tbl.id}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-bold text-gray-900">{tbl.name}</td>
+                    <td className="py-3 px-4 text-gray-600">{tbl.factory_name}</td>
+                    <td className="py-3 px-4 text-center font-mono">{tbl.source_count} منبع</td>
+                    <td className="py-3 px-4 text-center font-mono">{tbl.product_count} کالا</td>
+                    <td className="py-3 px-4 text-center font-mono text-slate-700 font-semibold">{tbl.start_time}</td>
+                    <td className="py-3 px-4 text-center">{tbl.retry_interval_minutes} دقیقه</td>
+                    <td className="py-3 px-4 text-center">{tbl.max_attempts} بار</td>
+                    <td className="py-3 px-4 text-center font-mono">{tbl.price_guard_percent}٪</td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            tbl.sync_status === 'SYNCED'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          }`}
+                        >
+                          {tbl.sync_status === 'SYNCED' ? 'متصل به مقصد' : 'نیازمند همگام‌سازی'}
+                        </span>
+                        <span className="text-[9px] text-gray-400">
+                          {tbl.today_status === 'COMPLETED' ? 'پایش امروز انجام شد' : 'در انتظار پایش'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={(e) => handleRun(tbl.id, e)}
+                          disabled={runningId === tbl.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition-colors"
+                          title="اجرای دستی کل جدول"
+                        >
+                          <Play className={`w-3 h-3 ${runningId === tbl.id ? 'animate-spin' : ''}`} />
+                          <span>اجرا</span>
+                        </button>
+
+                        <button
+                          onClick={() => onSelectTable(tbl)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded transition-colors"
+                          title="ویرایش کامل جدول و مدیریت منابع و سلکتورها"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-slate-700" />
+                          <span>ویرایش و منابع</span>
+                        </button>
+
+                        {onDeleteTable && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingTable(tbl);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition-colors"
+                            title="حذف جدول قیمت"
+                          >
+                            <Trash2 className="w-3 h-3 text-rose-500" />
+                            <span>حذف</span>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -2373,19 +2373,35 @@ apiRouter.all('/mock-wordpress/wp-json/price-system/v1/test-connection', (req: R
 });
 
 apiRouter.all('/mock-wordpress/wp-json/price-system/v1/fetch-destination-data', (req: Request, res: Response) => {
+  const page = parseInt(String(req.query.page || '1'), 10);
+  const perPage = parseInt(String(req.query.per_page || '250'), 10);
+
   res.json({
     success: true,
-    total_products: 3,
-    total_factories: 3,
+    page,
+    per_page: perPage,
+    total_products: 4,
+    total_pages: 1,
+    has_more: false,
+    total_factories: 4,
+    total_price_tables: 4,
     factories: [
       { id: 101, name: 'کارخانه فولاد مبارکه اصفهان' },
       { id: 102, name: 'کارخانه ذوب آهن اصفهان' },
-      { id: 103, name: 'فولاد خوزستان' }
+      { id: 103, name: 'فولاد خوزستان' },
+      { id: 104, name: 'فولاد نیشابور' }
+    ],
+    price_tables: [
+      { id: 201, name: 'تیرآهن' },
+      { id: 202, name: 'میلگرد' },
+      { id: 203, name: 'ورق سیاه' },
+      { id: 204, name: 'نبشی و ناودانی' }
     ],
     products: [
-      { post_id: 2001, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', active: false },
-      { post_id: 2002, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', active: false },
-      { post_id: 2003, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', active: false }
+      { post_id: 2001, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', category_name: 'تیرآهن', active: false },
+      { post_id: 2002, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', category_name: 'ورق سیاه', active: false },
+      { post_id: 2003, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', category_name: 'میلگرد', active: false },
+      { post_id: 2004, name: 'میلگرد ۱۴ نیشابور (سایت مقصد)', sku: 'REBAR-14-NISH', current_price: 28900, factory_name: 'فولاد نیشابور', category_name: 'میلگرد', active: false }
     ],
     message: 'اطلاعات با موفقیت استخراج شد.'
   });
