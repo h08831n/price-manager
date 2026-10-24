@@ -15,8 +15,13 @@ import {
   saveCachedPickerPage,
   invalidatePickerCache
 } from '../scraper/pickerCache';
+import {
+  publishTableToWordPress,
+  syncFactoriesToDestination,
+  syncPriceTablesToDestination,
+  syncProductsToDestination
+} from '../wordpress/client';
 import { excelService } from '../excel/excelService';
-import { publishTableToWordPress } from '../wordpress/client';
 import { FIXTURE_PAGES } from '../fixtures/fixtures';
 import { loadSourcePage } from '../scraper/pageLoader';
 import {
@@ -387,15 +392,22 @@ apiRouter.get('/products', (req: Request, res: Response) => {
 
 apiRouter.post('/products', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { post_id, name, sku, factory_id, price_table_id, current_price, price_adjustment, active, attributes } = req.body;
+  const { post_id, destination_id, name, sku, factory_id, price_table_id, current_price, price_adjustment, active, attributes } = req.body;
 
-  if (!post_id || isNaN(parseInt(post_id, 10))) {
-    return res.status(400).json({ error: 'شناسه post_id ووکامرس الزامی است.' });
+  const targetDestId = destination_id ? parseInt(destination_id, 10) : (post_id ? parseInt(post_id, 10) : null);
+
+  if (!targetDestId || isNaN(targetDestId)) {
+    return res.status(400).json({ error: 'شناسه آیدی سایت مقصد (post_id / destination_id) الزامی است.' });
   }
 
-  const existing = schema.products.find((p) => p.post_id === parseInt(post_id, 10));
+  // Prevent duplicate destination_id / post_id
+  const existing = schema.products.find(
+    (p) => p.post_id === targetDestId || (p.destination_id && p.destination_id === targetDestId)
+  );
   if (existing) {
-    return res.status(400).json({ error: `محصولی با post_id = ${post_id} از قبل در سیستم وجود دارد.` });
+    return res.status(400).json({
+      error: `محصولی با آیدی مقصد ${targetDestId} از قبل در سیستم وجود دارد (شناسه سیستم: ${existing.id} - ${existing.name}). افزودن تکراری مجاز نیست.`
+    });
   }
 
   const parsedAdj =
@@ -405,8 +417,9 @@ apiRouter.post('/products', (req: Request, res: Response) => {
 
   const newProd = {
     id: db.getNextId('products'),
-    post_id: parseInt(post_id, 10),
-    name: name || `محصول ${post_id}`,
+    post_id: targetDestId,
+    destination_id: targetDestId,
+    name: name || `محصول ${targetDestId}`,
     sku: sku || '',
     factory_id: parseInt(factory_id, 10) || 1,
     price_table_id: parseInt(price_table_id, 10) || 1,
@@ -414,6 +427,7 @@ apiRouter.post('/products', (req: Request, res: Response) => {
     price_adjustment: parsedAdj,
     active: active !== undefined ? Boolean(active) : true,
     attributes: attributes || {},
+    sync_status: 'NOT_SYNCED' as const,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -434,7 +448,25 @@ apiRouter.put('/products/:id', (req: Request, res: Response) => {
   const prod = schema.products.find((p) => p.id === id);
   if (!prod) return res.status(404).json({ error: 'محصول یافت نشد.' });
 
-  const { name, sku, factory_id, price_table_id, current_price, price_adjustment, active, attributes } = req.body;
+  const { destination_id, post_id, name, sku, factory_id, price_table_id, current_price, price_adjustment, active, attributes } = req.body;
+
+  if (destination_id !== undefined || post_id !== undefined) {
+    const newDestId = destination_id ? parseInt(destination_id, 10) : parseInt(post_id, 10);
+    if (!isNaN(newDestId) && newDestId > 0) {
+      // Duplicate check across other products
+      const dup = schema.products.find(
+        (p) => p.id !== id && (p.post_id === newDestId || p.destination_id === newDestId)
+      );
+      if (dup) {
+        return res.status(400).json({
+          error: `محصول دیگری با آیدی مقصد ${newDestId} در سیستم ثبت شده است (${dup.name}).`
+        });
+      }
+      prod.destination_id = newDestId;
+      prod.post_id = newDestId;
+    }
+  }
+
   if (name !== undefined) prod.name = name;
   if (sku !== undefined) prod.sku = sku;
   if (factory_id !== undefined) prod.factory_id = parseInt(factory_id, 10);
@@ -498,13 +530,26 @@ apiRouter.get('/factories', (req: Request, res: Response) => {
 
 apiRouter.post('/factories', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { name, active } = req.body;
+  const { name, destination_id, active } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'نام کارخانه الزامی است.' });
 
+  const targetDestId = destination_id ? parseInt(destination_id, 10) : null;
+  if (targetDestId) {
+    const dup = schema.factories.find((f) => f.destination_id === targetDestId);
+    if (dup) {
+      return res.status(400).json({
+        error: `کارخانه‌ای با آیدی مقصد ${targetDestId} از قبل در سیستم وجود دارد (${dup.name}). ثبت تکراری مجاز نیست.`
+      });
+    }
+  }
+
+  const newId = db.getNextId('factories');
   const newFac = {
-    id: db.getNextId('factories'),
+    id: newId,
+    destination_id: targetDestId || newId,
     name: name.trim(),
     active: active !== undefined ? Boolean(active) : true,
+    sync_status: 'NOT_SYNCED' as const,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -519,6 +564,19 @@ apiRouter.put('/factories/:id', (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
   const fac = schema.factories.find((f) => f.id === id);
   if (!fac) return res.status(404).json({ error: 'کارخانه یافت نشد.' });
+
+  if (req.body.destination_id !== undefined && req.body.destination_id !== null && req.body.destination_id !== '') {
+    const newDestId = parseInt(req.body.destination_id, 10);
+    if (!isNaN(newDestId) && newDestId > 0) {
+      const dup = schema.factories.find((f) => f.id !== id && f.destination_id === newDestId);
+      if (dup) {
+        return res.status(400).json({
+          error: `کارخانه دیگری با آیدی مقصد ${newDestId} در سیستم ثبت شده است (${dup.name}).`
+        });
+      }
+      fac.destination_id = newDestId;
+    }
+  }
 
   if (req.body.name !== undefined) fac.name = req.body.name.trim();
   if (req.body.active !== undefined) fac.active = Boolean(req.body.active);
@@ -595,12 +653,24 @@ apiRouter.get('/price-tables', (req: Request, res: Response) => {
 
 apiRouter.post('/price-tables', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { name, factory_id, start_time, retry_interval_minutes, max_attempts, price_guard_percent, default_price_adjustment, active } = req.body;
+  const { name, destination_id, factory_id, start_time, retry_interval_minutes, max_attempts, price_guard_percent, default_price_adjustment, active } = req.body;
 
   if (!name || !name.trim()) return res.status(400).json({ error: 'نام جدول قیمت الزامی است.' });
 
+  const targetDestId = destination_id ? parseInt(destination_id, 10) : null;
+  if (targetDestId) {
+    const dup = schema.price_tables.find((t) => t.destination_id === targetDestId);
+    if (dup) {
+      return res.status(400).json({
+        error: `جدول قیمتی با آیدی مقصد ${targetDestId} از قبل در سیستم وجود دارد (${dup.name}). ثبت تکراری مجاز نیست.`
+      });
+    }
+  }
+
+  const newId = db.getNextId('price_tables');
   const newTable = {
-    id: db.getNextId('price_tables'),
+    id: newId,
+    destination_id: targetDestId || newId,
     name: name.trim(),
     factory_id: parseInt(factory_id, 10) || 1,
     start_time: start_time || '11:00',
@@ -609,6 +679,7 @@ apiRouter.post('/price-tables', (req: Request, res: Response) => {
     price_guard_percent: parseFloat(price_guard_percent) || 30,
     default_price_adjustment: parseFloat(default_price_adjustment) || 0,
     active: active !== undefined ? Boolean(active) : true,
+    sync_status: 'NOT_SYNCED' as const,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -624,6 +695,19 @@ apiRouter.put('/price-tables/:id', (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
   const table = schema.price_tables.find((t) => t.id === id);
   if (!table) return res.status(404).json({ error: 'جدول قیمت یافت نشد.' });
+
+  if (req.body.destination_id !== undefined && req.body.destination_id !== null && req.body.destination_id !== '') {
+    const newDestId = parseInt(req.body.destination_id, 10);
+    if (!isNaN(newDestId) && newDestId > 0) {
+      const dup = schema.price_tables.find((t) => t.id !== id && t.destination_id === newDestId);
+      if (dup) {
+        return res.status(400).json({
+          error: `جدول قیمت دیگری با آیدی مقصد ${newDestId} در سیستم ثبت شده است (${dup.name}).`
+        });
+      }
+      table.destination_id = newDestId;
+    }
+  }
 
   if (req.body.name !== undefined) table.name = req.body.name.trim();
   if (req.body.factory_id !== undefined) table.factory_id = parseInt(req.body.factory_id, 10);
@@ -2074,7 +2158,59 @@ apiRouter.get('/screenshots/:filename', (req: Request, res: Response) => {
   }
 });
 
-// Mock WordPress Endpoint for local testing & live verification
+// ==========================================
+// 15. DESTINATION SITE (WORDPRESS) SYNCHRONIZATION ENDPOINTS
+// ==========================================
+
+// 1. Sync All Products to Destination Site
+apiRouter.post('/sync/products', async (req: Request, res: Response) => {
+  try {
+    const result = await syncProductsToDestination();
+    db.log('INFO', `همگام‌سازی محصولات با سایت مقصد انجام شد: ${result.synced} از ${result.total} محصول`, { result });
+    res.json(result);
+  } catch (err: any) {
+    db.log('ERROR', `خطا در همگام‌سازی محصولات با سایت مقصد: ${err.message}`, { error: err.message });
+    res.status(500).json({
+      success: false,
+      entity: 'products',
+      message: `خطا در همگام‌سازی محصولات: ${err.message}`
+    });
+  }
+});
+
+// 2. Sync All Factories to Destination Site
+apiRouter.post('/sync/factories', async (req: Request, res: Response) => {
+  try {
+    const result = await syncFactoriesToDestination();
+    db.log('INFO', `همگام‌سازی کارخانجات با سایت مقصد انجام شد: ${result.synced} از ${result.total} کارخانه`, { result });
+    res.json(result);
+  } catch (err: any) {
+    db.log('ERROR', `خطا در همگام‌سازی کارخانجات با سایت مقصد: ${err.message}`, { error: err.message });
+    res.status(500).json({
+      success: false,
+      entity: 'factories',
+      message: `خطا در همگام‌سازی کارخانجات: ${err.message}`
+    });
+  }
+});
+
+// 3. Sync All Price Tables to Destination Site
+apiRouter.post('/sync/price-tables', async (req: Request, res: Response) => {
+  try {
+    const result = await syncPriceTablesToDestination();
+    db.log('INFO', `همگام‌سازی جداول قیمت با سایت مقصد انجام شد: ${result.synced} از ${result.total} جدول`, { result });
+    res.json(result);
+  } catch (err: any) {
+    db.log('ERROR', `خطا در همگام‌سازی جداول قیمت با سایت مقصد: ${err.message}`, { error: err.message });
+    res.status(500).json({
+      success: false,
+      entity: 'price_tables',
+      message: `خطا در همگام‌سازی جداول قیمت: ${err.message}`
+    });
+  }
+});
+
+// Mock WordPress Endpoints for local testing & live verification
 apiRouter.post('/mock-wordpress/wp-json/price-system/v1/bulk-update', (req: Request, res: Response) => {
   const { price_table_id, products } = req.body;
   const items = (products || []).map((p: any) => ({
@@ -2088,6 +2224,66 @@ apiRouter.post('/mock-wordpress/wp-json/price-system/v1/bulk-update', (req: Requ
     price_table_id,
     updated: items.length,
     failed: 0,
+    items
+  });
+});
+
+apiRouter.post('/mock-wordpress/wp-json/price-system/v1/sync-factories', (req: Request, res: Response) => {
+  const { factories } = req.body;
+  const items = (factories || []).map((f: any) => ({
+    id: f.id,
+    destination_id: f.destination_id || f.id,
+    name: f.name,
+    success: true
+  }));
+
+  res.json({
+    success: true,
+    entity: 'factories',
+    total: items.length,
+    synced: items.length,
+    failed: 0,
+    message: `همگام‌سازی ${items.length} کارخانه با سایت مقصد (وردپرس) با موفقیت انجام شد.`,
+    items
+  });
+});
+
+apiRouter.post('/mock-wordpress/wp-json/price-system/v1/sync-tables', (req: Request, res: Response) => {
+  const { tables } = req.body;
+  const items = (tables || []).map((t: any) => ({
+    id: t.id,
+    destination_id: t.destination_id || t.id,
+    name: t.name,
+    success: true
+  }));
+
+  res.json({
+    success: true,
+    entity: 'price_tables',
+    total: items.length,
+    synced: items.length,
+    failed: 0,
+    message: `همگام‌سازی ${items.length} جدول قیمت با سایت مقصد با موفقیت انجام شد.`,
+    items
+  });
+});
+
+apiRouter.post('/mock-wordpress/wp-json/price-system/v1/sync-products', (req: Request, res: Response) => {
+  const { products } = req.body;
+  const items = (products || []).map((p: any) => ({
+    id: p.id,
+    destination_id: p.destination_id || p.post_id || p.id,
+    name: p.name,
+    success: true
+  }));
+
+  res.json({
+    success: true,
+    entity: 'products',
+    total: items.length,
+    synced: items.length,
+    failed: 0,
+    message: `همگام‌سازی و اتصال ${items.length} محصول با سایت مقصد با موفقیت انجام شد.`,
     items
   });
 });

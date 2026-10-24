@@ -39,6 +39,27 @@ class PriceSystemSyncPlugin {
             'callback' => array($this, 'handle_single_update'),
             'permission_callback' => array($this, 'verify_api_token'),
         ));
+
+        // Sync Factories / Producers Endpoint
+        register_rest_route(self::API_NAMESPACE, '/sync-factories', array(
+            'methods'  => 'POST',
+            'callback' => array($this, 'handle_sync_factories'),
+            'permission_callback' => array($this, 'verify_api_token'),
+        ));
+
+        // Sync Price Tables Endpoint
+        register_rest_route(self::API_NAMESPACE, '/sync-tables', array(
+            'methods'  => 'POST',
+            'callback' => array($this, 'handle_sync_tables'),
+            'permission_callback' => array($this, 'verify_api_token'),
+        ));
+
+        // Comprehensive Products Sync & Connect Endpoint
+        register_rest_route(self::API_NAMESPACE, '/sync-products', array(
+            'methods'  => 'POST',
+            'callback' => array($this, 'handle_sync_products'),
+            'permission_callback' => array($this, 'verify_api_token'),
+        ));
     }
 
     /**
@@ -172,6 +193,205 @@ class PriceSystemSyncPlugin {
             'post_id'   => $post_id,
             'old_price' => $old_price,
             'new_price' => $new_price
+        ));
+    }
+
+    /**
+     * Handle Synchronization of Factories / Producers
+     */
+    public function handle_sync_factories($request) {
+        $params = $request->get_json_params();
+        $factories = isset($params['factories']) && is_array($params['factories']) ? $params['factories'] : array();
+
+        $results = array();
+        $synced_count = 0;
+
+        foreach ($factories as $f) {
+            $id = isset($f['id']) ? intval($f['id']) : 0;
+            $name = isset($f['name']) ? sanitize_text_field($f['name']) : '';
+            $dest_id = isset($f['destination_id']) ? intval($f['destination_id']) : $id;
+
+            if ($id <= 0 || empty($name)) {
+                $results[] = array('id' => $id, 'destination_id' => $dest_id, 'name' => $name, 'success' => false, 'error' => 'نام کارخانه یا شناسه خالی است');
+                continue;
+            }
+
+            // If destination_id corresponds to a taxonomy term (e.g. pa_factory or product_brand)
+            if (taxonomy_exists('pa_factory')) {
+                $term = term_exists($name, 'pa_factory');
+                if (!$term) {
+                    $inserted = wp_insert_term($name, 'pa_factory');
+                    if (!is_wp_error($inserted)) {
+                        $dest_id = $inserted['term_id'];
+                    }
+                } else {
+                    $dest_id = is_array($term) ? $term['term_id'] : intval($term);
+                }
+            }
+
+            // Save mapping option for persistent lookup
+            update_option('price_system_factory_' . $id, array(
+                'id' => $id,
+                'name' => $name,
+                'destination_id' => $dest_id,
+                'synced_at' => current_time('mysql')
+            ));
+
+            $synced_count++;
+            $results[] = array(
+                'id' => $id,
+                'destination_id' => $dest_id,
+                'name' => $name,
+                'success' => true
+            );
+        }
+
+        return rest_ensure_response(array(
+            'success' => true,
+            'entity'  => 'factories',
+            'total'   => count($factories),
+            'synced'  => $synced_count,
+            'failed'  => count($factories) - $synced_count,
+            'message' => "همگام‌سازی {$synced_count} کارخانه با موفقیت در وردپرس ثبت گردید.",
+            'items'   => $results
+        ));
+    }
+
+    /**
+     * Handle Synchronization of Price Tables
+     */
+    public function handle_sync_tables($request) {
+        $params = $request->get_json_params();
+        $tables = isset($params['tables']) && is_array($params['tables']) ? $params['tables'] : array();
+
+        $results = array();
+        $synced_count = 0;
+
+        foreach ($tables as $t) {
+            $id = isset($t['id']) ? intval($t['id']) : 0;
+            $name = isset($t['name']) ? sanitize_text_field($t['name']) : '';
+            $dest_id = isset($t['destination_id']) ? intval($t['destination_id']) : $id;
+
+            if ($id <= 0 || empty($name)) {
+                $results[] = array('id' => $id, 'destination_id' => $dest_id, 'name' => $name, 'success' => false, 'error' => 'نام جدول یا شناسه خالی است');
+                continue;
+            }
+
+            // Save table definition in WordPress options
+            update_option('price_system_table_' . $id, array(
+                'id' => $id,
+                'name' => $name,
+                'factory_id' => isset($t['factory_id']) ? intval($t['factory_id']) : 0,
+                'destination_id' => $dest_id,
+                'default_price_adjustment' => isset($t['default_price_adjustment']) ? floatval($t['default_price_adjustment']) : 0,
+                'synced_at' => current_time('mysql')
+            ));
+
+            $synced_count++;
+            $results[] = array(
+                'id' => $id,
+                'destination_id' => $dest_id,
+                'name' => $name,
+                'success' => true
+            );
+        }
+
+        return rest_ensure_response(array(
+            'success' => true,
+            'entity'  => 'price_tables',
+            'total'   => count($tables),
+            'synced'  => $synced_count,
+            'failed'  => count($tables) - $synced_count,
+            'message' => "همگام‌سازی {$synced_count} جدول قیمت با موفقیت در وردپرس ثبت گردید.",
+            'items'   => $results
+        ));
+    }
+
+    /**
+     * Handle Comprehensive Products Sync & Connect
+     */
+    public function handle_sync_products($request) {
+        $params = $request->get_json_params();
+        $products = isset($params['products']) && is_array($params['products']) ? $params['products'] : array();
+
+        $results = array();
+        $synced_count = 0;
+
+        foreach ($products as $p) {
+            $id = isset($p['id']) ? intval($p['id']) : 0;
+            $post_id = isset($p['destination_id']) ? intval($p['destination_id']) : (isset($p['post_id']) ? intval($p['post_id']) : 0);
+            $name = isset($p['name']) ? sanitize_text_field($p['name']) : '';
+            $sku = isset($p['sku']) ? sanitize_text_field($p['sku']) : '';
+            $price = isset($p['current_price']) ? floatval($p['current_price']) : 0;
+
+            if ($post_id <= 0) {
+                // If post_id is not given, check if a product with this SKU already exists to prevent duplicate insertion
+                if (!empty($sku)) {
+                    $found_id = wc_get_product_id_by_sku($sku);
+                    if ($found_id) {
+                        $post_id = $found_id;
+                    }
+                }
+            }
+
+            // Verify or connect post
+            if ($post_id > 0) {
+                $post = get_post($post_id);
+                if ($post) {
+                    // Update meta for tight connection
+                    update_post_meta($post_id, '_price_system_product_id', $id);
+                    update_post_meta($post_id, '_price_system_table_id', isset($p['price_table_id']) ? intval($p['price_table_id']) : 0);
+                    update_post_meta($post_id, '_price_system_factory_id', isset($p['factory_id']) ? intval($p['factory_id']) : 0);
+                    update_post_meta($post_id, '_price_system_last_sync', current_time('mysql'));
+
+                    if ($price > 0) {
+                        update_post_meta($post_id, '_regular_price', $price);
+                        update_post_meta($post_id, '_price', $price);
+                    }
+
+                    if (function_exists('wc_delete_product_transients')) {
+                        wc_delete_product_transients($post_id);
+                    }
+
+                    $synced_count++;
+                    $results[] = array(
+                        'id' => $id,
+                        'destination_id' => $post_id,
+                        'name' => $name,
+                        'success' => true
+                    );
+                    continue;
+                }
+            }
+
+            // If product does not exist, record connected virtual destination
+            $final_dest_id = $post_id > 0 ? $post_id : $id;
+            update_option('price_system_prod_' . $id, array(
+                'id' => $id,
+                'name' => $name,
+                'sku' => $sku,
+                'price' => $price,
+                'destination_id' => $final_dest_id,
+                'synced_at' => current_time('mysql')
+            ));
+
+            $synced_count++;
+            $results[] = array(
+                'id' => $id,
+                'destination_id' => $final_dest_id,
+                'name' => $name,
+                'success' => true
+            );
+        }
+
+        return rest_ensure_response(array(
+            'success' => true,
+            'entity'  => 'products',
+            'total'   => count($products),
+            'synced'  => $synced_count,
+            'failed'  => count($products) - $synced_count,
+            'message' => "همگام‌سازی و اتصال {$synced_count} محصول با موفقیت انجام شد.",
+            'items'   => $results
         ));
     }
 

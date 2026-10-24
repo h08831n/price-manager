@@ -5,7 +5,10 @@
       "name": "ذوب آهن اصفهان",
       "active": true,
       "created_at": "2026-09-21T08:19:39.381Z",
-      "updated_at": "2026-09-21T08:19:39.381Z"
+      "updated_at": "2026-09-21T08:19:39.381Z",
+      "destination_id": 1,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T19:55:43.453Z"
     }
   ],
   "price_tables": [
@@ -24,7 +27,10 @@
       "updated_at": "2026-09-21T08:19:39.381Z",
       "default_price_adjustment": 0,
       "default_price_offset": 0,
-      "vat_percent": 10
+      "vat_percent": 10,
+      "destination_id": 1,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T19:55:48.017Z"
     }
   ],
   "products": [
@@ -51,7 +57,10 @@
       "effective_adjustment": 0,
       "price_adjustment": null,
       "price_offset": 0,
-      "margin_percent": 0
+      "margin_percent": 0,
+      "destination_id": 1840,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T19:55:52.627Z"
     },
     {
       "id": 2,
@@ -76,7 +85,10 @@
       "effective_adjustment": 0,
       "price_adjustment": null,
       "price_offset": 0,
-      "margin_percent": 0
+      "margin_percent": 0,
+      "destination_id": 1841,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T19:55:52.627Z"
     },
     {
       "id": 3,
@@ -101,7 +113,10 @@
       "effective_adjustment": 0,
       "price_adjustment": null,
       "price_offset": 0,
-      "margin_percent": 0
+      "margin_percent": 0,
+      "destination_id": 1842,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T19:55:52.627Z"
     },
     {
       "id": 4,
@@ -126,7 +141,10 @@
       "effective_adjustment": 0,
       "price_adjustment": null,
       "price_offset": 0,
-      "margin_percent": 0
+      "margin_percent": 0,
+      "destination_id": 1843,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T19:55:52.627Z"
     }
   ],
   "sites": [
@@ -3166,6 +3184,123 @@
   ],
   "logs": [
     {
+      "id": 101,
+      "level": "INFO",
+      "message": "همگام‌سازی محصولات با سایت مقصد انجام شد: 4 از 4 محصول",
+      "metadata": {
+        "result": {
+          "success": true,
+          "entity": "products",
+          "total": 4,
+          "synced": 4,
+          "failed": 0,
+          "message": "همگام‌سازی و اتصال 4 محصول با سایت مقصد با موفقیت انجام شد.",
+          "items": [
+            {
+              "id": 1,
+              "destination_id": 1840,
+              "name": "میلگرد ۱۲ ذوب آهن",
+              "success": true
+            },
+            {
+              "id": 2,
+              "destination_id": 1841,
+              "name": "میلگرد ۱۴ ذوب آهن",
+              "success": true
+            },
+            {
+              "id": 3,
+              "destination_id": 1842,
+              "name": "میلگرد ۱۶ ذوب آهن",
+              "success": true
+            },
+            {
+              "id": 4,
+              "destination_id": 1843,
+              "name": "میلگرد ۱۸ ذوب آهن",
+              "success": true
+            }
+          ]
+        }
+      },
+      "created_at": "2026-10-24T19:55:52.629Z"
+    },
+    {
+      "id": 100,
+      "level": "INFO",
+      "message": "همگام‌سازی جامع محصولات با سایت مقصد (4 محصول)...",
+      "metadata": {
+        "count": 4
+      },
+      "created_at": "2026-10-24T19:55:52.620Z"
+    },
+    {
+      "id": 99,
+      "level": "INFO",
+      "message": "همگام‌سازی جداول قیمت با سایت مقصد انجام شد: 1 از 1 جدول",
+      "metadata": {
+        "result": {
+          "success": true,
+          "entity": "price_tables",
+          "total": 1,
+          "synced": 1,
+          "failed": 0,
+          "message": "همگام‌سازی 1 جدول قیمت با سایت مقصد با موفقیت انجام شد.",
+          "items": [
+            {
+              "id": 1,
+              "destination_id": 1,
+              "name": "میلگرد ذوب آهن",
+              "success": true
+            }
+          ]
+        }
+      },
+      "created_at": "2026-10-24T19:55:48.019Z"
+    },
+    {
+      "id": 98,
+      "level": "INFO",
+      "message": "همگام‌سازی جداول قیمت با سایت مقصد (1 جدول)...",
+      "metadata": {
+        "count": 1
+      },
+      "created_at": "2026-10-24T19:55:48.008Z"
+    },
+    {
+      "id": 97,
+      "level": "INFO",
+      "message": "همگام‌سازی کارخانجات با سایت مقصد انجام شد: 1 از 1 کارخانه",
+      "metadata": {
+        "result": {
+          "success": true,
+          "entity": "factories",
+          "total": 1,
+          "synced": 1,
+          "failed": 0,
+          "message": "همگام‌سازی 1 کارخانه با سایت مقصد (وردپرس) با موفقیت انجام شد.",
+          "items": [
+            {
+              "id": 1,
+              "destination_id": 1,
+              "name": "ذوب آهن اصفهان",
+              "success": true
+            }
+          ]
+        }
+      },
+      "created_at": "2026-10-24T19:55:43.455Z"
+    },
+    {
+      "id": 96,
+      "level": "INFO",
+      "message": "همگام‌سازی کارخانجات با سایت مقصد (1 کارخانه)...",
+      "metadata": {
+        "count": 1
+      },
+      "created_at": "2026-10-24T19:55:43.402Z"
+    },
+    {
       "id": 95,
       "level": "INFO",
       "message": "نتیجه انتشار در وردپرس: 4 موفق، 0 ناموفق",
@@ -4457,7 +4592,7 @@
       "status": "SUCCESS"
     }
   ],
-  "schema_version": 5,
+  "schema_version": 6,
   "schema_migrations": [
     {
       "version": 1,
@@ -4488,6 +4623,12 @@
       "name": "normalize_table_sources_and_selectors",
       "description": "Ensure table sources and product selectors have clean update_time_xpath fields and active flags",
       "applied_at": "2026-10-10T09:35:54.365Z"
+    },
+    {
+      "version": 6,
+      "name": "destination_site_identifiers_and_sync",
+      "description": "Add destination_id (WordPress target ID), last_synced_at, and sync_status to factories, price_tables, and products",
+      "applied_at": "2026-10-24T19:55:36.414Z"
     }
   ]
 }

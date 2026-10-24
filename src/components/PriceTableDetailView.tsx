@@ -24,6 +24,7 @@ import {
   MoveUp,
   MoveDown,
   AlertTriangle,
+  AlertCircle,
   Table,
   Search
 } from 'lucide-react';
@@ -53,7 +54,7 @@ interface PriceTableDetailViewProps {
   factories?: Factory[];
   onBack: () => void;
   onRunTable: (tableId: number) => Promise<void>;
-  onRunSource: (sourceId: number) => Promise<void>;
+  onRunSource: (sourceId: number) => Promise<any>;
   onSaveTable?: (table: Partial<PriceTable>) => Promise<void>;
   onDeleteTable?: (tableId: number) => Promise<void>;
   onSaveTableSource?: (data: Partial<TableSource> & { url?: string; new_url?: string }) => Promise<void>;

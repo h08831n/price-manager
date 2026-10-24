@@ -352,7 +352,7 @@ export class DatabaseManager {
       logs: [],
       config_history: [],
       import_history: [],
-      schema_version: 5,
+      schema_version: 6,
       schema_migrations: []
     };
 

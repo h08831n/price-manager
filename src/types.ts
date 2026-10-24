@@ -4,16 +4,20 @@ export type PersianDirection = 'rtl';
 
 export interface Factory {
   id: number;
+  destination_id?: number | null; // ID of the factory / term / post in the destination site (WordPress/WooCommerce)
   name: string;
   active: boolean;
   created_at: string;
   updated_at: string;
   product_count?: number;
   table_count?: number;
+  last_synced_at?: string | null;
+  sync_status?: 'SYNCED' | 'NOT_SYNCED' | 'PENDING' | 'FAILED';
 }
 
 export interface PriceTable {
   id: number;
+  destination_id?: number | null; // ID of the price table / post / custom entity in destination site
   name: string;
   factory_id: number;
   factory_name?: string;
@@ -30,6 +34,8 @@ export interface PriceTable {
   source_count?: number;
   product_count?: number;
   today_status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  last_synced_at?: string | null;
+  sync_status?: 'SYNCED' | 'NOT_SYNCED' | 'PENDING' | 'FAILED';
 }
 
 export interface ProductAttribute {
@@ -41,6 +47,7 @@ export interface ProductAttribute {
 
 export interface Product {
   id: number;
+  destination_id?: number | null; // Explicit Destination ID (matches post_id in WooCommerce/WordPress)
   post_id: number; // Exact WordPress / WooCommerce post ID
   name: string;
   sku?: string;
@@ -57,6 +64,8 @@ export interface Product {
   attributes: Record<string, any>; // e.g. { pa_size: "16", pa_grade: "A3" }
   created_at: string;
   updated_at: string;
+  last_synced_at?: string | null;
+  sync_status?: 'SYNCED' | 'NOT_SYNCED' | 'PENDING' | 'FAILED';
 }
 
 export type ScrapeMethod = 'FETCH' | 'PLAYWRIGHT';

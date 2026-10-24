@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Play, Eye, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Clock, ArrowLeft } from 'lucide-react';
+import { Plus, Play, Eye, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Clock, ArrowLeft, Globe } from 'lucide-react';
 import { PriceTable, Factory } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -13,6 +13,7 @@ interface PriceTablesViewProps {
   onOpenImport: (entity: string) => void;
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
+  onSyncWithDestination?: () => Promise<any>;
 }
 
 export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
@@ -24,11 +25,13 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   onDeleteTable,
   onOpenImport,
   onExport,
-  onDownloadTemplate
+  onDownloadTemplate,
+  onSyncWithDestination
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTable, setNewTable] = useState<Partial<PriceTable>>({
     name: '',
+    destination_id: undefined,
     factory_id: factories[0]?.id || 1,
     start_time: '11:00',
     retry_interval_minutes: 30,
@@ -38,6 +41,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
     active: true
   });
   const [runningId, setRunningId] = useState<number | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Delete modal state
   const [deletingTable, setDeletingTable] = useState<PriceTable | null>(null);
@@ -52,6 +56,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   const handleOpenAdd = () => {
     setNewTable({
       name: '',
+      destination_id: undefined,
       factory_id: factories[0]?.id || 1,
       start_time: '11:00',
       retry_interval_minutes: 30,
@@ -91,7 +96,28 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onSyncWithDestination && (
+            <button
+              id="btn-sync-tables-destination"
+              type="button"
+              onClick={async () => {
+                setIsSyncing(true);
+                try {
+                  await onSyncWithDestination();
+                } finally {
+                  setIsSyncing(false);
+                }
+              }}
+              disabled={isSyncing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
+              title="همگام‌سازی و اتصال جداول قیمت با سایت مقصد (WordPress)"
+            >
+              <Globe className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'در حال همگام‌سازی مقصد...' : 'همگام‌سازی با سایت مقصد'}</span>
+            </button>
+          )}
+
           <button
             onClick={handleOpenAdd}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors"
@@ -132,6 +158,8 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
           <table className="w-full text-right text-xs">
             <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
               <tr>
+                <th className="py-3 px-4 w-16 text-center font-mono">آیدی سیستم</th>
+                <th className="py-3 px-4 w-24 text-center font-mono text-purple-900 bg-purple-50/50">آیدی مقصد</th>
                 <th className="py-3 px-4">نام جدول</th>
                 <th className="py-3 px-4">کارخانه مربوطه</th>
                 <th className="py-3 px-4 text-center">تعداد منابع</th>
@@ -140,7 +168,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                 <th className="py-3 px-4 text-center">فاصله تلاش</th>
                 <th className="py-3 px-4 text-center">سقف تلاش</th>
                 <th className="py-3 px-4 text-center">Price Guard</th>
-                <th className="py-3 px-4 text-center">وضعیت امروز</th>
+                <th className="py-3 px-4 text-center w-28">وضعیت اتصال</th>
                 <th className="py-3 px-4 text-center w-36">عملیات</th>
               </tr>
             </thead>
@@ -151,6 +179,12 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                   onClick={() => onSelectTable(tbl)}
                   className="hover:bg-gray-50/80 cursor-pointer transition-colors"
                 >
+                  <td className="py-3 px-4 font-mono font-bold text-slate-800 text-center bg-slate-50/50">#{tbl.id}</td>
+                  <td className="py-3 px-4 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
+                    <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه جدول در سایت مقصد">
+                      {tbl.destination_id ?? tbl.id}
+                    </span>
+                  </td>
                   <td className="py-3 px-4 font-bold text-gray-900">{tbl.name}</td>
                   <td className="py-3 px-4 text-gray-600">{tbl.factory_name}</td>
                   <td className="py-3 px-4 text-center font-mono">{tbl.source_count} منبع</td>
@@ -160,15 +194,20 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                   <td className="py-3 px-4 text-center">{tbl.max_attempts} بار</td>
                   <td className="py-3 px-4 text-center font-mono">{tbl.price_guard_percent}٪</td>
                   <td className="py-3 px-4 text-center">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                        tbl.today_status === 'COMPLETED'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}
-                    >
-                      {tbl.today_status === 'COMPLETED' ? 'کامل شده' : 'در انتظار'}
-                    </span>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          tbl.sync_status === 'SYNCED'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                        }`}
+                      >
+                        {tbl.sync_status === 'SYNCED' ? 'متصل به مقصد' : 'نیازمند همگام‌سازی'}
+                      </span>
+                      <span className="text-[9px] text-gray-400">
+                        {tbl.today_status === 'COMPLETED' ? 'پایش امروز انجام شد' : 'در انتظار پایش'}
+                      </span>
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-center">
                     <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -222,18 +261,39 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
             </h3>
 
             <form onSubmit={handleCreateSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-gray-700 font-medium mb-1">
-                  نام جدول <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="مثال: میلگرد ذوب آهن"
-                  value={newTable.name || ''}
-                  onChange={(e) => setNewTable({ ...newTable, name: e.target.value })}
-                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    نام جدول <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="مثال: میلگرد ذوب آهن"
+                    value={newTable.name || ''}
+                    onChange={(e) => setNewTable({ ...newTable, name: e.target.value })}
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    آیدی در سایت مقصد (post_id / شناسه یکتا)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="اختیاری (مثال: 5410)"
+                    value={newTable.destination_id ?? ''}
+                    onChange={(e) =>
+                      setNewTable({
+                        ...newTable,
+                        destination_id: e.target.value ? parseInt(e.target.value, 10) : undefined
+                      })
+                    }
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-left"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">شناسه یکتای جدول در وردپرس (عدم تکرار تضمین می‌شود)</p>
+                </div>
               </div>
 
               <div>

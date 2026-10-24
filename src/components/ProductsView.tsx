@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   XCircle,
   Filter,
-  RefreshCw
+  RefreshCw,
+  Globe
 } from 'lucide-react';
 import { Product, Factory, PriceTable, ProductSelector, PriceChange } from '../types';
 import { ProductDetailModal } from './ProductDetailModal';
@@ -30,6 +31,7 @@ interface ProductsViewProps {
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
   onReload?: () => Promise<void> | void;
+  onSyncWithDestination?: () => Promise<any>;
 }
 
 export const ProductsView: React.FC<ProductsViewProps> = ({
@@ -43,13 +45,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   onOpenImport,
   onExport,
   onDownloadTemplate,
-  onReload
+  onReload,
+  onSyncWithDestination
 }) => {
   const [search, setSearch] = useState('');
   const [selectedFactory, setSelectedFactory] = useState<string>('ALL');
   const [selectedTable, setSelectedTable] = useState<string>('ALL');
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Edit/Add modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -155,6 +159,27 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
             <span>{isRecalculating ? 'در حال محاسبه...' : 'محاسبه مجدد قیمت‌ها'}</span>
           </button>
 
+          {onSyncWithDestination && (
+            <button
+              id="btn-sync-products-destination"
+              type="button"
+              onClick={async () => {
+                setIsSyncing(true);
+                try {
+                  await onSyncWithDestination();
+                } finally {
+                  setIsSyncing(false);
+                }
+              }}
+              disabled={isSyncing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
+              title="همگام‌سازی و اتصال مستقیم تمام محصولات با سایت مقصد (WordPress / WooCommerce)"
+            >
+              <Globe className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'در حال همگام‌سازی مقصد...' : 'همگام‌سازی با سایت مقصد'}</span>
+            </button>
+          )}
+
           <button
             id="btn-add-product"
             onClick={handleOpenAdd}
@@ -241,7 +266,8 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           <table className="w-full text-right text-xs">
             <thead className="bg-gray-50/80 text-gray-500 font-medium border-b border-gray-200">
               <tr>
-                <th className="py-3 px-3 w-20 font-mono">post_id</th>
+                <th className="py-3 px-3 w-16 text-center font-mono">آیدی سیستم</th>
+                <th className="py-3 px-3 w-24 text-center font-mono text-purple-900 bg-purple-50/50">آیدی مقصد (post_id)</th>
                 <th className="py-3 px-3">نام محصول</th>
                 <th className="py-3 px-3 w-24">SKU</th>
                 <th className="py-3 px-3 w-28">کارخانه</th>
@@ -249,21 +275,26 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 <th className="py-3 px-3 w-32 bg-emerald-50/60 text-emerald-950 font-bold">کمترین سورس بازار</th>
                 <th className="py-3 px-3 w-28 text-center bg-purple-50/50 text-purple-950 font-bold">تعدیل (افست)</th>
                 <th className="py-3 px-3 w-32 bg-blue-50/60 text-blue-950 font-bold">قیمت نهایی سامانه</th>
-                <th className="py-3 px-3 text-center w-20">وضعیت</th>
+                <th className="py-3 px-3 text-center w-24">وضعیت اتصال</th>
                 <th className="py-3 px-3 text-center w-24">عملیات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-gray-400">
+                  <td colSpan={11} className="py-12 text-center text-gray-400">
                     محصولی با این مشخصات یافت نشد.
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="py-3 px-3 font-mono font-medium text-slate-700">{p.post_id}</td>
+                    <td className="py-3 px-3 text-center font-mono font-bold text-slate-900 bg-slate-50/50">#{p.id}</td>
+                    <td className="py-3 px-3 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
+                      <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه دقیق محصول در وردپرس/ووکامرس مقصد">
+                        {p.destination_id || p.post_id}
+                      </span>
+                    </td>
                     <td className="py-3 px-3 font-medium text-gray-900">{p.name}</td>
                     <td className="py-3 px-3 font-mono text-gray-500">{p.sku || '—'}</td>
                     <td className="py-3 px-3 text-gray-600">{p.factory_name || '—'}</td>
@@ -316,13 +347,18 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     </td>
 
                     <td className="py-3 px-3 text-center">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                          p.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500'
-                        }`}
-                      >
-                        {p.active ? 'فعال' : 'غیرفعال'}
-                      </span>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            p.sync_status === 'SYNCED'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          }`}
+                        >
+                          {p.sync_status === 'SYNCED' ? 'متصل به مقصد' : 'نیازمند همگام‌سازی'}
+                        </span>
+                        <span className="text-[9px] text-gray-400">{p.active ? 'پایش فعال' : 'غیرفعال'}</span>
+                      </div>
                     </td>
                     <td className="py-3 px-3 text-center">
                       <div className="flex items-center justify-center gap-1.5">
@@ -372,25 +408,35 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg p-6 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-sm font-bold text-gray-900 mb-4">
-              {editingProduct.id ? 'ویرایش محصول' : 'افزودن محصول جدید'}
+              {editingProduct.id ? `ویرایش محصول (آیدی سیستم: #${editingProduct.id})` : 'افزودن محصول جدید'}
             </h3>
 
             <form onSubmit={handleSubmitSave} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
-                    شناسه ووکامرس post_id <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-gray-700 font-semibold">
+                      آیدی سایت مقصد (post_id) <span className="text-rose-500">*</span>
+                    </label>
+                  </div>
                   <input
                     type="number"
                     required
-                    disabled={Boolean(editingProduct.id)}
-                    value={editingProduct.post_id || ''}
-                    onChange={(e) =>
-                      setEditingProduct({ ...editingProduct, post_id: parseInt(e.target.value, 10) })
-                    }
-                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 disabled:opacity-50"
+                    placeholder="مثال: 1840"
+                    value={editingProduct.destination_id ?? editingProduct.post_id ?? ''}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setEditingProduct({
+                        ...editingProduct,
+                        destination_id: isNaN(val) ? undefined : val,
+                        post_id: isNaN(val) ? 0 : val
+                      });
+                    }}
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono font-bold text-purple-900"
                   />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    شناسه یکتای محصول در وردپرس/ووکامرس (مانع از ثبت تکراری)
+                  </p>
                 </div>
 
                 <div>
@@ -399,7 +445,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     type="text"
                     value={editingProduct.sku || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                   />
                 </div>
               </div>

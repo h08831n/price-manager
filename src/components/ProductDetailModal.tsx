@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ExternalLink, Calendar, TrendingUp, TrendingDown, Layers, Hash } from 'lucide-react';
+import { X, ExternalLink, Calendar, TrendingUp, TrendingDown, Layers, Hash, Globe } from 'lucide-react';
 import { Product, ProductSelector, PriceChange } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -28,14 +28,32 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-slate-50/50">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-mono font-bold">
-                post_id: {product.post_id}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono font-bold border border-slate-300">
+                سیستم #{product.id}
               </span>
-              <h2 className="text-base font-bold text-gray-900">{product.name}</h2>
+              <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-mono font-bold border border-blue-200 flex items-center gap-1">
+                <Globe className="w-3 h-3 text-blue-600" />
+                مقصد: {product.destination_id ?? product.post_id ?? 'نامشخص'}
+              </span>
+              {product.sync_status === 'SYNCED' ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+                  همگام با مقصد
+                </span>
+              ) : (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                  نیازمند همگام‌سازی
+                </span>
+              )}
+              <h2 className="text-base font-bold text-gray-900 mr-1">{product.name}</h2>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-500 mt-1">
               کارخانه: {product.factory_name || 'نامشخص'} • جدول: {product.price_table_name || 'نامشخص'}
+              {product.last_synced_at && (
+                <span className="mr-2 text-gray-400">
+                  (آخرین همگام‌سازی: {new Date(product.last_synced_at).toLocaleTimeString('fa-IR')})
+                </span>
+              )}
             </p>
           </div>
           <button

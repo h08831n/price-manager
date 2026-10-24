@@ -9,7 +9,7 @@ export interface MigrationStep {
   up: (schema: any) => void;
 }
 
-export const LATEST_SCHEMA_VERSION = 5;
+export const LATEST_SCHEMA_VERSION = 6;
 
 export const MIGRATIONS: MigrationStep[] = [
   {
@@ -117,6 +117,40 @@ export const MIGRATIONS: MigrationStep[] = [
           if (ps.update_time_xpath === undefined) ps.update_time_xpath = null;
           if (ps.active === undefined) ps.active = true;
         }
+      }
+    }
+  },
+  {
+    version: 6,
+    name: 'destination_site_identifiers_and_sync',
+    description: 'Add destination_id (WordPress target ID), last_synced_at, and sync_status to factories, price_tables, and products',
+    up: (schema: any) => {
+      // Factories
+      if (Array.isArray(schema.factories)) {
+        for (const f of schema.factories) {
+          if (f.destination_id === undefined) f.destination_id = f.id;
+          if (f.sync_status === undefined) f.sync_status = 'NOT_SYNCED';
+          if (f.last_synced_at === undefined) f.last_synced_at = null;
+        }
+      }
+      // Price Tables
+      if (Array.isArray(schema.price_tables)) {
+        for (const t of schema.price_tables) {
+          if (t.destination_id === undefined) t.destination_id = t.id;
+          if (t.sync_status === undefined) t.sync_status = 'NOT_SYNCED';
+          if (t.last_synced_at === undefined) t.last_synced_at = null;
+        }
+      }
+      // Products
+      if (Array.isArray(schema.products)) {
+        for (const p of schema.products) {
+          if (p.destination_id === undefined) p.destination_id = p.post_id || p.id;
+          if (p.sync_status === undefined) f_sync_status(p);
+          if (p.last_synced_at === undefined) p.last_synced_at = null;
+        }
+      }
+      function f_sync_status(prod: any) {
+        prod.sync_status = prod.current_price > 0 ? 'SYNCED' : 'NOT_SYNCED';
       }
     }
   }

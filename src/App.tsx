@@ -367,6 +367,60 @@ export default function App() {
     }
   };
 
+  const handleSyncProducts = async () => {
+    try {
+      showToast('در حال همگام‌سازی و اتصال محصولات با سایت مقصد...', 'info');
+      const res = await fetch('/api/sync/products', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در همگام‌سازی محصولات');
+      showToast(data.message || 'همگام‌سازی محصولات با سایت مقصد با موفقیت انجام شد', 'success');
+      loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleSyncFactories = async () => {
+    try {
+      showToast('در حال همگام‌سازی کارخانجات با سایت مقصد...', 'info');
+      const res = await fetch('/api/sync/factories', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در همگام‌سازی کارخانجات');
+      showToast(data.message || 'همگام‌سازی کارخانجات با موفقیت انجام شد', 'success');
+      loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleSyncPriceTables = async () => {
+    try {
+      showToast('در حال همگام‌سازی جداول قیمت با سایت مقصد...', 'info');
+      const res = await fetch('/api/sync/price-tables', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در همگام‌سازی جداول');
+      showToast(data.message || 'همگام‌سازی جداول قیمت با موفقیت انجام شد', 'success');
+      loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
   const handleSavePriceTable = async (table: Partial<PriceTable>) => {
     try {
       const method = table.id ? 'PUT' : 'POST';
@@ -800,6 +854,7 @@ export default function App() {
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
                 onReload={loadAllData}
+                onSyncWithDestination={handleSyncProducts}
               />
             )}
 
@@ -811,6 +866,7 @@ export default function App() {
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
+                onSyncWithDestination={handleSyncFactories}
               />
             )}
 
@@ -829,6 +885,7 @@ export default function App() {
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
+                onSyncWithDestination={handleSyncPriceTables}
               />
             )}
 

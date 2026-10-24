@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Factory as FactoryIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Factory as FactoryIcon, Globe } from 'lucide-react';
 import { Factory } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -10,6 +10,7 @@ interface FactoriesViewProps {
   onOpenImport: (entity: string) => void;
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
+  onSyncWithDestination?: () => Promise<any>;
 }
 
 export const FactoriesView: React.FC<FactoriesViewProps> = ({
@@ -18,10 +19,12 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
   onDeleteFactory,
   onOpenImport,
   onExport,
-  onDownloadTemplate
+  onDownloadTemplate,
+  onSyncWithDestination
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFactory, setEditingFactory] = useState<Partial<Factory> | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Delete modal state
   const [deletingFactory, setDeletingFactory] = useState<Factory | null>(null);
@@ -37,7 +40,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
   }, Boolean(deletingFactory || isModalOpen));
 
   const handleOpenAdd = () => {
-    setEditingFactory({ name: '', active: true });
+    setEditingFactory({ name: '', destination_id: undefined, active: true });
     setIsModalOpen(true);
   };
 
@@ -62,7 +65,28 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
           <p className="text-xs text-gray-500 mt-0.5">دسته‌بندی مبنای جداول قیمت و محصولات فولادی</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onSyncWithDestination && (
+            <button
+              id="btn-sync-factories-destination"
+              type="button"
+              onClick={async () => {
+                setIsSyncing(true);
+                try {
+                  await onSyncWithDestination();
+                } finally {
+                  setIsSyncing(false);
+                }
+              }}
+              disabled={isSyncing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
+              title="همگام‌سازی و اتصال کارخانه‌ها با سایت مقصد (WordPress)"
+            >
+              <Globe className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'در حال همگام‌سازی مقصد...' : 'همگام‌سازی با سایت مقصد'}</span>
+            </button>
+          )}
+
           <button
             onClick={handleOpenAdd}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors"
@@ -101,29 +125,40 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
         <table className="w-full text-right text-xs">
           <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
             <tr>
-              <th className="py-3 px-4 w-16">شناسه</th>
+              <th className="py-3 px-4 w-16 text-center font-mono">آیدی سیستم</th>
+              <th className="py-3 px-4 w-24 text-center font-mono text-purple-900 bg-purple-50/50">آیدی مقصد</th>
               <th className="py-3 px-4">نام کارخانه</th>
               <th className="py-3 px-4 text-center">تعداد جداول قیمت</th>
               <th className="py-3 px-4 text-center">تعداد کالاها</th>
-              <th className="py-3 px-4 text-center w-28">وضعیت</th>
+              <th className="py-3 px-4 text-center w-28">وضعیت اتصال</th>
               <th className="py-3 px-4 text-center w-24">عملیات</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {factories.map((f) => (
               <tr key={f.id} className="hover:bg-gray-50/80 transition-colors">
-                <td className="py-3 px-4 font-mono text-gray-500">{f.id}</td>
+                <td className="py-3 px-4 font-mono font-bold text-slate-800 text-center bg-slate-50/50">#{f.id}</td>
+                <td className="py-3 px-4 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
+                  <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه کارخانه در سایت مقصد">
+                    {f.destination_id ?? f.id}
+                  </span>
+                </td>
                 <td className="py-3 px-4 font-bold text-gray-900">{f.name}</td>
                 <td className="py-3 px-4 text-center font-mono">{f.table_count || 0} جدول</td>
                 <td className="py-3 px-4 text-center font-mono">{f.product_count || 0} کالا</td>
                 <td className="py-3 px-4 text-center">
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                      f.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    {f.active ? 'فعال' : 'غیرفعال'}
-                  </span>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        f.sync_status === 'SYNCED'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
+                      }`}
+                    >
+                      {f.sync_status === 'SYNCED' ? 'متصل به مقصد' : 'نیازمند همگام‌سازی'}
+                    </span>
+                    <span className="text-[9px] text-gray-400">{f.active ? 'فعال' : 'غیرفعال'}</span>
+                  </div>
                 </td>
                 <td className="py-3 px-4 text-center">
                   <div className="flex items-center justify-center gap-1.5">
@@ -155,7 +190,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-sm font-bold text-gray-900 mb-4">
-              {editingFactory.id ? 'ویرایش کارخانه' : 'افزودن کارخانه جدید'}
+              {editingFactory.id ? `ویرایش کارخانه (آیدی سیستم: #${editingFactory.id})` : 'افزودن کارخانه جدید'}
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
@@ -171,6 +206,28 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                   onChange={(e) => setEditingFactory({ ...editingFactory, name: e.target.value })}
                   className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800"
                 />
+              </div>
+
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">
+                  آیدی کارخانه در سایت مقصد (Destination ID)
+                </label>
+                <input
+                  type="number"
+                  placeholder="اختیاری - در صورت خالی ماندن برابر شناسه سیستم قرار می‌گیرد"
+                  value={editingFactory.destination_id ?? ''}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setEditingFactory({
+                      ...editingFactory,
+                      destination_id: isNaN(val) ? undefined : val
+                    });
+                  }}
+                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono font-bold text-purple-900"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  آیدی دسته/ویژگی/پست مرتبط با این کارخانه در وردپرس مقصد (از ثبت تکراری جلوگیری می‌شود)
+                </p>
               </div>
 
               <div className="flex items-center gap-2 pt-2">
