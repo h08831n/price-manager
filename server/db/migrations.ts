@@ -44,6 +44,7 @@ export const MIGRATIONS: MigrationStep[] = [
           schema[col] = [];
         }
       }
+      const existingPassword = schema.global_settings?.admin_password;
       if (!schema.global_settings || typeof schema.global_settings !== 'object') {
         schema.global_settings = {
           working_hours_start: '08:30',
@@ -58,8 +59,10 @@ export const MIGRATIONS: MigrationStep[] = [
           wordpress_url: process.env.WORDPRESS_URL || 'http://localhost:3000/api/mock-wordpress',
           wordpress_api_token: process.env.WORDPRESS_API_TOKEN || 'secure-test-token-xyz',
           timezone: process.env.TZ || 'Asia/Tehran',
-          admin_password: process.env.ADMIN_PASSWORD || 'admin123'
+          admin_password: existingPassword || process.env.ADMIN_PASSWORD || 'admin123'
         };
+      } else if (!schema.global_settings.admin_password) {
+        schema.global_settings.admin_password = process.env.ADMIN_PASSWORD || 'admin123';
       }
     }
   },

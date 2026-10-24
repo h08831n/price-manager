@@ -99,7 +99,9 @@ apiRouter.post('/auth/change-password', (req: Request, res: Response) => {
   if (!schema.global_settings) {
     schema.global_settings = {} as any;
   }
-  schema.global_settings.admin_password = String(new_password).trim();
+  const newPassStr = String(new_password).trim();
+  schema.global_settings.admin_password = newPassStr;
+  db.saveSecrets({ admin_password: newPassStr });
   db.logConfigChange('security', 1, 'update', 'رمز عبور قبلی', 'رمز عبور جدید');
   db.save();
 
@@ -2129,6 +2131,13 @@ apiRouter.post('/settings', (req: Request, res: Response) => {
     ...schema.global_settings,
     ...req.body
   };
+  if (req.body.wordpress_url || req.body.wordpress_api_token || req.body.admin_password) {
+    db.saveSecrets({
+      ...(req.body.wordpress_url ? { wordpress_url: req.body.wordpress_url } : {}),
+      ...(req.body.wordpress_api_token ? { wordpress_api_token: req.body.wordpress_api_token } : {}),
+      ...(req.body.admin_password ? { admin_password: req.body.admin_password } : {})
+    });
+  }
   db.logConfigChange('settings', 1, 'update', null, 'Global Settings Updated');
   db.save();
   res.json(schema.global_settings);

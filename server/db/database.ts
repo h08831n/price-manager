@@ -251,7 +251,48 @@ export class DatabaseManager {
     if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
   }
 
+  private getSecretsFile(): string {
+    return path.join(path.dirname(this.dbFile), '.system_secrets.json');
+  }
+
+  public getSavedSecrets(): {
+    admin_password?: string;
+    wordpress_url?: string;
+    wordpress_api_token?: string;
+  } {
+    try {
+      const file = this.getSecretsFile();
+      if (fs.existsSync(file)) {
+        const raw = fs.readFileSync(file, 'utf-8');
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn('⚠️ Could not read system secrets vault:', e);
+    }
+    return {};
+  }
+
+  public saveSecrets(secrets: {
+    admin_password?: string;
+    wordpress_url?: string;
+    wordpress_api_token?: string;
+  }) {
+    try {
+      const file = this.getSecretsFile();
+      const existing = this.getSavedSecrets();
+      const updated = {
+        ...existing,
+        ...secrets,
+        updated_at: new Date().toISOString()
+      };
+      fs.writeFileSync(file, JSON.stringify(updated, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('⚠️ Could not save system secrets vault:', e);
+    }
+  }
+
   private getDefaultSettings(): GlobalSettings {
+    const secrets = this.getSavedSecrets();
     return {
       working_hours_start: '08:30',
       working_hours_end: '17:00',
@@ -262,9 +303,10 @@ export class DatabaseManager {
       default_browser_timeout_sec: 30,
       default_page_load_wait_ms: 1500,
       default_recheck: false,
-      wordpress_url: process.env.WORDPRESS_URL || 'http://localhost:3000/api/mock-wordpress',
-      wordpress_api_token: process.env.WORDPRESS_API_TOKEN || 'secure-test-token-xyz',
-      timezone: process.env.TZ || 'Asia/Tehran'
+      wordpress_url: secrets.wordpress_url || process.env.WORDPRESS_URL || 'http://localhost:3000/api/mock-wordpress',
+      wordpress_api_token: secrets.wordpress_api_token || process.env.WORDPRESS_API_TOKEN || 'secure-test-token-xyz',
+      timezone: process.env.TZ || 'Asia/Tehran',
+      admin_password: secrets.admin_password || process.env.ADMIN_PASSWORD || 'admin123'
     };
   }
 
@@ -272,7 +314,32 @@ export class DatabaseManager {
     if (fs.existsSync(this.dbFile)) {
       try {
         const raw = fs.readFileSync(this.dbFile, 'utf-8');
-        const parsed = JSON.parse(raw);
+        let parsed = JSON.parse(raw);
+
+        // Check for backup recovery if current file was truncated or has fewer products than server backup
+        const backupCandidates = [
+          path.join(process.cwd(), 'persistent_data', 'database.json'),
+          path.join(process.cwd(), 'data_backup', 'database.json.bak'),
+          path.join('/opt/price-collector/data_backup', 'database.json.bak'),
+          path.join(process.cwd(), 'data_backup', 'database_latest.json')
+        ];
+        for (const bkp of backupCandidates) {
+          try {
+            if (fs.existsSync(bkp)) {
+              const bkpRaw = fs.readFileSync(bkp, 'utf-8');
+              const bkpParsed = JSON.parse(bkpRaw);
+              if (
+                Array.isArray(bkpParsed.products) &&
+                bkpParsed.products.length > (parsed.products?.length || 0)
+              ) {
+                console.log(`🛡️ [DB Protection] Recovering rich product data (${bkpParsed.products.length} products) from backup: ${bkp}`);
+                parsed = bkpParsed;
+                break;
+              }
+            }
+          } catch {}
+        }
+
         const sites = (parsed.sites || []).map((s: any) => ({
           ...s,
           scrape_method: s.scrape_method === 'PLAYWRIGHT' ? 'PLAYWRIGHT' : 'FETCH',
@@ -288,6 +355,51 @@ export class DatabaseManager {
         }));
         const source_pages = parsed.source_pages || [];
         const page_actions = migratePageActions(parsed.page_actions || [], table_sources, source_pages);
+
+        // Enforce user secrets vault on loaded global settings
+        const secrets = this.getSavedSecrets();
+        const settings: GlobalSettings = {
+          ...this.getDefaultSettings(),
+          ...(parsed.global_settings || {})
+        };
+
+        // Recover custom password from backup if current is default
+        if (!secrets.admin_password && (!settings.admin_password || settings.admin_password === 'admin123')) {
+          for (const bkp of backupCandidates) {
+            try {
+              if (fs.existsSync(bkp)) {
+                const bkpRaw = fs.readFileSync(bkp, 'utf-8');
+                const bkpParsed = JSON.parse(bkpRaw);
+                const bkpPass = bkpParsed.global_settings?.admin_password;
+                if (bkpPass && bkpPass !== 'admin123') {
+                  console.log(`🛡️ [DB Protection] Restored custom admin password from server backup: ${bkp}`);
+                  secrets.admin_password = bkpPass;
+                  this.saveSecrets({ admin_password: bkpPass });
+                  break;
+                }
+              }
+            } catch {}
+          }
+        }
+
+        if (secrets.admin_password) {
+          settings.admin_password = secrets.admin_password;
+        } else if (settings.admin_password && settings.admin_password !== 'admin123') {
+          this.saveSecrets({ admin_password: settings.admin_password });
+        }
+
+        if (secrets.wordpress_url) {
+          settings.wordpress_url = secrets.wordpress_url;
+        } else if (settings.wordpress_url && !settings.wordpress_url.includes('localhost:3000/api/mock-wordpress')) {
+          this.saveSecrets({ wordpress_url: settings.wordpress_url });
+        }
+
+        if (secrets.wordpress_api_token) {
+          settings.wordpress_api_token = secrets.wordpress_api_token;
+        } else if (settings.wordpress_api_token && settings.wordpress_api_token !== 'secure-test-token-xyz') {
+          this.saveSecrets({ wordpress_api_token: settings.wordpress_api_token });
+        }
+
         const loadedSchema: DatabaseSchema = {
           factories: parsed.factories || [],
           price_tables: parsed.price_tables || [],
@@ -297,7 +409,7 @@ export class DatabaseManager {
           table_sources,
           product_selectors,
           page_actions,
-          global_settings: parsed.global_settings || this.getDefaultSettings(),
+          global_settings: settings,
           runs: parsed.runs || [],
           run_locks: parsed.run_locks || [],
           daily_table_runs: parsed.daily_table_runs || [],

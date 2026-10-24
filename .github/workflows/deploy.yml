@@ -24,10 +24,20 @@ jobs:
             git update-index --no-skip-worktree data/database.json 2>/dev/null || true
             git update-index --no-assume-unchanged data/database.json 2>/dev/null || true
             
-            # 2. Backup server's live database and backups before pulling
+            # 2. Multi-layered Persistent Backup (Never lose live products, tables, or password)
+            mkdir -p /opt/price-collector/persistent_data
             mkdir -p /opt/price-collector/data_backup
-            if [ -f data/database.json ]; then
-              cp -f data/database.json /opt/price-collector/data_backup/database.json.bak
+            
+            # Preserve current live database
+            if [ -s data/database.json ]; then
+              cp -f data/database.json /opt/price-collector/persistent_data/database.json
+              cp -f data/database.json /opt/price-collector/data_backup/database_latest.json
+              cp -f data/database.json /opt/price-collector/data_backup/database_$(date +%Y%m%d_%H%M%S).json
+            fi
+            
+            # Preserve secrets vault (custom password & WordPress credentials)
+            if [ -f data/.system_secrets.json ]; then
+              cp -f data/.system_secrets.json /opt/price-collector/persistent_data/.system_secrets.json
             fi
             
             # 3. Clean up git state, fetch latest code, and hard reset
@@ -37,9 +47,17 @@ jobs:
             git checkout -f origin/main 2>/dev/null || true
             git reset --hard origin/main
             
-            # 4. Restore the server's live database (preserving all live products and settings)
-            if [ -f /opt/price-collector/data_backup/database.json.bak ]; then
+            # 4. RESTORE user's live database and secrets (Priority: persistent_data > backup_latest > database.json.bak)
+            if [ -s /opt/price-collector/persistent_data/database.json ]; then
+              cp -f /opt/price-collector/persistent_data/database.json data/database.json
+            elif [ -s /opt/price-collector/data_backup/database_latest.json ]; then
+              cp -f /opt/price-collector/data_backup/database_latest.json data/database.json
+            elif [ -s /opt/price-collector/data_backup/database.json.bak ]; then
               cp -f /opt/price-collector/data_backup/database.json.bak data/database.json
+            fi
+            
+            if [ -f /opt/price-collector/persistent_data/.system_secrets.json ]; then
+              cp -f /opt/price-collector/persistent_data/.system_secrets.json data/.system_secrets.json
             fi
             
             # 5. Rebuild and restart docker containers with latest code

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { ProductsView } from './components/ProductsView';
@@ -38,8 +39,63 @@ import {
   GlobalSettings
 } from './types';
 
+const PATH_TO_TAB: Record<string, string> = {
+  '/': 'dashboard',
+  '/products': 'products',
+  '/factories': 'factories',
+  '/price-tables': 'price_tables',
+  '/sites': 'sites',
+  '/runs': 'runs',
+  '/errors': 'errors',
+  '/logs': 'logs',
+  '/settings': 'settings',
+  '/history': 'history'
+};
+
+const TAB_TO_PATH: Record<string, string> = {
+  dashboard: '/',
+  products: '/products',
+  factories: '/factories',
+  price_tables: '/price-tables',
+  sites: '/sites',
+  runs: '/runs',
+  errors: '/errors',
+  logs: '/logs',
+  settings: '/settings',
+  history: '/history'
+};
+
+function getTabFromPath(pathname: string): string {
+  if (PATH_TO_TAB[pathname]) return PATH_TO_TAB[pathname];
+  for (const [route, tab] of Object.entries(PATH_TO_TAB)) {
+    if (route !== '/' && pathname.startsWith(route)) {
+      return tab;
+    }
+  }
+  return 'dashboard';
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<string>(() => getTabFromPath(location.pathname));
+
+  // Sync activeTab when URL pathname changes
+  useEffect(() => {
+    const tabFromUrl = getTabFromPath(location.pathname);
+    if (tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [location.pathname]);
+
+  const handleTabChange = useCallback((tab: string) => {
+    setActiveTab(tab);
+    const targetPath = TAB_TO_PATH[tab] || '/';
+    if (location.pathname !== targetPath) {
+      navigate(targetPath);
+    }
+  }, [location.pathname, navigate]);
+
   const [selectedTable, setSelectedTable] = useState<PriceTable | null>(null);
   const selectedTableRef = useRef<PriceTable | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -778,7 +834,7 @@ export default function App() {
         setActiveTab={(tab) => {
           selectedTableRef.current = null;
           setSelectedTable(null);
-          setActiveTab(tab);
+          handleTabChange(tab);
         }}
         openErrorsCount={dashboardData?.open_errors_count || 0}
         onRefresh={loadAllData}
