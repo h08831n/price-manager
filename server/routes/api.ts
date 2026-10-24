@@ -2172,11 +2172,12 @@ apiRouter.get('/screenshots/:filename', (req: Request, res: Response) => {
 // 15. DESTINATION SITE (WORDPRESS) SYNCHRONIZATION ENDPOINTS
 // ==========================================
 
-// 1. Sync All Products to Destination Site
+// 1. Sync All Products to Destination Site (Batch/Chunked)
 apiRouter.post('/sync/products', async (req: Request, res: Response) => {
+  const batchSize = req.body?.batch_size ? parseInt(req.body.batch_size, 10) : undefined;
   try {
-    const result = await syncProductsToDestination();
-    db.log('INFO', `همگام‌سازی محصولات با سایت مقصد انجام شد: ${result.synced} از ${result.total} محصول`, { result });
+    const result = await syncProductsToDestination(batchSize);
+    db.log('INFO', `همگام‌سازی دسته‌ای محصولات با سایت مقصد انجام شد: ${result.synced} از ${result.total} محصول (${result.batches_count || 1} بسته)`, { result });
     res.json(result);
   } catch (err: any) {
     db.log('ERROR', `خطا در همگام‌سازی محصولات با سایت مقصد: ${err.message}`, { error: err.message });
@@ -2188,11 +2189,12 @@ apiRouter.post('/sync/products', async (req: Request, res: Response) => {
   }
 });
 
-// 2. Sync All Factories to Destination Site
+// 2. Sync All Factories to Destination Site (Batch/Chunked)
 apiRouter.post('/sync/factories', async (req: Request, res: Response) => {
+  const batchSize = req.body?.batch_size ? parseInt(req.body.batch_size, 10) : undefined;
   try {
-    const result = await syncFactoriesToDestination();
-    db.log('INFO', `همگام‌سازی کارخانجات با سایت مقصد انجام شد: ${result.synced} از ${result.total} کارخانه`, { result });
+    const result = await syncFactoriesToDestination(batchSize);
+    db.log('INFO', `همگام‌سازی دسته‌ای کارخانجات با سایت مقصد انجام شد: ${result.synced} از ${result.total} کارخانه (${result.batches_count || 1} بسته)`, { result });
     res.json(result);
   } catch (err: any) {
     db.log('ERROR', `خطا در همگام‌سازی کارخانجات با سایت مقصد: ${err.message}`, { error: err.message });
@@ -2204,11 +2206,12 @@ apiRouter.post('/sync/factories', async (req: Request, res: Response) => {
   }
 });
 
-// 3. Sync All Price Tables to Destination Site
+// 3. Sync All Price Tables to Destination Site (Batch/Chunked)
 apiRouter.post('/sync/price-tables', async (req: Request, res: Response) => {
+  const batchSize = req.body?.batch_size ? parseInt(req.body.batch_size, 10) : undefined;
   try {
-    const result = await syncPriceTablesToDestination();
-    db.log('INFO', `همگام‌سازی جداول قیمت با سایت مقصد انجام شد: ${result.synced} از ${result.total} جدول`, { result });
+    const result = await syncPriceTablesToDestination(batchSize);
+    db.log('INFO', `همگام‌سازی دسته‌ای جداول قیمت با سایت مقصد انجام شد: ${result.synced} از ${result.total} جدول (${result.batches_count || 1} بسته)`, { result });
     res.json(result);
   } catch (err: any) {
     db.log('ERROR', `خطا در همگام‌سازی جداول قیمت با سایت مقصد: ${err.message}`, { error: err.message });

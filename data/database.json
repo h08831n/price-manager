@@ -60,7 +60,7 @@
       "margin_percent": 0,
       "destination_id": 1840,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T19:55:52.627Z"
+      "last_synced_at": "2026-10-24T20:42:12.950Z"
     },
     {
       "id": 2,
@@ -88,7 +88,7 @@
       "margin_percent": 0,
       "destination_id": 1841,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T19:55:52.627Z"
+      "last_synced_at": "2026-10-24T20:42:12.950Z"
     },
     {
       "id": 3,
@@ -116,7 +116,7 @@
       "margin_percent": 0,
       "destination_id": 1842,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T19:55:52.627Z"
+      "last_synced_at": "2026-10-24T20:42:12.950Z"
     },
     {
       "id": 4,
@@ -144,7 +144,7 @@
       "margin_percent": 0,
       "destination_id": 1843,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T19:55:52.627Z"
+      "last_synced_at": "2026-10-24T20:42:12.950Z"
     }
   ],
   "sites": [
@@ -547,7 +547,8 @@
     "default_recheck": false,
     "wordpress_url": "http://localhost:3000/api/mock-wordpress",
     "wordpress_api_token": "secure-test-token-xyz",
-    "timezone": "Asia/Tehran"
+    "timezone": "Asia/Tehran",
+    "admin_password": "admin123"
   },
   "runs": [
     {
@@ -3183,6 +3184,61 @@
     }
   ],
   "logs": [
+    {
+      "id": 103,
+      "level": "INFO",
+      "message": "همگام‌سازی دسته‌ای محصولات با سایت مقصد انجام شد: 4 از 4 محصول (1 بسته)",
+      "metadata": {
+        "result": {
+          "success": true,
+          "entity": "products",
+          "total": 4,
+          "synced": 4,
+          "failed": 0,
+          "batches_count": 1,
+          "batch_size": 25,
+          "message": "همگام‌سازی و اتصال دسته‌ای 4 محصول در 1 بسته با موفقیت انجام شد (4 موفق، 0 ناموفق).",
+          "items": [
+            {
+              "id": 1,
+              "destination_id": 1840,
+              "name": "میلگرد ۱۲ ذوب آهن",
+              "success": true
+            },
+            {
+              "id": 2,
+              "destination_id": 1841,
+              "name": "میلگرد ۱۴ ذوب آهن",
+              "success": true
+            },
+            {
+              "id": 3,
+              "destination_id": 1842,
+              "name": "میلگرد ۱۶ ذوب آهن",
+              "success": true
+            },
+            {
+              "id": 4,
+              "destination_id": 1843,
+              "name": "میلگرد ۱۸ ذوب آهن",
+              "success": true
+            }
+          ]
+        }
+      },
+      "created_at": "2026-10-24T20:42:12.952Z"
+    },
+    {
+      "id": 102,
+      "level": "INFO",
+      "message": "همگام‌سازی دسته‌ای محصولات با سایت مقصد (4 محصول در 1 بسته، هر بسته 25 تایی)...",
+      "metadata": {
+        "total": 4,
+        "batches": 1,
+        "batchSize": 25
+      },
+      "created_at": "2026-10-24T20:42:12.888Z"
+    },
     {
       "id": 101,
       "level": "INFO",

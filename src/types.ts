@@ -348,6 +348,8 @@ export interface GlobalSettings {
   wordpress_timeout_sec?: number;
   wordpress_auto_publish?: boolean;
   wordpress_stock_status?: 'instock' | 'outofstock' | 'keep_current';
+  sync_batch_size?: number; // Number of items sent per chunk (default: 25)
+  sync_batch_delay_ms?: number; // Throttle pause in ms between chunks (default: 250)
   timezone: string; // "Asia/Tehran"
   admin_password?: string;
   default_timeout?: number;

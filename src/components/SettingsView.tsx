@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, Check, Globe, Clock, ShieldCheck, Key, RefreshCw, Lock, AlertCircle, Eye, EyeOff, CheckCircle2, XCircle, Wifi } from 'lucide-react';
+import { Save, Check, Globe, Clock, ShieldCheck, Key, RefreshCw, Lock, AlertCircle, Eye, EyeOff, CheckCircle2, XCircle, Wifi, Layers } from 'lucide-react';
 import { GlobalSettings } from '../types';
 
 interface SettingsViewProps {
@@ -12,7 +12,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
     ...settings,
     wordpress_timeout_sec: settings.wordpress_timeout_sec || 15,
     wordpress_auto_publish: settings.wordpress_auto_publish ?? true,
-    wordpress_stock_status: settings.wordpress_stock_status || 'keep_current'
+    wordpress_stock_status: settings.wordpress_stock_status || 'keep_current',
+    sync_batch_size: settings.sync_batch_size || 25,
+    sync_batch_delay_ms: settings.sync_batch_delay_ms ?? 250
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -420,6 +422,69 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                   <option value="instock">تنظیم وضعیت روی موجود در انبار (In Stock)</option>
                 </select>
                 <p className="text-[10px] text-gray-400 mt-1">مدیریت خودکار وضعیت انبار ووکامرس</p>
+              </div>
+            </div>
+
+            {/* Batching & Anti-Overload Settings (Automated Chunking) */}
+            <div className="p-3.5 bg-slate-50/80 rounded-lg border border-slate-200 space-y-3">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-slate-700" />
+                <span className="font-bold text-gray-800 text-xs">
+                  تنظیمات ارسال چندتایی و ضد فشار روی سرور (Batch Sync & Anti-Overload)
+                </span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
+                  محافظت از منابع سرور وردپرس
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-600 leading-relaxed">
+                هنگامی که تعداد زیادی محصول، جدول یا کارخانه در سامانه ثبت شده باشد، ارسال یکجای تمام اقلام ممکن است باعث افت سرعت، اشغال پردازنده و حافظه رم وردپرس، یا خطای قطعی ارتباط (Gateway Timeout) گردد. سامانه به صورت خودکار داده‌ها را در بسته‌های چندتایی با مکث زمانی معین ارسال می‌کند تا هیچ فشاری به هیچ‌یک از سرورها وارد نشود.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    تعداد اقلام در هر بسته (Batch Size)
+                  </label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="200"
+                    value={formData.sync_batch_size || 25}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        sync_batch_size: Math.max(1, parseInt(e.target.value, 10) || 25)
+                      })
+                    }
+                    className="w-full px-3 py-1.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-slate-800 font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    پیش‌فرض: ۲۵ قلم در هر بسته (پیشنهادی: بین ۱۵ تا ۵۰)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    فاصله زمانی مکث بین ارسال هر بسته (Throttle Delay - میلی‌ثانیه)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5000"
+                    step="50"
+                    value={formData.sync_batch_delay_ms ?? 250}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        sync_batch_delay_ms: Math.max(0, parseInt(e.target.value, 10) || 0)
+                      })
+                    }
+                    className="w-full px-3 py-1.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-slate-800 font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    پیش‌فرض: ۲۵۰ میلی‌ثانیه مکث جهت تنفس وب‌سرور و دیتابیس MySQL وردپرس
+                  </p>
+                </div>
               </div>
             </div>
 

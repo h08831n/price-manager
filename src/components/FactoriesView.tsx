@@ -80,10 +80,10 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
               }}
               disabled={isSyncing}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
-              title="همگام‌سازی و اتصال کارخانه‌ها با سایت مقصد (WordPress)"
+              title="همگام‌سازی دسته‌ای و خودکار کارخانه‌ها با سایت مقصد (WordPress) بدون ایجاد ترافیک یا بار اضافی"
             >
               <Globe className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'در حال همگام‌سازی مقصد...' : 'همگام‌سازی با سایت مقصد'}</span>
+              <span>{isSyncing ? 'در حال ارسال بسته‌ای به مقصد...' : 'همگام‌سازی با سایت مقصد'}</span>
             </button>
           )}
 

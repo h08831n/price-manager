@@ -27,6 +27,15 @@ export interface WordPressPublishResponse {
   message?: string;
 }
 
+export function chunkArray<T>(items: T[], size: number): T[][] {
+  const safeSize = size > 0 ? size : 25;
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += safeSize) {
+    chunks.push(items.slice(i, i + safeSize));
+  }
+  return chunks;
+}
+
 export async function publishTableToWordPress(
   priceTableId: number,
   products: WordPressProductPayload[]
@@ -36,70 +45,103 @@ export async function publishTableToWordPress(
   const targetUrl = `${settings.wordpress_url.replace(/\/$/, '')}/wp-json/price-system/v1/bulk-update`;
   const token = settings.wordpress_api_token;
 
+  if (products.length === 0) {
+    return {
+      success: true,
+      updated: 0,
+      failed: 0,
+      items: [],
+      message: 'هیچ محصولی برای انتشار در وردپرس وجود ندارد.'
+    };
+  }
+
+  const batchSize = settings.sync_batch_size || 25;
+  const delayMs = settings.sync_batch_delay_ms !== undefined ? settings.sync_batch_delay_ms : 250;
+  const batches = chunkArray(products, batchSize);
+
   db.log(
     'INFO',
-    `ارسال به وب‌سایت وردپرس/ووکامرس (${products.length} محصول)`,
-    { priceTableId, count: products.length, targetUrl },
+    `ارسال دسته‌ای قیمت‌ها به وب‌سایت وردپرس/ووکامرس (${products.length} محصول در ${batches.length} بسته، هر بسته ${batchSize} تایی)...`,
+    { priceTableId, count: products.length, batches: batches.length, batchSize, targetUrl },
     { price_table_id: priceTableId }
   );
 
-  const payload: WordPressBulkUpdatePayload = {
-    price_table_id: priceTableId,
-    products
+  const allItems: WordPressItemResult[] = [];
+  let totalUpdated = 0;
+  let totalFailed = 0;
+
+  for (let i = 0; i < batches.length; i++) {
+    const currentBatch = batches[i];
+    const payload: WordPressBulkUpdatePayload & { batch_index?: number; total_batches?: number } = {
+      price_table_id: priceTableId,
+      products: currentBatch,
+      batch_index: i + 1,
+      total_batches: batches.length
+    };
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`پاسخ ناموفق از وردپرس در بسته ${i + 1} (${response.status}): ${errText.slice(0, 150)}`);
+      }
+
+      const data = (await response.json()) as WordPressPublishResponse;
+      totalUpdated += data.updated || 0;
+      totalFailed += data.failed || 0;
+      if (data.items) allItems.push(...data.items);
+    } catch (err: any) {
+      if (targetUrl.includes('localhost:3000/api/mock-wordpress')) {
+        const simulatedItems: WordPressItemResult[] = currentBatch.map((p) => ({
+          post_id: p.post_id,
+          new_price: p.price,
+          success: true
+        }));
+        totalUpdated += currentBatch.length;
+        allItems.push(...simulatedItems);
+      } else {
+        const failedItems: WordPressItemResult[] = currentBatch.map((p) => ({
+          post_id: p.post_id,
+          new_price: p.price,
+          success: false,
+          error: err.message
+        }));
+        totalFailed += currentBatch.length;
+        allItems.push(...failedItems);
+        db.log('ERROR', `خطا در ارسال بسته ${i + 1} قیمت‌ها به وردپرس: ${err.message}`, { error: err.message }, { price_table_id: priceTableId });
+      }
+    }
+
+    // Gentle delay between batches to relieve WordPress PHP & MySQL
+    if (i < batches.length - 1 && delayMs > 0) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+
+  const result: WordPressPublishResponse = {
+    success: totalFailed === 0,
+    updated: totalUpdated,
+    failed: totalFailed,
+    items: allItems,
+    message: `انتشار دسته‌ای ${products.length} محصول در ${batches.length} بسته انجام شد (${totalUpdated} موفق، ${totalFailed} ناموفق).`
   };
 
-  try {
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(payload)
-    });
+  db.log(
+    result.success ? 'INFO' : 'WARNING',
+    `نتیجه انتشار دسته‌ای در وردپرس: ${result.updated} موفق، ${result.failed} ناموفق (${batches.length} بسته)`,
+    { updated: result.updated, failed: result.failed, batches: batches.length },
+    { price_table_id: priceTableId }
+  );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`پاسخ ناموفق از وردپرس (${response.status} ${response.statusText}): ${errText.slice(0, 200)}`);
-    }
-
-    const data = (await response.json()) as WordPressPublishResponse;
-
-    db.log(
-      data.success ? 'INFO' : 'WARNING',
-      `نتیجه انتشار در وردپرس: ${data.updated} موفق، ${data.failed} ناموفق`,
-      { updated: data.updated, failed: data.failed },
-      { price_table_id: priceTableId }
-    );
-
-    return data;
-  } catch (err: any) {
-    db.log(
-      'ERROR',
-      `خطا در ارتباط با وب‌سرویس وردپرس: ${err.message}`,
-      { error: err.message },
-      { price_table_id: priceTableId }
-    );
-
-    // If using the local mock URL or in development, return a simulated successful response
-    if (targetUrl.includes('localhost:3000/api/mock-wordpress')) {
-      const simulatedItems: WordPressItemResult[] = products.map((p) => ({
-        post_id: p.post_id,
-        new_price: p.price,
-        success: true
-      }));
-
-      return {
-        success: true,
-        updated: products.length,
-        failed: 0,
-        items: simulatedItems,
-        message: 'شبیه‌سازی موفق در محیط پیش‌نمایش لوکال'
-      };
-    }
-
-    throw err;
-  }
+  return result;
 }
 
 // -------------------------------------------------------------
@@ -112,6 +154,8 @@ export interface DestinationSyncResult {
   total: number;
   synced: number;
   failed: number;
+  batches_count?: number;
+  batch_size?: number;
   created_count?: number;
   updated_count?: number;
   message: string;
@@ -124,7 +168,7 @@ export interface DestinationSyncResult {
   }>;
 }
 
-export async function syncFactoriesToDestination(): Promise<DestinationSyncResult> {
+export async function syncFactoriesToDestination(overrideBatchSize?: number): Promise<DestinationSyncResult> {
   const schema = db.getSchema();
   const settings = schema.global_settings;
   const targetUrl = `${settings.wordpress_url.replace(/\/$/, '')}/wp-json/price-system/v1/sync-factories`;
@@ -137,48 +181,108 @@ export async function syncFactoriesToDestination(): Promise<DestinationSyncResul
     active: f.active
   }));
 
-  db.log('INFO', `همگام‌سازی کارخانجات با سایت مقصد (${factoriesPayload.length} کارخانه)...`, { count: factoriesPayload.length });
+  if (factoriesPayload.length === 0) {
+    return {
+      success: true,
+      entity: 'factories',
+      total: 0,
+      synced: 0,
+      failed: 0,
+      batches_count: 0,
+      message: 'هیچ کارخانه‌ای برای همگام‌سازی وجود ندارد.',
+      items: []
+    };
+  }
 
-  try {
-    const res = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ factories: factoriesPayload })
-    });
+  const batchSize = overrideBatchSize || settings.sync_batch_size || 25;
+  const delayMs = settings.sync_batch_delay_ms !== undefined ? settings.sync_batch_delay_ms : 250;
+  const batches = chunkArray(factoriesPayload, batchSize);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`خطای ارتباط با وردپرس (${res.status}): ${errText.slice(0, 150)}`);
-    }
+  db.log('INFO', `همگام‌سازی دسته‌ای کارخانجات با سایت مقصد (${factoriesPayload.length} کارخانه در ${batches.length} بسته، هر بسته ${batchSize} تایی)...`, {
+    total: factoriesPayload.length,
+    batches: batches.length,
+    batchSize
+  });
 
-    const data = (await res.json()) as DestinationSyncResult;
-    markFactoriesSynced(data);
-    return data;
-  } catch (err: any) {
-    // If local mock or network unreachable in preview, use local simulator
-    if (targetUrl.includes('localhost:3000/api/mock-wordpress')) {
-      const mockResult: DestinationSyncResult = {
-        success: true,
-        entity: 'factories',
-        total: factoriesPayload.length,
-        synced: factoriesPayload.length,
-        failed: 0,
-        message: `همگام‌سازی ${factoriesPayload.length} کارخانه با سایت مقصد با موفقیت انجام شد.`,
-        items: factoriesPayload.map((f) => ({
+  const allItems: DestinationSyncResult['items'] = [];
+  let totalSynced = 0;
+  let totalFailed = 0;
+
+  for (let i = 0; i < batches.length; i++) {
+    const currentBatch = batches[i];
+    try {
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          factories: currentBatch,
+          batch_index: i + 1,
+          total_batches: batches.length
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`خطای ارتباط با وردپرس در بسته ${i + 1} (${res.status}): ${errText.slice(0, 150)}`);
+      }
+
+      const data = (await res.json()) as DestinationSyncResult;
+      markFactoriesSynced(data);
+      if (data.items) allItems.push(...data.items);
+      totalSynced += data.synced || 0;
+      totalFailed += data.failed || 0;
+    } catch (err: any) {
+      if (targetUrl.includes('localhost:3000/api/mock-wordpress')) {
+        const mockItems = currentBatch.map((f) => ({
           id: f.id,
           destination_id: f.destination_id,
           name: f.name,
           success: true
-        }))
-      };
-      markFactoriesSynced(mockResult);
-      return mockResult;
+        }));
+        markFactoriesSynced({
+          success: true,
+          entity: 'factories',
+          total: currentBatch.length,
+          synced: currentBatch.length,
+          failed: 0,
+          message: 'موفق',
+          items: mockItems
+        });
+        allItems.push(...mockItems);
+        totalSynced += currentBatch.length;
+      } else {
+        const failedItems = currentBatch.map((f) => ({
+          id: f.id,
+          destination_id: f.destination_id,
+          name: f.name,
+          success: false,
+          error: err.message
+        }));
+        allItems.push(...failedItems);
+        totalFailed += currentBatch.length;
+        db.log('ERROR', `خطا در همگام‌سازی بسته ${i + 1} کارخانجات: ${err.message}`);
+      }
     }
-    throw err;
+
+    if (i < batches.length - 1 && delayMs > 0) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
   }
+
+  return {
+    success: totalFailed === 0,
+    entity: 'factories',
+    total: factoriesPayload.length,
+    synced: totalSynced,
+    failed: totalFailed,
+    batches_count: batches.length,
+    batch_size: batchSize,
+    message: `همگام‌سازی دسته‌ای ${factoriesPayload.length} کارخانه در ${batches.length} بسته انجام شد (${totalSynced} موفق، ${totalFailed} ناموفق).`,
+    items: allItems
+  };
 }
 
 function markFactoriesSynced(result: DestinationSyncResult) {
@@ -195,7 +299,7 @@ function markFactoriesSynced(result: DestinationSyncResult) {
   db.save();
 }
 
-export async function syncPriceTablesToDestination(): Promise<DestinationSyncResult> {
+export async function syncPriceTablesToDestination(overrideBatchSize?: number): Promise<DestinationSyncResult> {
   const schema = db.getSchema();
   const settings = schema.global_settings;
   const targetUrl = `${settings.wordpress_url.replace(/\/$/, '')}/wp-json/price-system/v1/sync-tables`;
@@ -214,47 +318,108 @@ export async function syncPriceTablesToDestination(): Promise<DestinationSyncRes
     };
   });
 
-  db.log('INFO', `همگام‌سازی جداول قیمت با سایت مقصد (${tablesPayload.length} جدول)...`, { count: tablesPayload.length });
+  if (tablesPayload.length === 0) {
+    return {
+      success: true,
+      entity: 'price_tables',
+      total: 0,
+      synced: 0,
+      failed: 0,
+      batches_count: 0,
+      message: 'هیچ جدول قیمتی برای همگام‌سازی وجود ندارد.',
+      items: []
+    };
+  }
 
-  try {
-    const res = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ tables: tablesPayload })
-    });
+  const batchSize = overrideBatchSize || settings.sync_batch_size || 25;
+  const delayMs = settings.sync_batch_delay_ms !== undefined ? settings.sync_batch_delay_ms : 250;
+  const batches = chunkArray(tablesPayload, batchSize);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`خطای ارتباط با وردپرس (${res.status}): ${errText.slice(0, 150)}`);
-    }
+  db.log('INFO', `همگام‌سازی دسته‌ای جداول قیمت با سایت مقصد (${tablesPayload.length} جدول در ${batches.length} بسته، هر بسته ${batchSize} تایی)...`, {
+    total: tablesPayload.length,
+    batches: batches.length,
+    batchSize
+  });
 
-    const data = (await res.json()) as DestinationSyncResult;
-    markTablesSynced(data);
-    return data;
-  } catch (err: any) {
-    if (targetUrl.includes('localhost:3000/api/mock-wordpress')) {
-      const mockResult: DestinationSyncResult = {
-        success: true,
-        entity: 'price_tables',
-        total: tablesPayload.length,
-        synced: tablesPayload.length,
-        failed: 0,
-        message: `همگام‌سازی ${tablesPayload.length} جدول قیمت با سایت مقصد با موفقیت انجام شد.`,
-        items: tablesPayload.map((t) => ({
+  const allItems: DestinationSyncResult['items'] = [];
+  let totalSynced = 0;
+  let totalFailed = 0;
+
+  for (let i = 0; i < batches.length; i++) {
+    const currentBatch = batches[i];
+    try {
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          tables: currentBatch,
+          batch_index: i + 1,
+          total_batches: batches.length
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`خطای ارتباط با وردپرس در بسته ${i + 1} (${res.status}): ${errText.slice(0, 150)}`);
+      }
+
+      const data = (await res.json()) as DestinationSyncResult;
+      markTablesSynced(data);
+      if (data.items) allItems.push(...data.items);
+      totalSynced += data.synced || 0;
+      totalFailed += data.failed || 0;
+    } catch (err: any) {
+      if (targetUrl.includes('localhost:3000/api/mock-wordpress')) {
+        const mockItems = currentBatch.map((t) => ({
           id: t.id,
           destination_id: t.destination_id,
           name: t.name,
           success: true
-        }))
-      };
-      markTablesSynced(mockResult);
-      return mockResult;
+        }));
+        markTablesSynced({
+          success: true,
+          entity: 'price_tables',
+          total: currentBatch.length,
+          synced: currentBatch.length,
+          failed: 0,
+          message: 'موفق',
+          items: mockItems
+        });
+        allItems.push(...mockItems);
+        totalSynced += currentBatch.length;
+      } else {
+        const failedItems = currentBatch.map((t) => ({
+          id: t.id,
+          destination_id: t.destination_id,
+          name: t.name,
+          success: false,
+          error: err.message
+        }));
+        allItems.push(...failedItems);
+        totalFailed += currentBatch.length;
+        db.log('ERROR', `خطا در همگام‌سازی بسته ${i + 1} جداول: ${err.message}`);
+      }
     }
-    throw err;
+
+    if (i < batches.length - 1 && delayMs > 0) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
   }
+
+  return {
+    success: totalFailed === 0,
+    entity: 'price_tables',
+    total: tablesPayload.length,
+    synced: totalSynced,
+    failed: totalFailed,
+    batches_count: batches.length,
+    batch_size: batchSize,
+    message: `همگام‌سازی دسته‌ای ${tablesPayload.length} جدول قیمت در ${batches.length} بسته انجام شد (${totalSynced} موفق، ${totalFailed} ناموفق).`,
+    items: allItems
+  };
 }
 
 function markTablesSynced(result: DestinationSyncResult) {
@@ -271,7 +436,7 @@ function markTablesSynced(result: DestinationSyncResult) {
   db.save();
 }
 
-export async function syncProductsToDestination(): Promise<DestinationSyncResult> {
+export async function syncProductsToDestination(overrideBatchSize?: number): Promise<DestinationSyncResult> {
   const schema = db.getSchema();
   const settings = schema.global_settings;
   const targetUrl = `${settings.wordpress_url.replace(/\/$/, '')}/wp-json/price-system/v1/sync-products`;
@@ -296,47 +461,108 @@ export async function syncProductsToDestination(): Promise<DestinationSyncResult
     };
   });
 
-  db.log('INFO', `همگام‌سازی جامع محصولات با سایت مقصد (${productsPayload.length} محصول)...`, { count: productsPayload.length });
+  if (productsPayload.length === 0) {
+    return {
+      success: true,
+      entity: 'products',
+      total: 0,
+      synced: 0,
+      failed: 0,
+      batches_count: 0,
+      message: 'هیچ محصولی برای همگام‌سازی وجود ندارد.',
+      items: []
+    };
+  }
 
-  try {
-    const res = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ products: productsPayload })
-    });
+  const batchSize = overrideBatchSize || settings.sync_batch_size || 25;
+  const delayMs = settings.sync_batch_delay_ms !== undefined ? settings.sync_batch_delay_ms : 250;
+  const batches = chunkArray(productsPayload, batchSize);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`خطای ارتباط با وردپرس (${res.status}): ${errText.slice(0, 150)}`);
-    }
+  db.log('INFO', `همگام‌سازی دسته‌ای محصولات با سایت مقصد (${productsPayload.length} محصول در ${batches.length} بسته، هر بسته ${batchSize} تایی)...`, {
+    total: productsPayload.length,
+    batches: batches.length,
+    batchSize
+  });
 
-    const data = (await res.json()) as DestinationSyncResult;
-    markProductsSynced(data);
-    return data;
-  } catch (err: any) {
-    if (targetUrl.includes('localhost:3000/api/mock-wordpress')) {
-      const mockResult: DestinationSyncResult = {
-        success: true,
-        entity: 'products',
-        total: productsPayload.length,
-        synced: productsPayload.length,
-        failed: 0,
-        message: `همگام‌سازی ${productsPayload.length} محصول با سایت مقصد با موفقیت انجام شد.`,
-        items: productsPayload.map((p) => ({
+  const allItems: DestinationSyncResult['items'] = [];
+  let totalSynced = 0;
+  let totalFailed = 0;
+
+  for (let i = 0; i < batches.length; i++) {
+    const currentBatch = batches[i];
+    try {
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          products: currentBatch,
+          batch_index: i + 1,
+          total_batches: batches.length
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`خطای ارتباط با وردپرس در بسته ${i + 1} (${res.status}): ${errText.slice(0, 150)}`);
+      }
+
+      const data = (await res.json()) as DestinationSyncResult;
+      markProductsSynced(data);
+      if (data.items) allItems.push(...data.items);
+      totalSynced += data.synced || 0;
+      totalFailed += data.failed || 0;
+    } catch (err: any) {
+      if (targetUrl.includes('localhost:3000/api/mock-wordpress')) {
+        const mockItems = currentBatch.map((p) => ({
           id: p.id,
           destination_id: p.destination_id,
           name: p.name,
           success: true
-        }))
-      };
-      markProductsSynced(mockResult);
-      return mockResult;
+        }));
+        markProductsSynced({
+          success: true,
+          entity: 'products',
+          total: currentBatch.length,
+          synced: currentBatch.length,
+          failed: 0,
+          message: 'موفق',
+          items: mockItems
+        });
+        allItems.push(...mockItems);
+        totalSynced += currentBatch.length;
+      } else {
+        const failedItems = currentBatch.map((p) => ({
+          id: p.id,
+          destination_id: p.destination_id,
+          name: p.name,
+          success: false,
+          error: err.message
+        }));
+        allItems.push(...failedItems);
+        totalFailed += currentBatch.length;
+        db.log('ERROR', `خطا در بسته ${i + 1} همگام‌سازی محصولات: ${err.message}`);
+      }
     }
-    throw err;
+
+    if (i < batches.length - 1 && delayMs > 0) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
   }
+
+  return {
+    success: totalFailed === 0,
+    entity: 'products',
+    total: productsPayload.length,
+    synced: totalSynced,
+    failed: totalFailed,
+    batches_count: batches.length,
+    batch_size: batchSize,
+    message: `همگام‌سازی و اتصال دسته‌ای ${productsPayload.length} محصول در ${batches.length} بسته با موفقیت انجام شد (${totalSynced} موفق، ${totalFailed} ناموفق).`,
+    items: allItems
+  };
 }
 
 function markProductsSynced(result: DestinationSyncResult) {
