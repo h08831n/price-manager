@@ -675,4 +675,237 @@ export async function testWordPressConnection(customUrl?: string, customToken?: 
   }
 }
 
+export interface DestinationProductImportItem {
+  post_id: number;
+  name: string;
+  sku?: string;
+  current_price?: number;
+  factory_name?: string;
+  factory_id?: number;
+  categories?: string[];
+  stock_status?: string;
+  active?: boolean;
+}
+
+export interface DestinationImportResult {
+  success: boolean;
+  message: string;
+  products_imported: number;
+  products_updated: number;
+  factories_imported: number;
+  total_fetched: number;
+  items: Array<{
+    id: number;
+    post_id: number;
+    name: string;
+    is_new: boolean;
+    active: boolean;
+  }>;
+}
+
+/**
+ * Pull all data (products & factories) from destination WordPress/WooCommerce site.
+ * Imported products are DEFAULTED TO INACTIVE (active: false) per explicit user requirement,
+ * allowing the user to inspect and activate them selectively.
+ */
+export async function pullDataFromDestination(options?: {
+  defaultFactoryId?: number;
+  defaultTableId?: number;
+}): Promise<DestinationImportResult> {
+  const schema = db.getSchema();
+  const settings = schema.global_settings;
+  const baseUrl = (settings.wordpress_url || '').trim().replace(/\/$/, '');
+  const token = (settings.wordpress_api_token || '').trim();
+
+  if (!baseUrl) {
+    throw new Error('آدرس وب‌سایت وردپرس در تنظیمات مشخص نشده است.');
+  }
+
+  const endpointUrl = `${baseUrl}/wp-json/price-system/v1/fetch-destination-data`;
+  db.log('INFO', `آغاز دریافت اطلاعات و محصولات از سایت مقصد (${baseUrl})...`, { endpointUrl });
+
+  let fetchedProducts: DestinationProductImportItem[] = [];
+  let fetchedFactories: Array<{ id: number; name: string; slug?: string }> = [];
+
+  // Check if testing against local mock
+  if (endpointUrl.includes('localhost:3000/api/mock-wordpress')) {
+    fetchedFactories = [
+      { id: 101, name: 'کارخانه فولاد مبارکه اصفهان' },
+      { id: 102, name: 'کارخانه ذوب آهن اصفهان' },
+      { id: 103, name: 'فولاد خوزستان' }
+    ];
+    fetchedProducts = [
+      { post_id: 2001, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', active: false },
+      { post_id: 2002, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', active: false },
+      { post_id: 2003, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', active: false }
+    ];
+  } else {
+    const timeoutMs = (settings.wordpress_timeout_sec || 20) * 1000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(endpointUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`خطای دریافت از وردپرس (${res.status}): ${errText.slice(0, 150)}`);
+      }
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || 'خطا در خروجی اطلاعات وردپرس');
+      }
+
+      fetchedProducts = Array.isArray(data.products) ? data.products : [];
+      fetchedFactories = Array.isArray(data.factories) ? data.factories : [];
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      db.log('ERROR', `خطا در دریافت اطلاعات از وردپرس: ${err.message}`, { baseUrl });
+      throw err;
+    }
+  }
+
+  const now = new Date().toISOString();
+  let factoriesImported = 0;
+  let productsImported = 0;
+  let productsUpdated = 0;
+  const processedItems: Array<{ id: number; post_id: number; name: string; is_new: boolean; active: boolean }> = [];
+
+  // 1. Process and import factories
+  for (const fac of fetchedFactories) {
+    if (!fac.name || !fac.name.trim()) continue;
+    const trimmedName = fac.name.trim();
+    const existing = schema.factories.find(
+      (f) => (fac.id && f.destination_id === fac.id) || f.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    if (!existing) {
+      const nextFacId = schema.factories.length > 0 ? Math.max(...schema.factories.map((f) => f.id)) + 1 : 1;
+      schema.factories.push({
+        id: nextFacId,
+        name: trimmedName,
+        destination_id: fac.id || nextFacId,
+        active: true,
+        created_at: now,
+        updated_at: now
+      });
+      factoriesImported++;
+    } else if (fac.id && !existing.destination_id) {
+      existing.destination_id = fac.id;
+    }
+  }
+
+  // Fallback defaults
+  const defaultFactoryId = options?.defaultFactoryId || schema.factories[0]?.id || 1;
+  const defaultTableId = options?.defaultTableId || schema.price_tables[0]?.id || 1;
+
+  // 2. Process and import products
+  for (const item of fetchedProducts) {
+    if (!item.name || !item.name.trim()) continue;
+    const postId = Number(item.post_id) || 0;
+    const trimmedName = item.name.trim();
+    const sku = (item.sku || '').trim();
+
+    // Find if product already exists by post_id, destination_id, or matching SKU
+    const existingIndex = schema.products.findIndex(
+      (p) =>
+        (postId > 0 && (p.post_id === postId || p.destination_id === postId)) ||
+        (sku && p.sku && p.sku.toLowerCase() === sku.toLowerCase())
+    );
+
+    // Resolve factory
+    let resolvedFactoryId = defaultFactoryId;
+    if (item.factory_name) {
+      const matchedFac = schema.factories.find(
+        (f) => f.name.toLowerCase() === item.factory_name!.trim().toLowerCase()
+      );
+      if (matchedFac) resolvedFactoryId = matchedFac.id;
+    } else if (item.factory_id) {
+      const matchedFac = schema.factories.find((f) => f.destination_id === item.factory_id);
+      if (matchedFac) resolvedFactoryId = matchedFac.id;
+    }
+
+    if (existingIndex >= 0) {
+      // Update existing
+      const existing = schema.products[existingIndex];
+      existing.destination_id = postId > 0 ? postId : existing.destination_id;
+      existing.post_id = postId > 0 ? postId : existing.post_id;
+      if (item.current_price !== undefined && item.current_price > 0 && !existing.current_price) {
+        existing.current_price = item.current_price;
+      }
+      if (sku && !existing.sku) existing.sku = sku;
+      existing.sync_status = 'SYNCED';
+      existing.last_synced_at = now;
+      existing.updated_at = now;
+
+      productsUpdated++;
+      processedItems.push({
+        id: existing.id,
+        post_id: existing.post_id || existing.destination_id || postId,
+        name: existing.name,
+        is_new: false,
+        active: existing.active
+      });
+    } else {
+      // Create NEW product
+      // CRITICAL: active is strictly false by default so the user can inspect,
+      // edit selectors, and selectively activate each product.
+      const nextProdId = schema.products.length > 0 ? Math.max(...schema.products.map((p) => p.id)) + 1 : 1;
+      const newProduct = {
+        id: nextProdId,
+        post_id: postId > 0 ? postId : nextProdId,
+        destination_id: postId > 0 ? postId : nextProdId,
+        name: trimmedName,
+        sku: sku,
+        factory_id: resolvedFactoryId,
+        price_table_id: defaultTableId,
+        current_price: item.current_price || 0,
+        active: false, // Default to inactive per user requirement
+        sync_status: 'SYNCED' as const,
+        last_synced_at: now,
+        created_at: now,
+        updated_at: now,
+        attributes: {}
+      };
+
+      schema.products.push(newProduct);
+      productsImported++;
+      processedItems.push({
+        id: nextProdId,
+        post_id: postId,
+        name: trimmedName,
+        is_new: true,
+        active: false
+      });
+    }
+  }
+
+  // Save changes
+  db.save();
+
+  db.log(
+    'INFO',
+    `دریافت اطلاعات از سایت مقصد با موفقیت انجام شد: ${productsImported} محصول جدید (غیرفعال جهت بررسی)، ${productsUpdated} محصول بروزرسانی، ${factoriesImported} کارخانه ثبت گردید.`,
+    { productsImported, productsUpdated, factoriesImported, total: fetchedProducts.length }
+  );
+
+  return {
+    success: true,
+    message: `دریافت با موفقیت انجام شد: ${productsImported} محصول جدید (به صورت پیش‌فرض غیرفعال)، ${productsUpdated} محصول بروزرسانی، و ${factoriesImported} کارخانه از وردپرس اضافه شدند.`,
+    products_imported: productsImported,
+    products_updated: productsUpdated,
+    factories_imported: factoriesImported,
+    total_fetched: fetchedProducts.length,
+    items: processedItems
+  };
+}
+
 

@@ -20,7 +20,8 @@ import {
   syncFactoriesToDestination,
   syncPriceTablesToDestination,
   syncProductsToDestination,
-  testWordPressConnection
+  testWordPressConnection,
+  pullDataFromDestination
 } from '../wordpress/client';
 import { excelService } from '../excel/excelService';
 import { FIXTURE_PAGES } from '../fixtures/fixtures';
@@ -2223,6 +2224,49 @@ apiRouter.post('/sync/price-tables', async (req: Request, res: Response) => {
   }
 });
 
+// 4. Pull/Import All Data from Destination Site (WordPress/WooCommerce)
+// Products imported here are DEFAULTED TO INACTIVE (active: false) per explicit user instructions
+apiRouter.post('/sync/pull-from-destination', async (req: Request, res: Response) => {
+  try {
+    const result = await pullDataFromDestination();
+    db.log('INFO', result.message, { result });
+    res.json(result);
+  } catch (err: any) {
+    db.log('ERROR', `خطا در دریافت اطلاعات از سایت مقصد: ${err.message}`, { error: err.message });
+    res.status(500).json({
+      success: false,
+      message: `خطا در دریافت اطلاعات از سایت مقصد: ${err.message}`
+    });
+  }
+});
+
+// 5. Batch Toggle Product Active Status
+apiRouter.post('/products/batch-status', (req: Request, res: Response) => {
+  const { ids, active } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'لیست شناسه‌های محصول الزامی است.' });
+  }
+  const schema = db.getSchema();
+  const idSet = new Set(ids.map((id) => Number(id)));
+  let updatedCount = 0;
+
+  for (const prod of schema.products) {
+    if (idSet.has(prod.id)) {
+      prod.active = Boolean(active);
+      updatedCount++;
+    }
+  }
+
+  db.log('INFO', `تغییر وضعیت دسته‌ای محصولات: ${updatedCount} محصول به وضعیت ${active ? 'فعال' : 'غیرفعال'} تغییر یافت.`, { ids, active });
+  db.save();
+  res.json({
+    success: true,
+    updated_count: updatedCount,
+    active: Boolean(active),
+    message: `${updatedCount} محصول با موفقیت ${active ? 'فعال' : 'غیرفعال'} شدند.`
+  });
+});
+
 // Mock WordPress Endpoints for local testing & live verification
 apiRouter.post('/mock-wordpress/wp-json/price-system/v1/bulk-update', (req: Request, res: Response) => {
   const { price_table_id, products } = req.body;
@@ -2325,6 +2369,25 @@ apiRouter.all('/mock-wordpress/wp-json/price-system/v1/test-connection', (req: R
     site_url: 'http://localhost:3000/api/mock-wordpress',
     woocommerce_active: true,
     timestamp: new Date().toISOString()
+  });
+});
+
+apiRouter.all('/mock-wordpress/wp-json/price-system/v1/fetch-destination-data', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    total_products: 3,
+    total_factories: 3,
+    factories: [
+      { id: 101, name: 'کارخانه فولاد مبارکه اصفهان' },
+      { id: 102, name: 'کارخانه ذوب آهن اصفهان' },
+      { id: 103, name: 'فولاد خوزستان' }
+    ],
+    products: [
+      { post_id: 2001, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', active: false },
+      { post_id: 2002, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', active: false },
+      { post_id: 2003, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', active: false }
+    ],
+    message: 'اطلاعات با موفقیت استخراج شد.'
   });
 });
 

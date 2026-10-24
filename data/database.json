@@ -9,6 +9,30 @@
       "destination_id": 1,
       "sync_status": "SYNCED",
       "last_synced_at": "2026-10-24T19:55:43.453Z"
+    },
+    {
+      "id": 2,
+      "name": "کارخانه فولاد مبارکه اصفهان",
+      "destination_id": 101,
+      "active": true,
+      "created_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:19:40.217Z"
+    },
+    {
+      "id": 3,
+      "name": "کارخانه ذوب آهن اصفهان",
+      "destination_id": 102,
+      "active": true,
+      "created_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:19:40.217Z"
+    },
+    {
+      "id": 4,
+      "name": "فولاد خوزستان",
+      "destination_id": 103,
+      "active": true,
+      "created_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:19:40.217Z"
     }
   ],
   "price_tables": [
@@ -145,6 +169,54 @@
       "destination_id": 1843,
       "sync_status": "SYNCED",
       "last_synced_at": "2026-10-24T20:42:12.950Z"
+    },
+    {
+      "id": 5,
+      "post_id": 2001,
+      "destination_id": 2001,
+      "name": "تیرآهن ۱۴ ذوب آهن (سایت مقصد)",
+      "sku": "TIR-14-ESF",
+      "factory_id": 3,
+      "price_table_id": 1,
+      "current_price": 48500,
+      "active": true,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T21:19:40.217Z",
+      "created_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:19:40.217Z",
+      "attributes": {}
+    },
+    {
+      "id": 6,
+      "post_id": 2002,
+      "destination_id": 2002,
+      "name": "ورق سیاه ۲ میل مبارکه (سایت مقصد)",
+      "sku": "ST37-2MM",
+      "factory_id": 2,
+      "price_table_id": 1,
+      "current_price": 36200,
+      "active": true,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T21:19:40.217Z",
+      "created_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:19:40.217Z",
+      "attributes": {}
+    },
+    {
+      "id": 7,
+      "post_id": 2003,
+      "destination_id": 2003,
+      "name": "میلگرد ۲۰ فولاد خوزستان (سایت مقصد)",
+      "sku": "REBAR-20-KHZ",
+      "factory_id": 4,
+      "price_table_id": 1,
+      "current_price": 29800,
+      "active": false,
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-24T21:19:40.217Z",
+      "created_at": "2026-10-24T21:19:40.217Z",
+      "updated_at": "2026-10-24T21:19:40.217Z",
+      "attributes": {}
     }
   ],
   "sites": [
@@ -3184,6 +3256,79 @@
     }
   ],
   "logs": [
+    {
+      "id": 107,
+      "level": "INFO",
+      "message": "تغییر وضعیت دسته‌ای محصولات: 2 محصول به وضعیت فعال تغییر یافت.",
+      "metadata": {
+        "ids": [
+          5,
+          6
+        ],
+        "active": true
+      },
+      "created_at": "2026-10-24T21:19:44.624Z"
+    },
+    {
+      "id": 106,
+      "level": "INFO",
+      "message": "دریافت با موفقیت انجام شد: 3 محصول جدید (به صورت پیش‌فرض غیرفعال)، 0 محصول بروزرسانی، و 3 کارخانه از وردپرس اضافه شدند.",
+      "metadata": {
+        "result": {
+          "success": true,
+          "message": "دریافت با موفقیت انجام شد: 3 محصول جدید (به صورت پیش‌فرض غیرفعال)، 0 محصول بروزرسانی، و 3 کارخانه از وردپرس اضافه شدند.",
+          "products_imported": 3,
+          "products_updated": 0,
+          "factories_imported": 3,
+          "total_fetched": 3,
+          "items": [
+            {
+              "id": 5,
+              "post_id": 2001,
+              "name": "تیرآهن ۱۴ ذوب آهن (سایت مقصد)",
+              "is_new": true,
+              "active": false
+            },
+            {
+              "id": 6,
+              "post_id": 2002,
+              "name": "ورق سیاه ۲ میل مبارکه (سایت مقصد)",
+              "is_new": true,
+              "active": false
+            },
+            {
+              "id": 7,
+              "post_id": 2003,
+              "name": "میلگرد ۲۰ فولاد خوزستان (سایت مقصد)",
+              "is_new": true,
+              "active": false
+            }
+          ]
+        }
+      },
+      "created_at": "2026-10-24T21:19:40.221Z"
+    },
+    {
+      "id": 105,
+      "level": "INFO",
+      "message": "دریافت اطلاعات از سایت مقصد با موفقیت انجام شد: 3 محصول جدید (غیرفعال جهت بررسی)، 0 محصول بروزرسانی، 3 کارخانه ثبت گردید.",
+      "metadata": {
+        "productsImported": 3,
+        "productsUpdated": 0,
+        "factoriesImported": 3,
+        "total": 3
+      },
+      "created_at": "2026-10-24T21:19:40.219Z"
+    },
+    {
+      "id": 104,
+      "level": "INFO",
+      "message": "آغاز دریافت اطلاعات و محصولات از سایت مقصد (http://localhost:3000/api/mock-wordpress)...",
+      "metadata": {
+        "endpointUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/fetch-destination-data"
+      },
+      "created_at": "2026-10-24T21:19:40.215Z"
+    },
     {
       "id": 103,
       "level": "INFO",

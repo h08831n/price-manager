@@ -441,6 +441,49 @@ export default function App() {
     }
   };
 
+  const handlePullFromDestination = async () => {
+    try {
+      showToast('در حال استخراج و دریافت تمامی محصولات و کارخانه‌ها از سایت مقصد...', 'info');
+      const res = await fetch('/api/sync/pull-from-destination', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || data.error || 'خطا در دریافت اطلاعات از سایت مقصد');
+      }
+      showToast(data.message || 'اطلاعات با موفقیت از وردپرس دریافت شد و محصولات جدید به صورت غیرفعال ذخیره شدند.', 'success');
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleBatchProductStatus = async (ids: number[], active: boolean) => {
+    try {
+      const res = await fetch('/api/products/batch-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({ ids, active })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || data.error || 'خطا در تغییر وضعیت دسته‌ای محصولات');
+      }
+      showToast(data.message || `وضعیت محصولات با موفقیت ${active ? 'فعال' : 'غیرفعال'} شد.`, 'success');
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
   const handleSyncFactories = async () => {
     try {
       showToast('در حال همگام‌سازی کارخانجات با سایت مقصد...', 'info');
@@ -911,6 +954,8 @@ export default function App() {
                 onDownloadTemplate={handleDownloadTemplate}
                 onReload={loadAllData}
                 onSyncWithDestination={handleSyncProducts}
+                onPullFromDestination={handlePullFromDestination}
+                onBatchToggleStatus={handleBatchProductStatus}
               />
             )}
 

@@ -67,6 +67,25 @@ class PriceSystemSyncPlugin {
             'callback' => array($this, 'handle_test_connection'),
             'permission_callback' => array($this, 'verify_api_token'),
         ));
+
+        // Fetch Destination Data (Export WordPress & WooCommerce entities to Price Collector)
+        register_rest_route(self::API_NAMESPACE, '/fetch-destination-data', array(
+            'methods'  => array('GET', 'POST'),
+            'callback' => array($this, 'handle_fetch_destination_data'),
+            'permission_callback' => array($this, 'verify_api_token'),
+        ));
+
+        register_rest_route(self::API_NAMESPACE, '/fetch-products', array(
+            'methods'  => array('GET', 'POST'),
+            'callback' => array($this, 'handle_fetch_destination_data'),
+            'permission_callback' => array($this, 'verify_api_token'),
+        ));
+
+        register_rest_route(self::API_NAMESPACE, '/fetch-factories', array(
+            'methods'  => array('GET', 'POST'),
+            'callback' => array($this, 'handle_fetch_factories'),
+            'permission_callback' => array($this, 'verify_api_token'),
+        ));
     }
 
     /**
@@ -414,6 +433,132 @@ class PriceSystemSyncPlugin {
             'failed'  => count($products) - $synced_count,
             'message' => "همگام‌سازی و اتصال {$synced_count} محصول با موفقیت انجام شد.",
             'items'   => $results
+        ));
+    }
+
+    /**
+     * Handle Fetch Destination Data (Products, Factories, and Tables)
+     * Automatically returns products with active = false as requested by user.
+     */
+    public function handle_fetch_destination_data($request) {
+        $params = $request->get_params();
+        $limit = isset($params['limit']) ? intval($params['limit']) : 500;
+        $page = isset($params['page']) ? intval($params['page']) : 1;
+
+        // 1. Fetch Factories / Brands
+        $factories = array();
+        if (taxonomy_exists('pa_factory')) {
+            $terms = get_terms(array(
+                'taxonomy'   => 'pa_factory',
+                'hide_empty' => false,
+            ));
+            if (!is_wp_error($terms) && !empty($terms)) {
+                foreach ($terms as $t) {
+                    $factories[] = array(
+                        'id' => $t->term_id,
+                        'name' => $t->name,
+                        'slug' => $t->slug,
+                        'count' => $t->count
+                    );
+                }
+            }
+        }
+        if (empty($factories) && taxonomy_exists('product_brand')) {
+            $terms = get_terms(array(
+                'taxonomy'   => 'product_brand',
+                'hide_empty' => false,
+            ));
+            if (!is_wp_error($terms) && !empty($terms)) {
+                foreach ($terms as $t) {
+                    $factories[] = array(
+                        'id' => $t->term_id,
+                        'name' => $t->name,
+                        'slug' => $t->slug,
+                        'count' => $t->count
+                    );
+                }
+            }
+        }
+
+        // 2. Fetch Products
+        $products = array();
+        $query_args = array(
+            'post_type'      => array('product', 'product_variation'),
+            'post_status'    => array('publish', 'draft', 'pending'),
+            'posts_per_page' => $limit > 0 ? $limit : 500,
+            'paged'          => $page > 0 ? $page : 1,
+            'orderby'        => 'ID',
+            'order'          => 'DESC'
+        );
+
+        $posts = get_posts($query_args);
+        foreach ($posts as $post) {
+            $post_id = $post->ID;
+            $sku = get_post_meta($post_id, '_sku', true);
+            $reg_price = get_post_meta($post_id, '_regular_price', true);
+            $curr_price = get_post_meta($post_id, '_price', true);
+            $price = !empty($reg_price) ? floatval($reg_price) : (!empty($curr_price) ? floatval($curr_price) : 0);
+            
+            $factory_name = '';
+            $factory_id = 0;
+            if (taxonomy_exists('pa_factory')) {
+                $p_terms = wp_get_post_terms($post_id, 'pa_factory');
+                if (!empty($p_terms) && !is_wp_error($p_terms)) {
+                    $factory_name = $p_terms[0]->name;
+                    $factory_id = $p_terms[0]->term_id;
+                }
+            }
+
+            $cat_names = array();
+            if (taxonomy_exists('product_cat')) {
+                $c_terms = wp_get_post_terms($post_id, 'product_cat');
+                if (!empty($c_terms) && !is_wp_error($c_terms)) {
+                    foreach ($c_terms as $ct) {
+                        $cat_names[] = $ct->name;
+                    }
+                }
+            }
+
+            $products[] = array(
+                'post_id'        => $post_id,
+                'name'           => html_entity_decode($post->post_title, ENT_QUOTES, 'UTF-8'),
+                'sku'            => $sku ? $sku : '',
+                'current_price'  => $price,
+                'factory_name'   => $factory_name,
+                'factory_id'     => $factory_id,
+                'categories'     => $cat_names,
+                'stock_status'   => get_post_meta($post_id, '_stock_status', true) ?: 'instock',
+                'active'         => false // Default to false (inactive) per user requirement
+            );
+        }
+
+        return rest_ensure_response(array(
+            'success'         => true,
+            'total_products'  => count($products),
+            'total_factories' => count($factories),
+            'factories'       => $factories,
+            'products'        => $products,
+            'message'         => "تعداد " . count($products) . " محصول و " . count($factories) . " کارخانه با موفقیت استخراج شد."
+        ));
+    }
+
+    /**
+     * Handle Fetch Factories Only
+     */
+    public function handle_fetch_factories($request) {
+        $factories = array();
+        if (taxonomy_exists('pa_factory')) {
+            $terms = get_terms(array('taxonomy' => 'pa_factory', 'hide_empty' => false));
+            if (!is_wp_error($terms) && !empty($terms)) {
+                foreach ($terms as $t) {
+                    $factories[] = array('id' => $t->term_id, 'name' => $t->name, 'slug' => $t->slug, 'count' => $t->count);
+                }
+            }
+        }
+        return rest_ensure_response(array(
+            'success'   => true,
+            'factories' => $factories,
+            'total'     => count($factories)
         ));
     }
 
