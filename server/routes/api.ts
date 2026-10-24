@@ -19,7 +19,8 @@ import {
   publishTableToWordPress,
   syncFactoriesToDestination,
   syncPriceTablesToDestination,
-  syncProductsToDestination
+  syncProductsToDestination,
+  testWordPressConnection
 } from '../wordpress/client';
 import { excelService } from '../excel/excelService';
 import { FIXTURE_PAGES } from '../fixtures/fixtures';
@@ -2287,3 +2288,31 @@ apiRouter.post('/mock-wordpress/wp-json/price-system/v1/sync-products', (req: Re
     items
   });
 });
+
+// Test Connection Endpoint for WordPress
+apiRouter.post('/wordpress/test-connection', async (req: Request, res: Response) => {
+  const { wordpress_url, wordpress_api_token } = req.body;
+  try {
+    const result = await testWordPressConnection(wordpress_url, wordpress_api_token);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      status: 500,
+      message: `خطای سرور در بررسی اتصال: ${err.message}`
+    });
+  }
+});
+
+apiRouter.all('/mock-wordpress/wp-json/price-system/v1/test-connection', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    status: 'connected',
+    message: 'اتصال به وب‌سایت وردپرس/ووکامرس با موفقیت برقرار شد.',
+    site_name: 'شبیه‌ساز فروشگاه وردپرس',
+    site_url: 'http://localhost:3000/api/mock-wordpress',
+    woocommerce_active: true,
+    timestamp: new Date().toISOString()
+  });
+});
+

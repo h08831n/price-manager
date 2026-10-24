@@ -354,3 +354,99 @@ function markProductsSynced(result: DestinationSyncResult) {
   db.save();
 }
 
+export interface WordPressTestResult {
+  success: boolean;
+  status: number;
+  message: string;
+  site_name?: string;
+  site_url?: string;
+  woocommerce_active?: boolean;
+}
+
+export async function testWordPressConnection(customUrl?: string, customToken?: string): Promise<WordPressTestResult> {
+  const schema = db.getSchema();
+  const settings = schema.global_settings;
+  const rawUrl = (customUrl !== undefined ? customUrl : settings.wordpress_url || '').trim();
+  const token = (customToken !== undefined ? customToken : settings.wordpress_api_token || '').trim();
+
+  if (!rawUrl) {
+    return {
+      success: false,
+      status: 400,
+      message: 'آدرس وب‌سایت وردپرس مشخص نشده است. لطفاً آدرس را وارد کنید.'
+    };
+  }
+
+  const baseUrl = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') ? rawUrl : `https://${rawUrl}`;
+  const testUrl = `${baseUrl.replace(/\/$/, '')}/wp-json/price-system/v1/test-connection`;
+
+  // If local mock url is specified, test local mock directly
+  if (testUrl.includes('localhost:3000/api/mock-wordpress')) {
+    return {
+      success: true,
+      status: 200,
+      message: 'اتصال به سرویس شبیه‌ساز محلی با موفقیت برقرار شد.',
+      site_name: 'شبیه‌ساز آزمایشی وردپرس/ووکامرس',
+      site_url: baseUrl,
+      woocommerce_active: true
+    };
+  }
+
+  const timeoutMs = ((settings.wordpress_timeout_sec || 15) * 1000);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(testUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        success: true,
+        status: res.status,
+        message: data.message || 'ارتباط با سایت وردپرس با موفقیت برقرار شد.',
+        site_name: data.site_name,
+        site_url: data.site_url,
+        woocommerce_active: data.woocommerce_active
+      };
+    } else {
+      const errText = await res.text().catch(() => '');
+      let errMsg = `خطای سرور وردپرس (${res.status})`;
+      if (res.status === 401 || res.status === 403) {
+        errMsg = `خطای احراز هویت (${res.status}): توکن API واردشده در پنل با توکن تعریف‌شده در وردپرس یکسان نیست.`;
+      } else if (res.status === 404) {
+        errMsg = `مسیر افزونه در وردپرس یافت نشد (404). لطفاً از نصب و فعال بودن افزونه price-system-sync.php و ذخیره مجدد پیوندهای یکتا در وردپرس اطمینان حاصل فرمایید.`;
+      } else if (errText) {
+        errMsg = `${errMsg}: ${errText.slice(0, 150)}`;
+      }
+      return {
+        success: false,
+        status: res.status,
+        message: errMsg
+      };
+    }
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      return {
+        success: false,
+        status: 408,
+        message: `پاسخی در مدت زمان ${settings.wordpress_timeout_sec || 15} ثانیه از وب‌سایت وردپرس دریافت نشد (Timeout). آدرس دامنه و باز بودن پورت‌ها را بررسی فرمایید.`
+      };
+    }
+    return {
+      success: false,
+      status: 500,
+      message: `خطای برقراری ارتباط با سرور وردپرس: ${err.message}`
+    };
+  }
+}
+
+

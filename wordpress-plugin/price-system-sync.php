@@ -60,6 +60,28 @@ class PriceSystemSyncPlugin {
             'callback' => array($this, 'handle_sync_products'),
             'permission_callback' => array($this, 'verify_api_token'),
         ));
+
+        // Test Connection & Health Check Endpoint
+        register_rest_route(self::API_NAMESPACE, '/test-connection', array(
+            'methods'  => array('GET', 'POST'),
+            'callback' => array($this, 'handle_test_connection'),
+            'permission_callback' => array($this, 'verify_api_token'),
+        ));
+    }
+
+    /**
+     * Handle Test Connection
+     */
+    public function handle_test_connection($request) {
+        return new WP_REST_Response(array(
+            'success' => true,
+            'status'  => 'connected',
+            'message' => 'ارتباط با موفقیت برقرار شد. وب‌سایت وردپرس آماده دریافت و همگام‌سازی است.',
+            'site_name' => get_bloginfo('name'),
+            'site_url'  => get_bloginfo('url'),
+            'woocommerce_active' => class_exists('WooCommerce'),
+            'timestamp' => current_time('mysql'),
+        ), 200);
     }
 
     /**

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, Check, Globe, Clock, ShieldCheck, Key, RefreshCw, Lock, AlertCircle } from 'lucide-react';
+import { Save, Check, Globe, Clock, ShieldCheck, Key, RefreshCw, Lock, AlertCircle, Eye, EyeOff, CheckCircle2, XCircle, Wifi } from 'lucide-react';
 import { GlobalSettings } from '../types';
 
 interface SettingsViewProps {
@@ -8,9 +8,25 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) => {
-  const [formData, setFormData] = useState<GlobalSettings>({ ...settings });
+  const [formData, setFormData] = useState<GlobalSettings>({
+    ...settings,
+    wordpress_timeout_sec: settings.wordpress_timeout_sec || 15,
+    wordpress_auto_publish: settings.wordpress_auto_publish ?? true,
+    wordpress_stock_status: settings.wordpress_stock_status || 'keep_current'
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // WordPress live test state
+  const [showToken, setShowToken] = useState(false);
+  const [isTestingWp, setIsTestingWp] = useState(false);
+  const [wpTestResult, setWpTestResult] = useState<{
+    success: boolean;
+    message: string;
+    site_name?: string;
+    site_url?: string;
+    woocommerce_active?: boolean;
+  } | null>(null);
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -19,6 +35,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+
+  const handleTestWpConnection = async () => {
+    setIsTestingWp(true);
+    setWpTestResult(null);
+    try {
+      const res = await fetch('/api/wordpress/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wordpress_url: formData.wordpress_url,
+          wordpress_api_token: formData.wordpress_api_token
+        })
+      });
+      const data = await res.json();
+      setWpTestResult(data);
+    } catch (err: any) {
+      setWpTestResult({
+        success: false,
+        message: `خطای ارتباط با سرور: ${err.message}`
+      });
+    } finally {
+      setIsTestingWp(false);
+    }
+  };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,39 +275,172 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
 
         {/* WordPress Sync Configuration (Requirement #28, #29) */}
         <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-            <Key className="w-4 h-4 text-slate-800" />
-            <h3 className="font-bold text-gray-900 text-sm">اتصال به وبسایت اصلی وردپرس (ووکامرس)</h3>
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Key className="w-4 h-4 text-slate-800" />
+              <div>
+                <h3 className="font-bold text-gray-900 text-sm">اتصال به وبسایت اصلی وردپرس (ووکامرس)</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  کلیه متغیرهای اتصال به سایت مقصد از طریق این پنل مدیریت شده و در پایگاه‌داده نگهداری می‌شوند
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTestWpConnection}
+              disabled={isTestingWp}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-md text-xs font-semibold transition-colors disabled:opacity-50"
+            >
+              {isTestingWp ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                  <span>در حال تست اتصال...</span>
+                </>
+              ) : (
+                <>
+                  <Wifi className="w-3.5 h-3.5 text-blue-600" />
+                  <span>تست ارتباط آنلاین با وردپرس</span>
+                </>
+              )}
+            </button>
           </div>
 
-          <div className="space-y-3">
+          {wpTestResult && (
+            <div
+              className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 animate-in fade-in duration-150 ${
+                wpTestResult.success
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-rose-50 border-rose-200 text-rose-900'
+              }`}
+            >
+              {wpTestResult.success ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              )}
+              <div className="space-y-1">
+                <div className="font-bold">
+                  {wpTestResult.success ? 'اتصال موفقیت‌آمیز است' : 'خطا در برقراری ارتباط با وردپرس'}
+                </div>
+                <div className="text-[11px] leading-relaxed">
+                  {wpTestResult.message}
+                </div>
+                {wpTestResult.site_name && (
+                  <div className="text-[10px] text-emerald-700 font-medium">
+                    نام سایت: {wpTestResult.site_name} | ووکامرس:{' '}
+                    {wpTestResult.woocommerce_active ? 'فعال ✅' : 'غیرفعال ⚠️'}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
             <div>
               <label className="block text-gray-700 font-medium mb-1">
-                آدرس سایت وردپرس (WordPress Base URL)
+                آدرس کامل سایت وردپرس (WordPress Base URL) <span className="text-rose-500">*</span>
               </label>
               <input
                 type="url"
+                required
                 value={formData.wordpress_url}
                 onChange={(e) => setFormData({ ...formData, wordpress_url: e.target.value })}
-                placeholder="https://your-site.com"
+                placeholder="https://example.com"
                 className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 dir-ltr text-right font-mono"
               />
+              <p className="text-[11px] text-gray-400 mt-1">
+                آدرس دامنه سایت شما بدون اسلش انتهایی (مثال: <code>https://my-shop.ir</code>)
+              </p>
             </div>
 
             <div>
               <label className="block text-gray-700 font-medium mb-1">
-                توکن احراز هویت اختصاصی افزونه (API Token)
+                توکن احراز هویت اختصاصی افزونه (API Secret Token) <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="password"
-                value={formData.wordpress_api_token}
-                onChange={(e) => setFormData({ ...formData, wordpress_api_token: e.target.value })}
-                placeholder="کلید احراز هویت تعریف شده در افزونه price-system-sync.php"
-                className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 dir-ltr text-right font-mono"
-              />
+              <div className="relative">
+                <input
+                  type={showToken ? 'text' : 'password'}
+                  required
+                  value={formData.wordpress_api_token}
+                  onChange={(e) => setFormData({ ...formData, wordpress_api_token: e.target.value })}
+                  placeholder="کلید احراز هویت تعریف شده در افزونه price-system-sync.php"
+                  className="w-full pl-10 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 dir-ltr text-right font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                  title={showToken ? 'مخفی‌سازی توکن' : 'نمایش توکن'}
+                >
+                  {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
               <p className="text-[11px] text-gray-400 mt-1">
-                این توکن در هدر <code>Authorization: Bearer &lt;token&gt;</code> برای ارسال سریع و دسته‌ای قیمت‌ها استفاده می‌شود.
+                این کلید امنیتی در هدر <code>Authorization: Bearer</code> جهت احراز هویت درخواست‌های امن ارسال می‌گردد.
               </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">
+                  مهلت زمان پاسخگویی وردپرس (Timeout - ثانیه)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="120"
+                  value={formData.wordpress_timeout_sec || 15}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      wordpress_timeout_sec: parseInt(e.target.value, 10) || 15
+                    })
+                  }
+                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">پیش‌فرض: ۱۵ ثانیه</p>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">
+                  وضعیت موجودی انبار در ووکامرس پس از بروزرسانی قیمت
+                </label>
+                <select
+                  value={formData.wordpress_stock_status || 'keep_current'}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      wordpress_stock_status: e.target.value as any
+                    })
+                  }
+                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 text-xs"
+                >
+                  <option value="keep_current">حفظ وضعیت فعلی موجودی کالا در سایت مقصد</option>
+                  <option value="instock">تنظیم وضعیت روی موجود در انبار (In Stock)</option>
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">مدیریت خودکار وضعیت انبار ووکامرس</p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.wordpress_auto_publish ?? true}
+                  onChange={(e) =>
+                    setFormData({ ...formData, wordpress_auto_publish: e.target.checked })
+                  }
+                  className="rounded text-slate-900 focus:ring-0"
+                />
+                <span className="text-gray-700 font-medium">
+                  انتشار خودکار قیمت‌های نهایی به سایت ووکامرس بلافاصله پس از محاسبه روزانه
+                </span>
+              </label>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-[11px] text-gray-600 leading-relaxed">
+              💡 <strong>راهنما:</strong> فایل افزونه اختصاصی وردپرس در مسیر <code>wordpress-plugin/price-system-sync.php</code> قرار دارد. کافیست آن را در پوشه افزونه‌های هاست خود فعال کرده و همان توکنی که در افزونه وارد کرده‌اید را در کادر بالا درج کنید. تمام اطلاعات به صورت پویا در پایگاه‌داده ذخیره می‌شوند و هیچ نیازی به تغییر سورس‌کد پروژه نیست.
             </div>
           </div>
         </div>

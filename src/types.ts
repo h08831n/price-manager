@@ -345,6 +345,9 @@ export interface GlobalSettings {
   default_recheck: boolean; // false
   wordpress_url: string;
   wordpress_api_token: string;
+  wordpress_timeout_sec?: number;
+  wordpress_auto_publish?: boolean;
+  wordpress_stock_status?: 'instock' | 'outofstock' | 'keep_current';
   timezone: string; // "Asia/Tehran"
   admin_password?: string;
   default_timeout?: number;
