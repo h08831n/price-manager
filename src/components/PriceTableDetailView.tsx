@@ -26,7 +26,9 @@ import {
   AlertTriangle,
   AlertCircle,
   Table,
-  Search
+  Search,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import {
   PriceTable,
@@ -109,10 +111,18 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     max_attempts: table.max_attempts || 5,
     price_guard_percent: table.price_guard_percent || 30,
     default_price_adjustment: table.default_price_adjustment ?? 0,
+    assignment_mode: table.assignment_mode || (table.manual_product_ids && table.manual_product_ids.length > 0 ? 'MANUAL' : 'TAXONOMY'),
+    manual_product_ids: table.manual_product_ids || [],
     active: table.active ?? true
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSavedSuccess, setSettingsSavedSuccess] = useState(false);
+
+  // Manual Products Picker Modal state (ACF get_field('products'))
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [manualProductIdsDraft, setManualProductIdsDraft] = useState<number[]>(table.manual_product_ids || []);
+  const [manualProductSearch, setManualProductSearch] = useState('');
+  const [isSavingManualProducts, setIsSavingManualProducts] = useState(false);
 
   // New TableSource Modal state
   const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
@@ -186,33 +196,62 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   }, Boolean(deletingSource || revertingSourceId || isDeleteTableModalOpen || actionModal.isOpen || editingSourceSettings || isAddSourceModalOpen));
 
   const tableSources = sources.filter((s) => s.price_table_id === table.id);
-  const tableProducts = products.filter((p) => {
-    // 1. Direct assignment
-    if (p.price_table_id === table.id) return true;
-
-    // 2. Exact match on both factory and category (user requirement)
-    if (
-      table.factory_id &&
-      table.category_id &&
-      p.factory_id === table.factory_id &&
-      p.category_id === table.category_id
-    ) {
-      return true;
+  const tableProducts = (() => {
+    // Mode 1: Manual Products selection (ACF get_field('products'))
+    if (table.manual_product_ids && table.manual_product_ids.length > 0) {
+      const manualList: Product[] = [];
+      for (const manualId of table.manual_product_ids) {
+        const found = products.find(
+          (p) => p.post_id === manualId || p.destination_id === manualId || p.id === manualId
+        );
+        if (found) {
+          manualList.push(found);
+        }
+      }
+      if (manualList.length > 0) return manualList;
     }
 
-    // 3. Name-based match for category if IDs differ but names match with same factory
-    if (
-      table.factory_id &&
-      p.factory_id === table.factory_id &&
-      table.category_name &&
-      p.category_name &&
-      table.category_name.trim().toLowerCase() === p.category_name.trim().toLowerCase()
-    ) {
-      return true;
+    // Mode 2: Attribute-based filtering (ACF product_by_attr repeater)
+    if (table.product_by_attr && table.product_by_attr.length > 0) {
+      const attrFiltered = products.filter((p) => {
+        if (table.factory_id && p.factory_id !== table.factory_id) return false;
+        if (table.category_id && p.category_id !== table.category_id) return false;
+
+        for (const rule of table.product_by_attr!) {
+          const terms = rule.term.split(',').map((t) => t.trim().toLowerCase());
+          const attrVal = String(
+            p.attributes?.[rule.taxonomy] || p.attributes?.['pa_' + rule.taxonomy] || ''
+          ).toLowerCase();
+          if (!terms.some((t) => attrVal.includes(t))) return false;
+        }
+        return true;
+      });
+      if (attrFiltered.length > 0) return attrFiltered;
     }
 
-    return false;
-  });
+    // Mode 3: Automatic Taxonomy match (company + product_cat) or direct price_table_id
+    return products.filter((p) => {
+      if (p.price_table_id === table.id) return true;
+      if (
+        table.factory_id &&
+        table.category_id &&
+        p.factory_id === table.factory_id &&
+        p.category_id === table.category_id
+      ) {
+        return true;
+      }
+      if (
+        table.factory_id &&
+        p.factory_id === table.factory_id &&
+        table.category_name &&
+        p.category_name &&
+        table.category_name.trim().toLowerCase() === p.category_name.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      return false;
+    });
+  })();
 
   // Helpers for Source Page URLs, Sites, and Actions
   const getSourceSiteId = (source: TableSource): number => {
@@ -580,6 +619,21 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               >
                 {table.today_status === 'COMPLETED' ? 'کامل شده امروز' : 'در حال انتظار یا تلاش'}
               </span>
+
+              {/* Assignment Mode Badge */}
+              {table.manual_product_ids && table.manual_product_ids.length > 0 ? (
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-purple-50 text-purple-700 border border-purple-200" title="محصولات به صورت دستی در ACF انتخاب شده‌اند">
+                  انتخاب دستی محصولات (ACF: {table.manual_product_ids.length} کالا)
+                </span>
+              ) : table.product_by_attr && table.product_by_attr.length > 0 ? (
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 border border-blue-200" title="محصولات بر اساس ویژگی‌های ACF فیلتر شده‌اند">
+                  فیلتر با ویژگی‌ها (product_by_attr)
+                </span>
+              ) : (
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-50 text-slate-700 border border-slate-200" title="اتصال خودکار به محصولات دارای همین دسته و کارخانه">
+                  اتصال خودکار (کارخانه + دسته‌بندی)
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-2">
               <span>ساعت شروع: <strong className="text-gray-700">{table.start_time}</strong></span>
@@ -790,6 +844,64 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               </div>
             </div>
 
+            {/* Product Assignment & ACF Mode Section */}
+            <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-lg space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="block text-purple-950 font-bold text-xs">
+                    نحوه انتساب کالاها به جدول (بر اساس ساختار قالب وردپرس - generateDataTable.php)
+                  </label>
+                  <p className="text-[11px] text-purple-800/80 mt-0.5">
+                    سیستم اولویت انتساب را به ترتیب بررسی می‌کند: ۱. انتخاب دستی (ACF products) ۲. فیلتر ویژگی‌ها (product_by_attr) ۳. دسته و کارخانه خودکار.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualProductIdsDraft(tableSettings.manual_product_ids || []);
+                    setIsManualModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 self-start sm:self-auto"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>مدیریت محصولات دستی (ACF Products)</span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                <span className="font-semibold text-purple-900">وضعیت پیوند کالاها:</span>
+                {tableSettings.manual_product_ids && tableSettings.manual_product_ids.length > 0 ? (
+                  <span className="px-2.5 py-0.5 bg-purple-100 text-purple-800 rounded font-bold border border-purple-300">
+                    دستی: {tableSettings.manual_product_ids.length} کالا مستقیماً در این جدول چیده شده‌اند
+                  </span>
+                ) : table.product_by_attr && table.product_by_attr.length > 0 ? (
+                  <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded font-bold border border-blue-300">
+                    بر اساس ویژگی‌ها: {table.product_by_attr.length} شرط ویژگی فعال است
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 bg-gray-100 text-gray-800 rounded font-bold border border-gray-300">
+                    اتصال خودکار: کالاهای دارای کارخانه «{table.factory_name}» و دسته «{table.category_name || 'همه'}»
+                  </span>
+                )}
+
+                {tableSettings.manual_product_ids && tableSettings.manual_product_ids.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTableSettings((prev) => ({
+                        ...prev,
+                        assignment_mode: 'TAXONOMY',
+                        manual_product_ids: []
+                      }));
+                    }}
+                    className="text-[11px] text-rose-600 hover:underline mr-auto font-medium"
+                  >
+                    تغییر به اتصال خودکار (حذف لیست دستی)
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="flex items-center gap-2 pt-2">
               <input
                 type="checkbox"
@@ -799,7 +911,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                 className="rounded border-gray-300 text-slate-800 focus:ring-slate-800"
               />
               <label htmlFor="active-toggle" className="text-gray-700 font-medium">
-                این جدول قیمت فعال باشد
+                این جدول قیمت فعال باشد (کلید اصلی پایش و به‌روزرسانی قیمت‌ها در سایت مقصد)
               </label>
             </div>
 
@@ -1102,18 +1214,35 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                 </span>
                                 <span className="text-[10px] text-gray-500 font-normal">تومان</span>
                               </div>
-                              {product.previous_price && product.previous_price !== product.current_price && (
-                                <span
-                                  className={`text-[9px] font-mono ${
-                                    product.current_price > product.previous_price
-                                      ? 'text-rose-600'
-                                      : 'text-emerald-600'
-                                  }`}
-                                >
-                                  {product.current_price > product.previous_price ? '▲ افزایشی' : '▼ کاهشی'} (قبلی:{' '}
-                                  {product.previous_price.toLocaleString('fa-IR')})
-                                </span>
-                              )}
+                              {/* WordPress price fluctuation status & diff (matches generateDataTable.php) */}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                {product.price_status === 2 || (product.previous_price && product.current_price > product.previous_price) ? (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                    <span>▲</span>
+                                    <span>+{(product.price_diff || (product.previous_price ? product.current_price - product.previous_price : 0)).toLocaleString('fa-IR')}</span>
+                                    <span className="text-[9px] font-normal">افزایش</span>
+                                  </span>
+                                ) : product.price_status === 1 || (product.previous_price && product.current_price < product.previous_price) ? (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                                    <span>▼</span>
+                                    <span>-{(product.price_diff || (product.previous_price ? product.previous_price - product.current_price : 0)).toLocaleString('fa-IR')}</span>
+                                    <span className="text-[9px] font-normal">کاهش</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.2 rounded border border-gray-100">
+                                    ثابت
+                                  </span>
+                                )}
+
+                                {product.current_price > 0 && (
+                                  <span
+                                    className="text-[10px] text-gray-500 font-mono"
+                                    title="محاسبه قیمت بدون ۱۰٪ مالیات بر ارزش افزوده در قالب سایت"
+                                  >
+                                    بدون مالیات: {Math.ceil(product.current_price / 1.1).toLocaleString('fa-IR')}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -2442,6 +2571,196 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>{isRevertingSource ? 'در حال بازنشانی...' : 'تأیید بازنشانی'}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal for Managing Manual Products (ACF get_field('products')) */}
+      {isManualModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <Table className="w-4 h-4 text-purple-700" />
+                  <span>انتخاب دستی محصولات برای جدول «{table.name}»</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  مطابق فیلد ارتباطی ACF (<code className="font-mono text-purple-700">products</code>)؛ در صورت انتخاب، جدول منحصراً این کالاها را پایش می‌کند.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsManualModalOpen(false)}
+                className="text-gray-400 hover:text-gray-700 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search & Selection Summary */}
+            <div className="p-4 bg-gray-50/70 border-b border-gray-100 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={manualProductSearch}
+                    onChange={(e) => setManualProductSearch(e.target.value)}
+                    placeholder="جستجو بر اساس نام کالا، شناسه وردپرس یا کارخانه..."
+                    className="w-full pl-3 pr-8 py-2 text-xs bg-white border border-gray-200 rounded-md focus:outline-none focus:border-slate-800"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const filtered = products.filter((p) => {
+                      if (!manualProductSearch.trim()) return true;
+                      const q = manualProductSearch.toLowerCase();
+                      return (
+                        p.name.toLowerCase().includes(q) ||
+                        String(p.post_id).includes(q) ||
+                        (p.factory_name && p.factory_name.toLowerCase().includes(q))
+                      );
+                    });
+                    const filteredIds = filtered.map((p) => p.post_id || p.id);
+                    const allSelected = filteredIds.every((id) => manualProductIdsDraft.includes(id));
+                    if (allSelected) {
+                      setManualProductIdsDraft((prev) => prev.filter((id) => !filteredIds.includes(id)));
+                    } else {
+                      const next = new Set([...manualProductIdsDraft, ...filteredIds]);
+                      setManualProductIdsDraft(Array.from(next));
+                    }
+                  }}
+                  className="px-3 py-2 text-xs font-semibold bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-md transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  انتخاب همگی نتایج
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-gray-600">
+                <span>
+                  تعداد انتخاب‌شده: <strong className="text-purple-700 font-mono font-bold">{manualProductIdsDraft.length}</strong> کالا
+                </span>
+                {manualProductIdsDraft.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setManualProductIdsDraft([])}
+                    className="text-rose-600 hover:underline text-[11px]"
+                  >
+                    پاکسازی همه انتخاب‌ها
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Products List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-1.5 divide-y divide-gray-50">
+              {products
+                .filter((p) => {
+                  if (!manualProductSearch.trim()) return true;
+                  const q = manualProductSearch.toLowerCase();
+                  return (
+                    p.name.toLowerCase().includes(q) ||
+                    String(p.post_id).includes(q) ||
+                    (p.factory_name && p.factory_name.toLowerCase().includes(q)) ||
+                    (p.category_name && p.category_name.toLowerCase().includes(q))
+                  );
+                })
+                .map((p) => {
+                  const pId = p.post_id || p.id;
+                  const isChecked = manualProductIdsDraft.includes(pId);
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        if (isChecked) {
+                          setManualProductIdsDraft((prev) => prev.filter((id) => id !== pId));
+                        } else {
+                          setManualProductIdsDraft((prev) => [...prev, pId]);
+                        }
+                      }}
+                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors cursor-pointer text-xs ${
+                        isChecked
+                          ? 'bg-purple-50/70 border-purple-200 text-purple-950'
+                          : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-purple-700">
+                          {isChecked ? (
+                            <CheckSquare className="w-4 h-4 text-purple-700" />
+                          ) : (
+                            <Square className="w-4 h-4 text-gray-300" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-bold flex items-center gap-2">
+                            <span>{p.name}</span>
+                            <span className="font-mono text-[10px] text-gray-400">#{p.post_id}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
+                            {p.factory_name && <span>کارخانه: {p.factory_name}</span>}
+                            {p.category_name && <span>دسته: {p.category_name}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-left font-mono">
+                        <span className="font-bold text-slate-900">
+                          {p.current_price > 0 ? p.current_price.toLocaleString('fa-IR') : 'تماس بگیرید'}
+                        </span>
+                        {p.current_price > 0 && <span className="text-[10px] text-gray-400 mr-1">تومان</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/50">
+              <button
+                type="button"
+                onClick={() => setIsManualModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800"
+              >
+                انصراف
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingManualProducts}
+                  onClick={async () => {
+                    setIsSavingManualProducts(true);
+                    try {
+                      const newAssignmentMode = manualProductIdsDraft.length > 0 ? 'MANUAL' : 'TAXONOMY';
+                      setTableSettings((prev) => ({
+                        ...prev,
+                        assignment_mode: newAssignmentMode,
+                        manual_product_ids: manualProductIdsDraft
+                      }));
+                      if (onSaveTable) {
+                        await onSaveTable({
+                          id: table.id,
+                          assignment_mode: newAssignmentMode,
+                          manual_product_ids: manualProductIdsDraft
+                        });
+                      }
+                      setIsManualModalOpen(false);
+                    } finally {
+                      setIsSavingManualProducts(false);
+                    }
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-purple-700 hover:bg-purple-800 disabled:opacity-50 rounded-md transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isSavingManualProducts ? (
+                    <span>در حال ذخیره...</span>
+                  ) : (
+                    <span>ذخیره چینش دستی ({manualProductIdsDraft.length} کالا)</span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

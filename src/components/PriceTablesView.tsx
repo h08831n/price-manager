@@ -1,5 +1,26 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Play, Eye, Edit2, Trash2, AlertTriangle, Upload, Download, FileSpreadsheet, Clock, ArrowLeft, Globe, Search, X, DownloadCloud } from 'lucide-react';
+import {
+  Plus,
+  Play,
+  Eye,
+  Edit2,
+  Trash2,
+  AlertTriangle,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  Clock,
+  ArrowLeft,
+  Globe,
+  Search,
+  X,
+  DownloadCloud,
+  CheckSquare,
+  Square,
+  CheckCircle2,
+  XCircle,
+  Power
+} from 'lucide-react';
 import { PriceTable, Factory } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
@@ -13,8 +34,10 @@ interface PriceTablesViewProps {
   onOpenImport: (entity: string) => void;
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
-  onSyncWithDestination?: () => Promise<any>;
   onPullFromDestination?: () => Promise<any>;
+  onBatchToggleStatus?: (ids: number[], active: boolean) => Promise<any>;
+  onBatchDelete?: (ids: number[]) => Promise<any>;
+  onBatchRun?: (ids: number[]) => Promise<any>;
 }
 
 function normalizePersian(str: string): string {
@@ -38,8 +61,10 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   onOpenImport,
   onExport,
   onDownloadTemplate,
-  onSyncWithDestination,
-  onPullFromDestination
+  onPullFromDestination,
+  onBatchToggleStatus,
+  onBatchDelete,
+  onBatchRun
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTable, setNewTable] = useState<Partial<PriceTable>>({
@@ -54,10 +79,16 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
     active: true
   });
   const [runningId, setRunningId] = useState<number | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<number | null>(null);
+
+  // Multi-Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isBatchUpdating, setIsBatchUpdating] = useState(false);
+  const [isBatchDeletingModalOpen, setIsBatchDeletingModalOpen] = useState(false);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
 
   // Delete modal state
   const [deletingTable, setDeletingTable] = useState<PriceTable | null>(null);
@@ -65,9 +96,10 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
 
   // Close modals on Escape
   useEscapeKey(() => {
-    if (deletingTable) setDeletingTable(null);
+    if (isBatchDeletingModalOpen) setIsBatchDeletingModalOpen(false);
+    else if (deletingTable) setDeletingTable(null);
     else if (isAddModalOpen) setIsAddModalOpen(false);
-  }, Boolean(deletingTable || isAddModalOpen));
+  }, Boolean(isBatchDeletingModalOpen || deletingTable || isAddModalOpen));
 
   const filteredTables = useMemo(() => {
     const list = tables.filter((tbl) => {
@@ -90,6 +122,73 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
       return a.active ? -1 : 1;
     });
   }, [tables, searchQuery, selectedFactoryFilter]);
+
+  // Selection helpers
+  const isAllSelected = filteredTables.length > 0 && filteredTables.every((t) => selectedIds.has(t.id));
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredTables.map((t) => t.id)));
+    }
+  };
+
+  const toggleSelectOne = (id: number) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  // Bulk actions handlers
+  const handleBulkStatusChange = async (active: boolean) => {
+    if (selectedIds.size === 0) return;
+    setIsBatchUpdating(true);
+    try {
+      if (onBatchToggleStatus) {
+        await onBatchToggleStatus(Array.from(selectedIds), active);
+      } else {
+        for (const id of Array.from(selectedIds)) {
+          await onSaveTable({ id, active });
+        }
+      }
+      setSelectedIds(new Set());
+    } finally {
+      setIsBatchUpdating(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!onBatchDelete || selectedIds.size === 0) return;
+    setIsBatchDeleting(true);
+    try {
+      await onBatchDelete(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      setIsBatchDeletingModalOpen(false);
+    } finally {
+      setIsBatchDeleting(false);
+    }
+  };
+
+  const handleBulkRun = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBatchRunning(true);
+    try {
+      if (onBatchRun) {
+        await onBatchRun(Array.from(selectedIds));
+      } else {
+        // Run active selected tables sequentially
+        const activeSelected = filteredTables.filter((t) => selectedIds.has(t.id) && t.active);
+        for (const tbl of activeSelected) {
+          await onRunTable(tbl.id);
+        }
+      }
+      setSelectedIds(new Set());
+    } finally {
+      setIsBatchRunning(false);
+    }
+  };
 
   const handleOpenAdd = () => {
     setNewTable({
@@ -240,12 +339,95 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
         </div>
       </div>
 
+      {/* Bulk Action Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-md animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-slate-800 rounded font-mono font-bold text-amber-300">
+              {selectedIds.size}
+            </span>
+            <span>جدول قیمت انتخاب شده است</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={isBatchUpdating || isBatchRunning}
+              onClick={() => handleBulkStatusChange(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded font-medium transition-colors cursor-pointer"
+              title="جداول فعال می‌شوند و سیستم برای آن‌ها قیمت استخراج می‌کند"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>فعال‌سازی همگانی (شروع پایش قیمت)</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isBatchUpdating || isBatchRunning}
+              onClick={() => handleBulkStatusChange(false)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded font-medium transition-colors cursor-pointer"
+              title="جداول غیرفعال می‌شوند و استخراج قیمت برای آن‌ها متوقف می‌شود"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>غیرفعال‌سازی همگانی (توقف پایش قیمت)</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isBatchUpdating || isBatchRunning}
+              onClick={handleBulkRun}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded font-medium transition-colors cursor-pointer"
+              title="اجرای دستی و همگانی تمام جداول فعال انتخاب‌شده"
+            >
+              <Play className={`w-3.5 h-3.5 ${isBatchRunning ? 'animate-spin' : ''}`} />
+              <span>{isBatchRunning ? 'در حال اجرای گروهی...' : 'اجرای همگانی جداول فعال'}</span>
+            </button>
+
+            {onBatchDelete && (
+              <button
+                type="button"
+                disabled={isBatchUpdating || isBatchDeleting || isBatchRunning}
+                onClick={() => setIsBatchDeletingModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded font-medium transition-colors cursor-pointer"
+                title="حذف همگانی جداول قیمت انتخاب‌شده"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>حذف همگانی</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={isBatchUpdating || isBatchRunning}
+              onClick={() => setSelectedIds(new Set())}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition-colors text-[11px] cursor-pointer"
+            >
+              لغو انتخاب
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tables List */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
             <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
               <tr>
+                <th className="py-3 px-3 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="p-1 hover:bg-gray-200 rounded text-gray-500 transition-colors cursor-pointer inline-flex items-center justify-center"
+                    title={isAllSelected ? 'لغو انتخاب همه' : 'انتخاب همه موارد'}
+                  >
+                    {isAllSelected ? (
+                      <CheckSquare className="w-4 h-4 text-slate-900" />
+                    ) : (
+                      <Square className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3 px-4 w-16 text-center font-mono">آیدی سیستم</th>
                 <th className="py-3 px-4 w-24 text-center font-mono text-purple-900 bg-purple-50/50">آیدی مقصد</th>
                 <th className="py-3 px-4">نام جدول قیمت</th>
@@ -264,7 +446,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
             <tbody className="divide-y divide-gray-100">
               {filteredTables.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-8 text-center text-gray-400">
+                  <td colSpan={14} className="py-8 text-center text-gray-400">
                     {searchQuery || selectedFactoryFilter ? 'هیچ جدول قیمتی با فیلتر انتخابی یافت نشد.' : 'هیچ جدول قیمتی در سیستم ثبت نشده است.'}
                   </td>
                 </tr>
@@ -273,8 +455,21 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                   <tr
                     key={tbl.id}
                     onClick={() => onSelectTable(tbl)}
-                    className={`cursor-pointer transition-colors ${tbl.active ? 'hover:bg-slate-50/80 bg-white' : 'hover:bg-amber-50/40 bg-amber-50/20'}`}
+                    className={`cursor-pointer transition-colors ${selectedIds.has(tbl.id) ? 'bg-indigo-50/50' : tbl.active ? 'hover:bg-slate-50/80 bg-white' : 'hover:bg-amber-50/40 bg-amber-50/20'}`}
                   >
+                    <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectOne(tbl.id)}
+                        className="p-1 hover:bg-gray-100 rounded text-gray-500 transition-colors cursor-pointer inline-flex items-center justify-center"
+                      >
+                        {selectedIds.has(tbl.id) ? (
+                          <CheckSquare className="w-4 h-4 text-slate-900" />
+                        ) : (
+                          <Square className="w-4 h-4 text-gray-300" />
+                        )}
+                      </button>
+                    </td>
                     <td className="py-3 px-4 font-mono font-bold text-slate-800 text-center bg-slate-50/50">#{tbl.id}</td>
                     <td className="py-3 px-4 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
                       <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه جدول در سایت مقصد (پست تایپ price)">
@@ -282,9 +477,18 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                       </span>
                     </td>
                     <td className="py-3 px-4 font-bold text-gray-900">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className={`w-2 h-2 rounded-full ${tbl.active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
                         <span>{tbl.name}</span>
+                        {tbl.assignment_mode === 'MANUAL' ? (
+                          <span className="px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-800 border border-purple-200 rounded font-normal" title="محصولات مشخصاً و به صورت دستی در فیلد products در ACF انتخاب شده‌اند">
+                            دستی ({tbl.manual_product_ids?.length || tbl.product_count || 0})
+                          </span>
+                        ) : tbl.assignment_mode === 'ATTRIBUTE' ? (
+                          <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-800 border border-blue-200 rounded font-normal" title="بر اساس ویژگی‌های محصول (product_by_attr)">
+                            ویژگی
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="py-3 px-4 text-indigo-700 font-medium">
@@ -573,10 +777,56 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                     setIsDeleting(false);
                   }
                 }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{isDeleting ? 'در حال حذف...' : 'حذف قطعی جدول قیمت'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Modal */}
+      {isBatchDeletingModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">تأیید حذف همگانی جداول قیمت</h3>
+                <p className="text-xs text-gray-500 mt-0.5">عملیات حذف گروهی و کلیه منابع متصل</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50/50 rounded-lg border border-rose-200 text-xs text-rose-900 space-y-1">
+              <p>
+                آیا از حذف گروهی <strong>{selectedIds.size}</strong> جدول قیمت انتخاب‌شده اطمینان دارید؟
+              </p>
+              <p className="text-[11px] text-rose-700 font-medium pt-1">
+                ⚠️ هشدار: کلیه منابع استخراج، سلکتورها و وظایف زمان‌بندی مربوط به این جداول به طور کامل حذف خواهند شد!
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isBatchDeleting}
+                onClick={() => setIsBatchDeletingModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isBatchDeleting}
+                onClick={handleBulkDelete}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isBatchDeleting ? 'در حال حذف...' : `حذف قطعی ${selectedIds.size} جدول قیمت`}</span>
               </button>
             </div>
           </div>

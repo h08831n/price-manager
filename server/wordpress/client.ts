@@ -680,6 +680,9 @@ export interface DestinationProductImportItem {
   name: string;
   sku?: string;
   current_price?: number;
+  price_status?: 0 | 1 | 2;
+  price_diff?: number;
+  assignment_mode?: 'MANUAL' | 'ATTRIBUTE' | 'TAXONOMY';
   factory_name?: string;
   factory_id?: number;
   category_name?: string;
@@ -687,6 +690,20 @@ export interface DestinationProductImportItem {
   categories?: string[];
   stock_status?: string;
   active?: boolean;
+}
+
+export interface DestinationPriceTableImportItem {
+  id: number;
+  name: string;
+  slug?: string;
+  factory_id?: number;
+  factory_name?: string;
+  category_id?: number;
+  category_name?: string;
+  assignment_mode?: 'MANUAL' | 'ATTRIBUTE' | 'TAXONOMY';
+  manual_product_ids?: number[];
+  product_by_attr?: Array<{ taxonomy: string; term: string }>;
+  last_update_time?: number;
 }
 
 export interface DestinationImportResult {
@@ -717,7 +734,10 @@ export interface DestinationImportResult {
  * 3. Price tables are extracted from custom post type 'price'.
  * 4. Products default to ACTIVE (active: true).
  * 5. Price tables default to INACTIVE (active: false), allowing the user to selectively activate them.
- * 6. Products are matched to their price table by (category_id + factory_id), e.g. میلگرد + ذوب آهن -> جدول قیمت میلگرد ذوب آهن.
+ * 6. Products can be linked to tables in 3 modes (per generateDataTable.php):
+ *    - Mode 1: ACF manual products field (products_product) -> highest priority!
+ *    - Mode 2: ACF product_by_attr repeater (attribute rules).
+ *    - Mode 3: Automatic taxonomy matching (category_id + factory_id), e.g. میلگرد + ذوب آهن.
  */
 export async function pullDataFromDestination(options?: {
   defaultFactoryId?: number;
@@ -751,7 +771,7 @@ export async function pullDataFromDestination(options?: {
   let fetchedProducts: DestinationProductImportItem[] = [];
   let fetchedFactories: Array<{ id: number; name: string; slug?: string }> = [];
   let fetchedCategories: Array<{ id: number; name: string; slug?: string }> = [];
-  let fetchedTables: Array<{ id: number; name: string; slug?: string; factory_id?: number; factory_name?: string; category_id?: number; category_name?: string }> = [];
+  let fetchedTables: DestinationPriceTableImportItem[] = [];
 
   // Check if testing against local mock
   if (baseEndpointUrl.includes('localhost:3000/api/mock-wordpress')) {
@@ -768,16 +788,49 @@ export async function pullDataFromDestination(options?: {
       { id: 204, name: 'نبشی و ناودانی' }
     ];
     fetchedTables = [
-      { id: 3001, name: 'جدول قیمت میلگرد ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 201, category_name: 'میلگرد' },
-      { id: 3002, name: 'جدول قیمت تیرآهن ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 202, category_name: 'تیرآهن' },
-      { id: 3003, name: 'جدول قیمت ورق سیاه مبارکه', factory_id: 102, factory_name: 'کارخانه فولاد مبارکه اصفهان', category_id: 203, category_name: 'ورق سیاه' },
-      { id: 3004, name: 'جدول قیمت میلگرد خوزستان', factory_id: 103, factory_name: 'فولاد خوزستان', category_id: 201, category_name: 'میلگرد' }
+      {
+        id: 3001,
+        name: 'جدول قیمت میلگرد ذوب آهن',
+        factory_id: 101,
+        factory_name: 'کارخانه ذوب آهن اصفهان',
+        category_id: 201,
+        category_name: 'میلگرد',
+        assignment_mode: 'MANUAL',
+        manual_product_ids: [2001]
+      },
+      {
+        id: 3002,
+        name: 'جدول قیمت تیرآهن ذوب آهن',
+        factory_id: 101,
+        factory_name: 'کارخانه ذوب آهن اصفهان',
+        category_id: 202,
+        category_name: 'تیرآهن',
+        assignment_mode: 'TAXONOMY'
+      },
+      {
+        id: 3003,
+        name: 'جدول قیمت ورق سیاه مبارکه',
+        factory_id: 102,
+        factory_name: 'کارخانه فولاد مبارکه اصفهان',
+        category_id: 203,
+        category_name: 'ورق سیاه',
+        assignment_mode: 'TAXONOMY'
+      },
+      {
+        id: 3004,
+        name: 'جدول قیمت میلگرد خوزستان',
+        factory_id: 103,
+        factory_name: 'فولاد خوزستان',
+        category_id: 201,
+        category_name: 'میلگرد',
+        assignment_mode: 'TAXONOMY'
+      }
     ];
     fetchedProducts = [
-      { post_id: 2001, name: 'میلگرد ۱۴ ذوب آهن (سایت مقصد)', sku: 'REBAR-14-ESF', current_price: 29500, factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'میلگرد', category_id: 201, active: true },
-      { post_id: 2002, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'تیرآهن', category_id: 202, active: true },
-      { post_id: 2003, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', factory_id: 102, category_name: 'ورق سیاه', category_id: 203, active: true },
-      { post_id: 2004, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', factory_id: 103, category_name: 'میلگرد', category_id: 201, active: true }
+      { post_id: 2001, name: 'میلگرد ۱۴ ذوب آهن (سایت مقصد)', sku: 'REBAR-14-ESF', current_price: 29500, price_status: 2, price_diff: 500, assignment_mode: 'MANUAL', factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'میلگرد', category_id: 201, active: true },
+      { post_id: 2002, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, price_status: 0, price_diff: 0, assignment_mode: 'TAXONOMY', factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'تیرآهن', category_id: 202, active: true },
+      { post_id: 2003, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, price_status: 1, price_diff: 200, assignment_mode: 'TAXONOMY', factory_name: 'کارخانه فولاد مبارکه اصفهان', factory_id: 102, category_name: 'ورق سیاه', category_id: 203, active: true },
+      { post_id: 2004, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, price_status: 0, price_diff: 0, assignment_mode: 'TAXONOMY', factory_name: 'فولاد خوزستان', factory_id: 103, category_name: 'میلگرد', category_id: 201, active: true }
     ];
   } else {
     // Paginated fetch loop
@@ -967,6 +1020,8 @@ export async function pullDataFromDestination(options?: {
       (t) => (tbl.id && t.destination_id === tbl.id) || t.name.toLowerCase() === trimmedName.toLowerCase()
     );
 
+    const tblAssignmentMode = tbl.assignment_mode || (tbl.manual_product_ids && tbl.manual_product_ids.length > 0 ? 'MANUAL' : 'TAXONOMY');
+
     if (!existing) {
       const nextTblId = schema.price_tables.length > 0 ? Math.max(...schema.price_tables.map((t) => t.id)) + 1 : 1;
       schema.price_tables.push({
@@ -977,6 +1032,10 @@ export async function pullDataFromDestination(options?: {
         category_id: tableCategoryId,
         category_name: tableCategoryName,
         destination_id: tbl.id || nextTblId,
+        assignment_mode: tblAssignmentMode,
+        manual_product_ids: tbl.manual_product_ids || [],
+        product_by_attr: tbl.product_by_attr || [],
+        last_update_time: tbl.last_update_time,
         active: false, // Price tables strictly default to INACTIVE per user instruction
         start_time: '11:00',
         retry_interval_minutes: 30,
@@ -992,6 +1051,10 @@ export async function pullDataFromDestination(options?: {
       if (tbl.id && !existing.destination_id) existing.destination_id = tbl.id;
       if (tableFactoryId && !existing.factory_id) existing.factory_id = tableFactoryId;
       if (tableCategoryId && !existing.category_id) existing.category_id = tableCategoryId;
+      if (tbl.manual_product_ids) existing.manual_product_ids = tbl.manual_product_ids;
+      if (tbl.assignment_mode) existing.assignment_mode = tbl.assignment_mode;
+      if (tbl.product_by_attr) existing.product_by_attr = tbl.product_by_attr;
+      if (tbl.last_update_time) existing.last_update_time = tbl.last_update_time;
     }
   }
 
@@ -1076,13 +1139,23 @@ export async function pullDataFromDestination(options?: {
     }
 
     // Match product to price table:
-    // User specification:
-    // "نمایش محصولات در جدول قیمت به این شکله که محصولاتی رو نمایش میده که مثلا دسته بندی میلگرد دارنده و کارخانه ذوب آهن واسشون ست شده پس دااخل جدول قیمت میلگرد ذوب آهن نشونشون میده"
+    // MODE CASCADE per generateDataTable.php:
+    // Priority 1: Check if product was manually placed in a table via ACF 'products' field
     let resolvedTableId = defaultTableId;
     let resolvedTableName = '';
+    let resolvedAssignmentMode: 'MANUAL' | 'ATTRIBUTE' | 'TAXONOMY' = item.assignment_mode || 'TAXONOMY';
 
-    // First try matching both category and factory
-    if (resolvedCategoryId && resolvedFactoryId) {
+    const manualTable = schema.price_tables.find((t) =>
+      t.manual_product_ids && t.manual_product_ids.includes(postId)
+    );
+    if (manualTable) {
+      resolvedTableId = manualTable.id;
+      resolvedTableName = manualTable.name;
+      resolvedAssignmentMode = 'MANUAL';
+    }
+
+    // Priority 2: Match by Category & Factory (company taxonomy)
+    if (!resolvedTableName && resolvedCategoryId && resolvedFactoryId) {
       const matchedTable = schema.price_tables.find(
         (t) => t.category_id === resolvedCategoryId && t.factory_id === resolvedFactoryId
       );
@@ -1092,7 +1165,7 @@ export async function pullDataFromDestination(options?: {
       }
     }
 
-    // Fallback: match by category only if no factory-specific table
+    // Priority 3: Fallback by category only
     if (!resolvedTableName && resolvedCategoryId) {
       const matchedTable = schema.price_tables.find((t) => t.category_id === resolvedCategoryId);
       if (matchedTable) {
@@ -1101,7 +1174,7 @@ export async function pullDataFromDestination(options?: {
       }
     }
 
-    // Fallback: match by destination table ID or name
+    // Priority 4: Fallback by destination table ID or name
     if (!resolvedTableName && item.category_name) {
       const matchedTable = schema.price_tables.find(
         (t) => t.name.toLowerCase().includes(item.category_name!.toLowerCase())
@@ -1133,6 +1206,11 @@ export async function pullDataFromDestination(options?: {
       if (resolvedCategoryName) existing.category_name = resolvedCategoryName;
       if (resolvedTableId) existing.price_table_id = resolvedTableId;
       if (resolvedTableName) existing.price_table_name = resolvedTableName;
+      existing.assignment_mode = resolvedAssignmentMode;
+      if (item.price_status !== undefined) {
+        existing.price_status = (item.price_status === 1 || item.price_status === 2 ? item.price_status : 0) as 0 | 1 | 2;
+      }
+      if (item.price_diff !== undefined) existing.price_diff = item.price_diff;
       existing.sync_status = 'SYNCED';
       existing.last_synced_at = now;
       existing.updated_at = now;
@@ -1163,6 +1241,9 @@ export async function pullDataFromDestination(options?: {
         price_table_id: resolvedTableId,
         price_table_name: resolvedTableName,
         current_price: item.current_price || 0,
+        price_status: (item.price_status === 1 || item.price_status === 2 ? item.price_status : 0) as 0 | 1 | 2,
+        price_diff: item.price_diff || 0,
+        assignment_mode: resolvedAssignmentMode,
         active: true, // ACTIVE by default for products as requested
         sync_status: 'SYNCED' as const,
         last_synced_at: now,

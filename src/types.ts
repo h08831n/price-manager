@@ -43,6 +43,13 @@ export interface PriceTable {
   default_price_adjustment?: number; // e.g. -100 or +100 Tomans table-wide default
   working_days?: string;
   recheck_default?: boolean;
+  // WordPress ACF & Template Matching Modes:
+  assignment_mode?: 'MANUAL' | 'ATTRIBUTE' | 'TAXONOMY'; // MANUAL: get_field('products'), ATTRIBUTE: get_field('product_by_attr'), TAXONOMY: company + product_cat
+  manual_product_ids?: number[]; // Explicit list of WooCommerce post_ids / product IDs selected manually in ACF
+  product_by_attr?: Array<{ taxonomy: string; term: string }>; // ACF product_by_attr repeater
+  product_by_attr_company?: boolean;
+  last_update_time?: number; // Timestamp of last price update (stored in WP post meta 'last_update_time')
+  cache_version?: number; // WP _price_table_cache_v
   created_at: string;
   updated_at: string;
   source_count?: number;
@@ -78,6 +85,10 @@ export interface Product {
   effective_adjustment?: number; // Resulting applied adjustment in Tomans
   active: boolean;
   attributes: Record<string, any>; // e.g. { pa_size: "16", pa_grade: "A3" }
+  // WordPress price fluctuation metadata:
+  price_status?: 0 | 1 | 2; // 0 = ثابت (fixed), 1 = کاهش (down), 2 = افزایش (up)
+  price_diff?: number; // Absolute fluctuation value
+  assignment_mode?: 'MANUAL' | 'ATTRIBUTE' | 'TAXONOMY';
   created_at: string;
   updated_at: string;
   last_synced_at?: string | null;

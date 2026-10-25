@@ -4,7 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { db } from '../db/database';
-import { executePriceTable, recalculateProductPrices } from '../engine/tableExecution';
+import { executePriceTable, recalculateProductPrices, resolveProductsForTable } from '../engine/tableExecution';
 import { extractXPathFromHtml } from '../scraper/xpathExtractor';
 import { fetchHtmlForUrl } from '../scraper/engine';
 import { evaluateFreshness } from '../scraper/freshness';
@@ -526,6 +526,50 @@ apiRouter.delete('/products/:id', (req: Request, res: Response) => {
   res.json({ success: true, message: 'محصول با موفقیت حذف گردید.' });
 });
 
+apiRouter.post('/products/batch-status', (req: Request, res: Response) => {
+  const { ids, active } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ شناسه‌ای ارسال نشده است.' });
+  }
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const schema = db.getSchema();
+  let count = 0;
+  for (const prod of schema.products) {
+    if (idSet.has(prod.id)) {
+      prod.active = Boolean(active);
+      prod.updated_at = new Date().toISOString();
+      count++;
+    }
+  }
+  db.save();
+  res.json({
+    success: true,
+    count,
+    message: `وضعیت ${count} محصول با موفقیت ${active ? 'فعال' : 'غیرفعال'} شد.`
+  });
+});
+
+apiRouter.post('/products/batch-delete', (req: Request, res: Response) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ شناسه‌ای برای حذف ارسال نشده است.' });
+  }
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const schema = db.getSchema();
+  const initialLen = schema.products.length;
+  schema.products = schema.products.filter((p) => !idSet.has(p.id));
+  schema.product_selectors = schema.product_selectors.filter((s) => !idSet.has(s.product_id));
+  schema.price_records = schema.price_records.filter((cp) => !idSet.has(cp.product_id));
+  schema.price_changes = schema.price_changes.filter((pc) => !idSet.has(pc.product_id));
+  const deletedCount = initialLen - schema.products.length;
+  db.save();
+  res.json({
+    success: true,
+    count: deletedCount,
+    message: `${deletedCount} محصول با موفقیت از سیستم حذف شدند.`
+  });
+});
+
 // ==========================================
 // 3. FACTORIES API (Requirement #49)
 // ==========================================
@@ -636,6 +680,55 @@ apiRouter.delete('/factories/:id', (req: Request, res: Response) => {
   res.json({ success: true, message: 'کارخانه با موفقیت حذف گردید.' });
 });
 
+apiRouter.post('/factories/batch-status', (req: Request, res: Response) => {
+  const { ids, active } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ شناسه‌ای ارسال نشده است.' });
+  }
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const schema = db.getSchema();
+  let count = 0;
+  for (const f of schema.factories) {
+    if (idSet.has(f.id)) {
+      f.active = Boolean(active);
+      f.updated_at = new Date().toISOString();
+      count++;
+    }
+  }
+  db.save();
+  res.json({
+    success: true,
+    count,
+    message: `وضعیت ${count} کارخانه با موفقیت ${active ? 'فعال' : 'غیرفعال'} شد.`
+  });
+});
+
+apiRouter.post('/factories/batch-delete', (req: Request, res: Response) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ شناسه‌ای برای حذف ارسال نشده است.' });
+  }
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const schema = db.getSchema();
+  const initialLen = schema.factories.length;
+  schema.factories = schema.factories.filter((f) => !idSet.has(f.id));
+
+  // Clean up linked tables
+  const linkedTables = schema.price_tables.filter((t) => idSet.has(t.factory_id));
+  const linkedTableIds = new Set(linkedTables.map((t) => t.id));
+  schema.price_tables = schema.price_tables.filter((t) => !idSet.has(t.factory_id));
+  schema.products = schema.products.filter((p) => !idSet.has(p.factory_id) && !linkedTableIds.has(p.price_table_id));
+  schema.table_sources = schema.table_sources.filter((s) => !linkedTableIds.has(s.price_table_id));
+
+  const deletedCount = initialLen - schema.factories.length;
+  db.save();
+  res.json({
+    success: true,
+    count: deletedCount,
+    message: `${deletedCount} کارخانه با موفقیت حذف شدند.`
+  });
+});
+
 // ==========================================
 // 3B. CATEGORIES API
 // ==========================================
@@ -738,6 +831,61 @@ apiRouter.delete('/categories/:id', (req: Request, res: Response) => {
   res.json({ success: true, message: 'دسته‌بندی با موفقیت حذف گردید.' });
 });
 
+apiRouter.post('/categories/batch-status', (req: Request, res: Response) => {
+  const { ids, active } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ شناسه‌ای ارسال نشده است.' });
+  }
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const schema = db.getSchema();
+  if (!Array.isArray(schema.categories)) schema.categories = [];
+  let count = 0;
+  for (const c of schema.categories) {
+    if (idSet.has(c.id)) {
+      c.active = Boolean(active);
+      c.updated_at = new Date().toISOString();
+      count++;
+    }
+  }
+  db.save();
+  res.json({
+    success: true,
+    count,
+    message: `وضعیت ${count} دسته‌بندی با موفقیت ${active ? 'فعال' : 'غیرفعال'} شد.`
+  });
+});
+
+apiRouter.post('/categories/batch-delete', (req: Request, res: Response) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ شناسه‌ای برای حذف ارسال نشده است.' });
+  }
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const schema = db.getSchema();
+  if (!Array.isArray(schema.categories)) schema.categories = [];
+  const initialLen = schema.categories.length;
+  schema.categories = schema.categories.filter((c) => !idSet.has(c.id));
+  schema.products.forEach((p) => {
+    if (p.category_id && idSet.has(p.category_id)) {
+      p.category_id = null;
+      p.category_name = undefined;
+    }
+  });
+  schema.price_tables.forEach((t) => {
+    if (t.category_id && idSet.has(t.category_id)) {
+      t.category_id = null;
+      t.category_name = undefined;
+    }
+  });
+  const deletedCount = initialLen - schema.categories.length;
+  db.save();
+  res.json({
+    success: true,
+    count: deletedCount,
+    message: `${deletedCount} دسته‌بندی با موفقیت حذف شدند.`
+  });
+});
+
 // ==========================================
 // 4. PRICE TABLES API (Requirement #8, #50)
 // ==========================================
@@ -750,12 +898,8 @@ apiRouter.get('/price-tables', (req: Request, res: Response) => {
     const f = schema.factories.find((fac) => fac.id === t.factory_id);
     const cat = schema.categories.find((c) => c.id === t.category_id);
     const sourceCount = schema.table_sources.filter((s) => s.price_table_id === t.id).length;
-    // Count products matching either price_table_id OR both factory_id & category_id
-    const productCount = schema.products.filter(
-      (p) =>
-        p.price_table_id === t.id ||
-        (t.factory_id && t.category_id && p.factory_id === t.factory_id && p.category_id === t.category_id)
-    ).length;
+    // Count products using exact 3-mode cascade (Manual -> Attribute -> Taxonomy)
+    const productCount = resolveProductsForTable(t, schema.products).length;
     const daily = schema.daily_table_runs.find(
       (d) => d.price_table_id === t.id && d.run_date === todayStr
     );
@@ -781,7 +925,21 @@ apiRouter.get('/price-tables', (req: Request, res: Response) => {
 
 apiRouter.post('/price-tables', (req: Request, res: Response) => {
   const schema = db.getSchema();
-  const { name, destination_id, factory_id, start_time, retry_interval_minutes, max_attempts, price_guard_percent, default_price_adjustment, active } = req.body;
+  const {
+    name,
+    destination_id,
+    factory_id,
+    category_id,
+    start_time,
+    retry_interval_minutes,
+    max_attempts,
+    price_guard_percent,
+    default_price_adjustment,
+    assignment_mode,
+    manual_product_ids,
+    product_by_attr,
+    active
+  } = req.body;
 
   if (!name || !name.trim()) return res.status(400).json({ error: 'نام جدول قیمت الزامی است.' });
 
@@ -801,11 +959,15 @@ apiRouter.post('/price-tables', (req: Request, res: Response) => {
     destination_id: targetDestId || newId,
     name: name.trim(),
     factory_id: parseInt(factory_id, 10) || 1,
+    category_id: category_id !== undefined ? (parseInt(category_id, 10) || null) : null,
     start_time: start_time || '11:00',
     retry_interval_minutes: parseInt(retry_interval_minutes, 10) || 30,
     max_attempts: parseInt(max_attempts, 10) || 5,
     price_guard_percent: parseFloat(price_guard_percent) || 30,
     default_price_adjustment: parseFloat(default_price_adjustment) || 0,
+    assignment_mode: assignment_mode || (Array.isArray(manual_product_ids) && manual_product_ids.length > 0 ? 'MANUAL' : 'TAXONOMY'),
+    manual_product_ids: Array.isArray(manual_product_ids) ? manual_product_ids.map(Number) : [],
+    product_by_attr: Array.isArray(product_by_attr) ? product_by_attr : [],
     active: active !== undefined ? Boolean(active) : true,
     sync_status: 'NOT_SYNCED' as const,
     created_at: new Date().toISOString(),
@@ -839,6 +1001,7 @@ apiRouter.put('/price-tables/:id', (req: Request, res: Response) => {
 
   if (req.body.name !== undefined) table.name = req.body.name.trim();
   if (req.body.factory_id !== undefined) table.factory_id = parseInt(req.body.factory_id, 10);
+  if (req.body.category_id !== undefined) table.category_id = req.body.category_id ? parseInt(req.body.category_id, 10) : null;
   if (req.body.start_time !== undefined) table.start_time = req.body.start_time;
   if (req.body.retry_interval_minutes !== undefined) table.retry_interval_minutes = parseInt(req.body.retry_interval_minutes, 10);
   if (req.body.max_attempts !== undefined) table.max_attempts = parseInt(req.body.max_attempts, 10);
@@ -847,6 +1010,24 @@ apiRouter.put('/price-tables/:id', (req: Request, res: Response) => {
     table.default_price_adjustment = parseFloat(req.body.default_price_adjustment) || 0;
   }
   if (req.body.active !== undefined) table.active = Boolean(req.body.active);
+  if (req.body.assignment_mode !== undefined) table.assignment_mode = req.body.assignment_mode;
+  if (Array.isArray(req.body.manual_product_ids)) {
+    const manualIds = req.body.manual_product_ids.map(Number);
+    table.manual_product_ids = manualIds;
+    // When manual products are provided, also update their price_table_id
+    if (manualIds.length > 0) {
+      table.assignment_mode = 'MANUAL';
+      const manualSet = new Set(manualIds);
+      schema.products.forEach((p) => {
+        if (manualSet.has(p.id) || manualSet.has(p.post_id) || (p.destination_id && manualSet.has(p.destination_id))) {
+          p.price_table_id = table.id;
+          p.price_table_name = table.name;
+          p.assignment_mode = 'MANUAL';
+        }
+      });
+    }
+  }
+  if (Array.isArray(req.body.product_by_attr)) table.product_by_attr = req.body.product_by_attr;
   table.updated_at = new Date().toISOString();
 
   // Recalculate prices for products of this table
@@ -900,6 +1081,94 @@ apiRouter.post('/price-tables/:id/run', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+apiRouter.post('/price-tables/batch-status', (req: Request, res: Response) => {
+  const { ids, active } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ شناسه‌ای ارسال نشده است.' });
+  }
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const schema = db.getSchema();
+  let count = 0;
+  for (const t of schema.price_tables) {
+    if (idSet.has(t.id)) {
+      t.active = Boolean(active);
+      t.updated_at = new Date().toISOString();
+      count++;
+    }
+  }
+  db.save();
+  res.json({
+    success: true,
+    count,
+    message: `وضعیت ${count} جدول قیمت با موفقیت ${active ? 'فعال' : 'غیرفعال'} شد.`
+  });
+});
+
+apiRouter.post('/price-tables/batch-delete', (req: Request, res: Response) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ شناسه‌ای برای حذف ارسال نشده است.' });
+  }
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const schema = db.getSchema();
+  const initialLen = schema.price_tables.length;
+  const linkedSources = schema.table_sources.filter((s) => idSet.has(s.price_table_id));
+  const linkedSourceIds = new Set(linkedSources.map((s) => s.id));
+
+  schema.price_tables = schema.price_tables.filter((t) => !idSet.has(t.id));
+  schema.table_sources = schema.table_sources.filter((s) => !idSet.has(s.price_table_id));
+  schema.product_selectors = schema.product_selectors.filter((s) => !linkedSourceIds.has(s.table_source_id));
+  schema.daily_table_runs = schema.daily_table_runs.filter((r) => !idSet.has(r.price_table_id));
+  schema.daily_source_runs = schema.daily_source_runs.filter((r) => !linkedSourceIds.has(r.table_source_id));
+  const deletedCount = initialLen - schema.price_tables.length;
+  db.save();
+  res.json({
+    success: true,
+    count: deletedCount,
+    message: `${deletedCount} جدول قیمت با موفقیت حذف شدند.`
+  });
+});
+
+apiRouter.post('/price-tables/batch-run', async (req: Request, res: Response) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'هیچ جدولی برای اجرا انتخاب نشده است.' });
+  }
+  const schema = db.getSchema();
+  const idSet = new Set(ids.map((x) => parseInt(String(x), 10)));
+  const tablesToRun = schema.price_tables.filter((t) => idSet.has(t.id));
+
+  // Critical: only active tables are processed
+  const activeTables = tablesToRun.filter((t) => t.active);
+  const inactiveCount = tablesToRun.length - activeTables.length;
+
+  if (activeTables.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'تمام جداول انتخاب‌شده غیرفعال هستند. برای دریافت قیمت ابتدا جداول مورد نظر را فعال کنید.'
+    });
+  }
+
+  const results = [];
+  for (const tbl of activeTables) {
+    try {
+      const run = await executePriceTable(tbl.id, { triggerType: 'MANUAL_TABLE' });
+      results.push({ id: tbl.id, name: tbl.name, success: true, run });
+    } catch (err: any) {
+      results.push({ id: tbl.id, name: tbl.name, success: false, error: err.message });
+    }
+  }
+
+  res.json({
+    success: true,
+    total: tablesToRun.length,
+    executed: activeTables.length,
+    skipped_inactive: inactiveCount,
+    results,
+    message: `اجرای ${activeTables.length} جدول قیمت با موفقیت انجام شد.${inactiveCount > 0 ? ` (${inactiveCount} جدول غیرفعال نادیده گرفته شد)` : ''}`
+  });
 });
 
 // ==========================================
@@ -2523,16 +2792,16 @@ apiRouter.all('/mock-wordpress/wp-json/price-system/v1/fetch-destination-data', 
       { id: 204, name: 'نبشی و ناودانی', slug: 'angle-channel' }
     ],
     price_tables: [
-      { id: 3001, name: 'جدول قیمت میلگرد ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 201, category_name: 'میلگرد', active: false },
-      { id: 3002, name: 'جدول قیمت تیرآهن ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 202, category_name: 'تیرآهن', active: false },
-      { id: 3003, name: 'جدول قیمت ورق سیاه مبارکه', factory_id: 102, factory_name: 'کارخانه فولاد مبارکه اصفهان', category_id: 203, category_name: 'ورق سیاه', active: false },
-      { id: 3004, name: 'جدول قیمت میلگرد خوزستان', factory_id: 103, factory_name: 'فولاد خوزستان', category_id: 201, category_name: 'میلگرد', active: false }
+      { id: 3001, name: 'جدول قیمت میلگرد ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 201, category_name: 'میلگرد', assignment_mode: 'MANUAL', manual_product_ids: [2001], active: false },
+      { id: 3002, name: 'جدول قیمت تیرآهن ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 202, category_name: 'تیرآهن', assignment_mode: 'TAXONOMY', active: false },
+      { id: 3003, name: 'جدول قیمت ورق سیاه مبارکه', factory_id: 102, factory_name: 'کارخانه فولاد مبارکه اصفهان', category_id: 203, category_name: 'ورق سیاه', assignment_mode: 'TAXONOMY', active: false },
+      { id: 3004, name: 'جدول قیمت میلگرد خوزستان', factory_id: 103, factory_name: 'فولاد خوزستان', category_id: 201, category_name: 'میلگرد', assignment_mode: 'TAXONOMY', active: false }
     ],
     products: [
-      { post_id: 2001, name: 'میلگرد ۱۴ ذوب آهن (سایت مقصد)', sku: 'REBAR-14-ESF', current_price: 29500, factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'میلگرد', category_id: 201, active: true },
-      { post_id: 2002, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'تیرآهن', category_id: 202, active: true },
-      { post_id: 2003, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', factory_id: 102, category_name: 'ورق سیاه', category_id: 203, active: true },
-      { post_id: 2004, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', factory_id: 103, category_name: 'میلگرد', category_id: 201, active: true }
+      { post_id: 2001, name: 'میلگرد ۱۴ ذوب آهن (سایت مقصد)', sku: 'REBAR-14-ESF', current_price: 29500, price_status: 2, price_diff: 500, assignment_mode: 'MANUAL', factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'میلگرد', category_id: 201, active: true },
+      { post_id: 2002, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, price_status: 0, price_diff: 0, assignment_mode: 'TAXONOMY', factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'تیرآهن', category_id: 202, active: true },
+      { post_id: 2003, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, price_status: 1, price_diff: 200, assignment_mode: 'TAXONOMY', factory_name: 'کارخانه فولاد مبارکه اصفهان', factory_id: 102, category_name: 'ورق سیاه', category_id: 203, active: true },
+      { post_id: 2004, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, price_status: 0, price_diff: 0, assignment_mode: 'TAXONOMY', factory_name: 'فولاد خوزستان', factory_id: 103, category_name: 'میلگرد', category_id: 201, active: true }
     ],
     message: 'اطلاعات با موفقیت استخراج شد.'
   });

@@ -3,7 +3,74 @@ import { db } from '../db/database';
 import { scrapeTableSource } from '../scraper/engine';
 import { getEffectiveConfig, checkPriceGuard, calculateMinimumPrices } from './priceGuard';
 import { publishTableToWordPress, WordPressProductPayload } from '../wordpress/client';
-import { Run, RunTriggerType, AppError, TableRevision } from '../../src/types';
+import { Run, RunTriggerType, AppError, TableRevision, PriceTable, Product } from '../../src/types';
+
+/**
+ * Resolves the products associated with a price table following the 3 WordPress template modes
+ * discovered in generateDataTable.php:
+ * 1. Mode 1 (Manual / Explicit): ACF repeater/relationship field `products` (`products_product`)
+ * 2. Mode 2 (Attributes): ACF repeater `product_by_attr` (taxonomy & term) + company & category
+ * 3. Mode 3 (Taxonomy Default): company taxonomy (factory_id) + product_cat taxonomy (category_id)
+ */
+export function resolveProductsForTable(priceTable: PriceTable, allProducts: Product[]): Product[] {
+  // Mode 1: Manual Products selection (ACF get_field('products'))
+  if (priceTable.manual_product_ids && priceTable.manual_product_ids.length > 0) {
+    const manualList: Product[] = [];
+    for (const manualId of priceTable.manual_product_ids) {
+      const found = allProducts.find(
+        (p) => p.post_id === manualId || p.destination_id === manualId || p.id === manualId
+      );
+      if (found && found.active) {
+        manualList.push(found);
+      }
+    }
+    if (manualList.length > 0) return manualList;
+  }
+
+  // Mode 2: Attribute-based filtering (ACF product_by_attr repeater)
+  if (priceTable.product_by_attr && priceTable.product_by_attr.length > 0) {
+    const attrFiltered = allProducts.filter((p) => {
+      if (!p.active) return false;
+      if (priceTable.factory_id && p.factory_id !== priceTable.factory_id) return false;
+      if (priceTable.category_id && p.category_id !== priceTable.category_id) return false;
+
+      // Check attribute terms
+      for (const rule of priceTable.product_by_attr!) {
+        const terms = rule.term.split(',').map((t) => t.trim().toLowerCase());
+        const attrVal = String(
+          p.attributes?.[rule.taxonomy] || p.attributes?.['pa_' + rule.taxonomy] || ''
+        ).toLowerCase();
+        if (!terms.some((t) => attrVal.includes(t))) return false;
+      }
+      return true;
+    });
+    if (attrFiltered.length > 0) return attrFiltered;
+  }
+
+  // Mode 3: Automatic Taxonomy Match (company + product_cat) or direct price_table_id
+  return allProducts.filter((p) => {
+    if (!p.active) return false;
+    if (p.price_table_id === priceTable.id) return true;
+    if (
+      priceTable.factory_id &&
+      priceTable.category_id &&
+      p.factory_id === priceTable.factory_id &&
+      p.category_id === priceTable.category_id
+    ) {
+      return true;
+    }
+    if (
+      priceTable.factory_id &&
+      p.factory_id === priceTable.factory_id &&
+      priceTable.category_name &&
+      p.category_name &&
+      priceTable.category_name.trim().toLowerCase() === p.category_name.trim().toLowerCase()
+    ) {
+      return true;
+    }
+    return false;
+  });
+}
 
 export interface ExecuteTableOptions {
   triggerType: RunTriggerType;
@@ -20,6 +87,18 @@ export async function executePriceTable(
 
   if (!priceTable) {
     throw new Error(`جدول قیمت با شناسه ${priceTableId} یافت نشد.`);
+  }
+
+  // Active Check: Inactive tables must not crawl prices or publish
+  if (!priceTable.active) {
+    db.log(
+      'WARNING',
+      `جدول قیمت «${priceTable.name}» در وضعیت غیرفعال قرار دارد. سیستم برای جداول غیرفعال قیمت دریافت نمی‌کند.`,
+      { priceTableId }
+    );
+    throw new Error(
+      `جدول قیمت «${priceTable.name}» غیرفعال است. برای اینکه سیستم برای این جدول و محصولاتش قیمت دریافت کند، ابتدا آن را فعال نمایید.`
+    );
   }
 
   const runId = db.getNextId('runs');
@@ -58,7 +137,7 @@ export async function executePriceTable(
   );
 
   try {
-    const tableProducts = schema.products.filter((p) => p.price_table_id === priceTableId && p.active);
+    const tableProducts = resolveProductsForTable(priceTable, schema.products);
     runRecord.products_expected = tableProducts.length;
 
     let activeSources = schema.table_sources.filter(

@@ -172,10 +172,21 @@ class PriceSystemSyncPlugin {
             }
 
             $old_price = floatval(get_post_meta($post_id, '_price', true));
+            $price_diff = ($old_price > 0 && $new_price > 0) ? abs($new_price - $old_price) : 0;
+            $price_status = 0; // 0 = ثابت (Fixed)
+            if ($old_price > 0 && $new_price > 0) {
+                if ($new_price > $old_price) {
+                    $price_status = 2; // افزایش قیمت (Up arrow)
+                } elseif ($new_price < $old_price) {
+                    $price_status = 1; // کاهش قیمت (Down arrow)
+                }
+            }
 
             // Update WooCommerce standard price fields
             update_post_meta($post_id, '_regular_price', $new_price);
             update_post_meta($post_id, '_price', $new_price);
+            update_post_meta($post_id, 'price_status', $price_status);
+            update_post_meta($post_id, 'price_diff', $price_diff);
             update_post_meta($post_id, '_price_system_last_sync', current_time('mysql'));
             update_post_meta($post_id, '_price_system_table_id', $price_table_id);
 
@@ -186,11 +197,21 @@ class PriceSystemSyncPlugin {
 
             $updated_count++;
             $results[] = array(
-                'post_id'   => $post_id,
-                'old_price' => $old_price,
-                'new_price' => $new_price,
-                'success'   => true
+                'post_id'      => $post_id,
+                'old_price'    => $old_price,
+                'new_price'    => $new_price,
+                'price_status' => $price_status,
+                'price_diff'   => $price_diff,
+                'success'      => true
             );
+        }
+
+        // If price_table_id is provided, update table's last_update_time and bump cache version
+        if ($price_table_id > 0) {
+            update_post_meta($price_table_id, 'last_update_time', time());
+            $current_v = (int) get_post_meta($price_table_id, '_price_table_cache_v', true);
+            if ($current_v < 1) $current_v = 1;
+            update_post_meta($price_table_id, '_price_table_cache_v', $current_v + 1);
         }
 
         return rest_ensure_response(array(
@@ -539,16 +560,54 @@ class PriceSystemSyncPlugin {
                     $p_cat_id = intval(get_post_meta($pp->ID, 'category_id', true) ?: get_post_meta($pp->ID, '_category_id', true) ?: get_post_meta($pp->ID, 'product_cat_id', true));
                 }
 
+                // ACF Mode 1: Manual Products selection (get_field('products'))
+                $manual_product_ids = array();
+                if (function_exists('get_field')) {
+                    $acf_products = get_field('products', $pp->ID);
+                    if (!empty($acf_products) && is_array($acf_products)) {
+                        foreach ($acf_products as $row) {
+                            $prod_item = isset($row['products_product']) ? $row['products_product'] : (is_numeric($row) ? $row : null);
+                            if ($prod_item instanceof WP_Post) {
+                                $manual_product_ids[] = $prod_item->ID;
+                            } elseif (is_numeric($prod_item)) {
+                                $manual_product_ids[] = intval($prod_item);
+                            }
+                        }
+                    }
+                }
+
+                // ACF Mode 2: Attribute-based filtering (product_by_attr repeater)
+                $product_by_attr = array();
+                if (function_exists('have_rows') && have_rows('product_by_attr', $pp->ID)) {
+                    while (have_rows('product_by_attr', $pp->ID)) {
+                        the_row();
+                        $attr_tax = get_sub_field('taxonomy');
+                        $attr_term = get_sub_field('term');
+                        if ($attr_tax && $attr_term) {
+                            $product_by_attr[] = array(
+                                'taxonomy' => sanitize_text_field($attr_tax),
+                                'term'     => sanitize_text_field($attr_term)
+                            );
+                        }
+                    }
+                }
+
+                $assignment_mode = !empty($manual_product_ids) ? 'MANUAL' : (!empty($product_by_attr) ? 'ATTRIBUTE' : 'TAXONOMY');
+
                 $price_tables[] = array(
-                    'id'             => $pp->ID,
-                    'destination_id' => $pp->ID,
-                    'name'           => html_entity_decode($pp->post_title, ENT_QUOTES, 'UTF-8'),
-                    'slug'           => $pp->post_name,
-                    'factory_id'     => $p_company_id,
-                    'factory_name'   => $p_company_name,
-                    'category_id'    => $p_cat_id,
-                    'category_name'  => $p_cat_name,
-                    'active'         => false // Price tables strictly default to inactive per user instructions
+                    'id'                 => $pp->ID,
+                    'destination_id'     => $pp->ID,
+                    'name'               => html_entity_decode($pp->post_title, ENT_QUOTES, 'UTF-8'),
+                    'slug'               => $pp->post_name,
+                    'factory_id'         => $p_company_id,
+                    'factory_name'       => $p_company_name,
+                    'category_id'        => $p_cat_id,
+                    'category_name'      => $p_cat_name,
+                    'assignment_mode'    => $assignment_mode,
+                    'manual_product_ids' => $manual_product_ids,
+                    'product_by_attr'    => $product_by_attr,
+                    'last_update_time'   => intval(get_post_meta($pp->ID, 'last_update_time', true)),
+                    'active'             => false // Price tables strictly default to inactive per user instructions
                 );
             }
         }
@@ -557,15 +616,18 @@ class PriceSystemSyncPlugin {
         if (empty($price_tables) && !empty($categories)) {
             foreach ($categories as $ct) {
                 $price_tables[] = array(
-                    'id'             => $ct['id'],
-                    'destination_id' => $ct['id'],
-                    'name'           => $ct['name'],
-                    'slug'           => $ct['slug'],
-                    'factory_id'     => 0,
-                    'factory_name'   => '',
-                    'category_id'    => $ct['id'],
-                    'category_name'  => $ct['name'],
-                    'active'         => false
+                    'id'                 => $ct['id'],
+                    'destination_id'     => $ct['id'],
+                    'name'               => $ct['name'],
+                    'slug'               => $ct['slug'],
+                    'factory_id'         => 0,
+                    'factory_name'       => '',
+                    'category_id'        => $ct['id'],
+                    'category_name'      => $ct['name'],
+                    'assignment_mode'    => 'TAXONOMY',
+                    'manual_product_ids' => array(),
+                    'product_by_attr'    => array(),
+                    'active'             => false
                 );
             }
         }
@@ -597,6 +659,8 @@ class PriceSystemSyncPlugin {
             $reg_price = get_post_meta($post_id, '_regular_price', true);
             $curr_price = get_post_meta($post_id, '_price', true);
             $price = !empty($reg_price) ? floatval($reg_price) : (!empty($curr_price) ? floatval($curr_price) : 0);
+            $price_status = intval(get_post_meta($post_id, 'price_status', true));
+            $price_diff = floatval(get_post_meta($post_id, 'price_diff', true));
 
             // Determine factory / company
             $factory_name = '';
@@ -631,16 +695,33 @@ class PriceSystemSyncPlugin {
                 }
             }
 
-            // Match price table by category & factory or category
+            // Match price table:
+            // Priority 1: Check if product was manually placed in a price table via ACF 'products' field
             $matched_table_id = 0;
             $matched_table_name = '';
+            $product_assignment_mode = 'TAXONOMY';
+
             foreach ($price_tables as $pt) {
-                if ($primary_cat_id && $pt['category_id'] === $primary_cat_id && $factory_id && $pt['factory_id'] === $factory_id) {
+                if (!empty($pt['manual_product_ids']) && in_array($post_id, $pt['manual_product_ids'])) {
                     $matched_table_id = $pt['id'];
                     $matched_table_name = $pt['name'];
+                    $product_assignment_mode = 'MANUAL';
                     break;
                 }
             }
+
+            // Priority 2: Fallback to matching by Category & Factory (company)
+            if (!$matched_table_id && $primary_cat_id && $factory_id) {
+                foreach ($price_tables as $pt) {
+                    if ($pt['category_id'] === $primary_cat_id && $pt['factory_id'] === $factory_id) {
+                        $matched_table_id = $pt['id'];
+                        $matched_table_name = $pt['name'];
+                        break;
+                    }
+                }
+            }
+
+            // Priority 3: Fallback to matching by Category only
             if (!$matched_table_id && $primary_cat_id) {
                 foreach ($price_tables as $pt) {
                     if ($pt['category_id'] === $primary_cat_id) {
@@ -656,6 +737,9 @@ class PriceSystemSyncPlugin {
                 'name'             => html_entity_decode($post->post_title, ENT_QUOTES, 'UTF-8'),
                 'sku'              => $sku ? $sku : '',
                 'current_price'    => $price,
+                'price_status'     => $price_status,
+                'price_diff'       => $price_diff,
+                'assignment_mode'  => $product_assignment_mode,
                 'factory_name'     => $factory_name,
                 'factory_id'       => $factory_id,
                 'category_name'    => $primary_cat_name,

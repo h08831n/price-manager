@@ -510,6 +510,155 @@ export default function App() {
     }
   };
 
+  const handleBatchProductDelete = async (ids: number[]) => {
+    try {
+      const res = await fetch('/api/products/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ids })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در حذف دسته‌ای محصولات');
+      showToast(data.message || `${ids.length} محصول با موفقیت حذف شدند.`);
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleBatchPriceTableStatus = async (ids: number[], active: boolean) => {
+    try {
+      const res = await fetch('/api/price-tables/batch-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ids, active })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در تغییر وضعیت دسته‌ای جداول');
+      showToast(data.message || `وضعیت جداول با موفقیت ${active ? 'فعال' : 'غیرفعال'} شد.`);
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleBatchPriceTableDelete = async (ids: number[]) => {
+    try {
+      const res = await fetch('/api/price-tables/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ids })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در حذف دسته‌ای جداول');
+      showToast(data.message || `${ids.length} جدول قیمت با موفقیت حذف شدند.`);
+      if (selectedTable && ids.includes(selectedTable.id)) {
+        selectedTableRef.current = null;
+        setSelectedTable(null);
+      }
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleBatchPriceTableRun = async (ids: number[]) => {
+    try {
+      showToast('اجرای گروهی جداول قیمت آغاز شد...', 'info');
+      const res = await fetch('/api/price-tables/batch-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ids })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در اجرای گروهی جداول');
+      showToast(data.message || 'اجرای گروهی با موفقیت به اتمام رسید.');
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleBatchCategoryStatus = async (ids: number[], active: boolean) => {
+    try {
+      const res = await fetch('/api/categories/batch-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ids, active })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در تغییر وضعیت دسته‌ای دسته‌ها');
+      showToast(data.message || `وضعیت دسته‌ها با موفقیت ${active ? 'فعال' : 'غیرفعال'} شد.`);
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleBatchCategoryDelete = async (ids: number[]) => {
+    try {
+      const res = await fetch('/api/categories/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ids })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در حذف دسته‌ای دسته‌بندی‌ها');
+      showToast(data.message || `${ids.length} دسته‌بندی با موفقیت حذف شدند.`);
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleBatchFactoryStatus = async (ids: number[], active: boolean) => {
+    try {
+      const res = await fetch('/api/factories/batch-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ids, active })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در تغییر وضعیت دسته‌ای کارخانجات');
+      showToast(data.message || `وضعیت کارخانجات با موفقیت ${active ? 'فعال' : 'غیرفعال'} شد.`);
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
+  const handleBatchFactoryDelete = async (ids: number[]) => {
+    try {
+      const res = await fetch('/api/factories/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ids })
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || 'خطا در حذف دسته‌ای کارخانجات');
+      showToast(data.message || `${ids.length} کارخانه با موفقیت حذف شدند.`);
+      await loadAllData();
+      return data;
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
   const handleSyncFactories = async () => {
     try {
       showToast('در حال همگام‌سازی کارخانجات با سایت مقصد...', 'info');
@@ -993,6 +1142,7 @@ export default function App() {
                 onReload={loadAllData}
                 onPullFromDestination={handlePullFromDestination}
                 onBatchToggleStatus={handleBatchProductStatus}
+                onBatchDelete={handleBatchProductDelete}
               />
             )}
 
@@ -1005,6 +1155,8 @@ export default function App() {
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
                 onPullFromDestination={handlePullFromDestination}
+                onBatchToggleStatus={handleBatchCategoryStatus}
+                onBatchDelete={handleBatchCategoryDelete}
               />
             )}
 
@@ -1017,6 +1169,8 @@ export default function App() {
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
                 onPullFromDestination={handlePullFromDestination}
+                onBatchToggleStatus={handleBatchFactoryStatus}
+                onBatchDelete={handleBatchFactoryDelete}
               />
             )}
 
@@ -1036,6 +1190,9 @@ export default function App() {
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
                 onPullFromDestination={handlePullFromDestination}
+                onBatchToggleStatus={handleBatchPriceTableStatus}
+                onBatchDelete={handleBatchPriceTableDelete}
+                onBatchRun={handleBatchPriceTableRun}
               />
             )}
 

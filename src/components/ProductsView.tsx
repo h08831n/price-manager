@@ -41,9 +41,9 @@ interface ProductsViewProps {
   onExport: (entity: string) => void;
   onDownloadTemplate: (entity: string) => void;
   onReload?: () => Promise<void> | void;
-  onSyncWithDestination?: () => Promise<any>;
   onPullFromDestination?: () => Promise<any>;
   onBatchToggleStatus?: (ids: number[], active: boolean) => Promise<any>;
+  onBatchDelete?: (ids: number[]) => Promise<any>;
 }
 
 export const ProductsView: React.FC<ProductsViewProps> = ({
@@ -58,9 +58,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   onExport,
   onDownloadTemplate,
   onReload,
-  onSyncWithDestination,
   onPullFromDestination,
-  onBatchToggleStatus
+  onBatchToggleStatus,
+  onBatchDelete
 }) => {
   const [search, setSearch] = useState('');
   const [selectedFactory, setSelectedFactory] = useState<string>('ALL');
@@ -79,6 +79,8 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
   // Bulk Selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isBatchDeletingModalOpen, setIsBatchDeletingModalOpen] = useState(false);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
 
   // Edit/Add modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -90,10 +92,11 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
   // Close modals on Escape key
   useEscapeKey(() => {
-    if (deletingProduct) setDeletingProduct(null);
+    if (isBatchDeletingModalOpen) setIsBatchDeletingModalOpen(false);
+    else if (deletingProduct) setDeletingProduct(null);
     else if (isEditModalOpen) setIsEditModalOpen(false);
     else if (selectedProductForDetail) setSelectedProductForDetail(null);
-  }, Boolean(deletingProduct || isEditModalOpen || selectedProductForDetail));
+  }, Boolean(isBatchDeletingModalOpen || deletingProduct || isEditModalOpen || selectedProductForDetail));
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -166,6 +169,21 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       if (onReload) await onReload();
     } finally {
       setIsBatchUpdating(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!onBatchDelete || selectedIds.size === 0) return;
+    setIsBatchDeleting(true);
+    try {
+      await onBatchDelete(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      setIsBatchDeletingModalOpen(false);
+      if (onReload) await onReload();
+    } catch (err) {
+      console.error('Failed to batch delete products:', err);
+    } finally {
+      setIsBatchDeleting(false);
     }
   };
 
@@ -453,17 +471,30 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               type="button"
               disabled={isBatchUpdating}
               onClick={() => handleBulkStatusChange(false)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded font-medium transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded font-medium transition-colors cursor-pointer"
             >
               <XCircle className="w-3.5 h-3.5" />
               <span>غیرفعال‌سازی موارد انتخاب‌شده</span>
             </button>
 
+            {onBatchDelete && (
+              <button
+                type="button"
+                disabled={isBatchUpdating || isBatchDeleting}
+                onClick={() => setIsBatchDeletingModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded font-medium transition-colors cursor-pointer"
+                title="حذف همگانی محصولات انتخاب شده"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>حذف همگانی انتخاب‌شده‌ها</span>
+              </button>
+            )}
+
             <button
               type="button"
               disabled={isBatchUpdating}
               onClick={() => setSelectedIds(new Set())}
-              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition-colors text-[11px]"
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition-colors text-[11px] cursor-pointer"
             >
               لغو انتخاب
             </button>
@@ -1037,10 +1068,56 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     setIsDeleting(false);
                   }
                 }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{isDeleting ? 'در حال حذف...' : 'حذف قطعی محصول'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Modal */}
+      {isBatchDeletingModalOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-50 rounded-full">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">تأیید حذف همگانی محصولات</h3>
+                <p className="text-xs text-gray-500 mt-0.5">عملیات حذف گروهی غیرقابل بازگشت است.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50/50 rounded-lg border border-rose-200 text-xs text-rose-900 space-y-1">
+              <p>
+                آیا از حذف همگانی <strong>{selectedIds.size}</strong> محصول انتخاب‌شده اطمینان دارید؟
+              </p>
+              <p className="text-[11px] text-rose-700 pt-1">
+                توجه: این اقلام همراه با سلکتورها و قیمت‌های استخراج‌شده به طور دائم از سامانه حذف خواهند شد.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={isBatchDeleting}
+                onClick={() => setIsBatchDeletingModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isBatchDeleting}
+                onClick={handleBulkDelete}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-md transition-colors shadow-xs cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isBatchDeleting ? 'در حال حذف...' : `حذف قطعی ${selectedIds.size} محصول`}</span>
               </button>
             </div>
           </div>
