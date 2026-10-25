@@ -252,31 +252,10 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               }}
               disabled={isPulling}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
-              title="دریافت تمام محصولات و کارخانه‌ها از سایت وردپرس مقصد (محصولات جدید به صورت پیش‌فرض غیرفعال وارد می‌شوند)"
+              title="دریافت اطلاعات محصولات، دسته‌ها و کارخانه‌ها از سایت وردپرس مقصد"
             >
               <CloudDownload className={`w-3.5 h-3.5 text-purple-700 ${isPulling ? 'animate-spin' : ''}`} />
               <span>{isPulling ? 'در حال دریافت از وردپرس...' : 'دریافت محصولات از سایت مقصد'}</span>
-            </button>
-          )}
-
-          {onSyncWithDestination && (
-            <button
-              id="btn-sync-products-destination"
-              type="button"
-              onClick={async () => {
-                setIsSyncing(true);
-                try {
-                  await onSyncWithDestination();
-                } finally {
-                  setIsSyncing(false);
-                }
-              }}
-              disabled={isSyncing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
-              title="همگام‌سازی دسته‌ای و خودکار محصولات با سایت مقصد (WordPress / WooCommerce) در بسته‌های بهینه‌سازی‌شده بدون ایجاد فشار روی سرور"
-            >
-              <Globe className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'در حال ارسال بسته‌ای به مقصد...' : 'همگام‌سازی با سایت مقصد'}</span>
             </button>
           )}
 

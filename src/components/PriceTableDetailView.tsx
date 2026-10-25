@@ -186,7 +186,33 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   }, Boolean(deletingSource || revertingSourceId || isDeleteTableModalOpen || actionModal.isOpen || editingSourceSettings || isAddSourceModalOpen));
 
   const tableSources = sources.filter((s) => s.price_table_id === table.id);
-  const tableProducts = products.filter((p) => p.price_table_id === table.id);
+  const tableProducts = products.filter((p) => {
+    // 1. Direct assignment
+    if (p.price_table_id === table.id) return true;
+
+    // 2. Exact match on both factory and category (user requirement)
+    if (
+      table.factory_id &&
+      table.category_id &&
+      p.factory_id === table.factory_id &&
+      p.category_id === table.category_id
+    ) {
+      return true;
+    }
+
+    // 3. Name-based match for category if IDs differ but names match with same factory
+    if (
+      table.factory_id &&
+      p.factory_id === table.factory_id &&
+      table.category_name &&
+      p.category_name &&
+      table.category_name.trim().toLowerCase() === p.category_name.trim().toLowerCase()
+    ) {
+      return true;
+    }
+
+    return false;
+  });
 
   // Helpers for Source Page URLs, Sites, and Actions
   const getSourceSiteId = (source: TableSource): number => {
@@ -524,10 +550,26 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
             <ArrowRight className="w-5 h-5" />
           </button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-lg font-bold text-gray-900">{table.name}</h1>
-              <span className="text-xs px-2.5 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">
-                کارخانه: {table.factory_name}
+              {table.category_name && (
+                <span className="text-xs px-2.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium border border-indigo-200">
+                  دسته: {table.category_name}
+                </span>
+              )}
+              {table.factory_name && (
+                <span className="text-xs px-2.5 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">
+                  کارخانه: {table.factory_name}
+                </span>
+              )}
+              <span
+                className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
+                  table.active
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-gray-100 text-gray-600 border-gray-300'
+                }`}
+              >
+                {table.active ? 'فعال (قیمت‌ها بروزرسانی می‌شوند)' : 'غیرفعال (بدون تغییر قیمت مقصد)'}
               </span>
               <span
                 className={`text-xs px-2.5 py-0.5 rounded font-medium ${

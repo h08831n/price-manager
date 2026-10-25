@@ -321,11 +321,18 @@ apiRouter.get('/bootstrap', (req: Request, res: Response) => {
     };
   });
 
+  // Sort active price tables first per user requirement: "اونایی که فعال هستند رو هم بالاتر نشون بده"
+  const sortedTables = [...schema.price_tables].sort((a, b) => {
+    if (a.active === b.active) return b.id - a.id;
+    return a.active ? -1 : 1;
+  });
+
   res.json({
     dashboard: dashboardData,
     products: schema.products,
     factories: schema.factories,
-    price_tables: schema.price_tables,
+    categories: schema.categories || [],
+    price_tables: sortedTables,
     sites: schema.sites,
     source_pages: schema.source_pages,
     table_sources: enrichedSources,
@@ -630,28 +637,145 @@ apiRouter.delete('/factories/:id', (req: Request, res: Response) => {
 });
 
 // ==========================================
+// 3B. CATEGORIES API
+// ==========================================
+apiRouter.get('/categories', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  if (!Array.isArray(schema.categories)) schema.categories = [];
+  const enriched = schema.categories.map((c) => ({
+    ...c,
+    table_count: schema.price_tables.filter((t) => t.category_id === c.id).length,
+    product_count: schema.products.filter((p) => p.category_id === c.id).length
+  }));
+  res.json(enriched);
+});
+
+apiRouter.post('/categories', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  if (!Array.isArray(schema.categories)) schema.categories = [];
+  const { name, destination_id, slug, active } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'نام دسته‌بندی الزامی است.' });
+
+  const targetDestId = destination_id ? parseInt(destination_id, 10) : null;
+  if (targetDestId) {
+    const dup = schema.categories.find((c) => c.destination_id === targetDestId);
+    if (dup) {
+      return res.status(400).json({
+        error: `دسته‌بندی دیگری با آیدی مقصد ${targetDestId} از قبل در سیستم وجود دارد (${dup.name}).`
+      });
+    }
+  }
+
+  const newId = db.getNextId('categories');
+  const newCat = {
+    id: newId,
+    destination_id: targetDestId || newId,
+    name: name.trim(),
+    slug: (slug || '').trim(),
+    active: active !== undefined ? Boolean(active) : true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  schema.categories.push(newCat);
+  db.logConfigChange('category', newCat.id, 'create', null, newCat.name);
+  db.save();
+  res.json(newCat);
+});
+
+apiRouter.put('/categories/:id', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  if (!Array.isArray(schema.categories)) schema.categories = [];
+  const id = parseInt(req.params.id, 10);
+  const cat = schema.categories.find((c) => c.id === id);
+  if (!cat) return res.status(404).json({ error: 'دسته‌بندی یافت نشد.' });
+
+  if (req.body.destination_id !== undefined && req.body.destination_id !== null && req.body.destination_id !== '') {
+    const newDestId = parseInt(req.body.destination_id, 10);
+    if (!isNaN(newDestId) && newDestId > 0) {
+      const dup = schema.categories.find((c) => c.id !== id && c.destination_id === newDestId);
+      if (dup) {
+        return res.status(400).json({
+          error: `دسته‌بندی دیگری با آیدی مقصد ${newDestId} در سیستم ثبت شده است (${dup.name}).`
+        });
+      }
+      cat.destination_id = newDestId;
+    }
+  }
+
+  if (req.body.name !== undefined) cat.name = req.body.name.trim();
+  if (req.body.slug !== undefined) cat.slug = req.body.slug.trim();
+  if (req.body.active !== undefined) cat.active = Boolean(req.body.active);
+  cat.updated_at = new Date().toISOString();
+
+  db.logConfigChange('category', cat.id, 'update', null, cat.name);
+  db.save();
+  res.json(cat);
+});
+
+apiRouter.delete('/categories/:id', (req: Request, res: Response) => {
+  const schema = db.getSchema();
+  if (!Array.isArray(schema.categories)) schema.categories = [];
+  const id = parseInt(req.params.id, 10);
+  const cat = schema.categories.find((c) => c.id === id);
+  if (!cat) return res.status(404).json({ error: 'دسته‌بندی یافت نشد.' });
+
+  schema.categories = schema.categories.filter((c) => c.id !== id);
+  schema.products.forEach((p) => {
+    if (p.category_id === id) {
+      p.category_id = null;
+      p.category_name = undefined;
+    }
+  });
+  schema.price_tables.forEach((t) => {
+    if (t.category_id === id) {
+      t.category_id = null;
+      t.category_name = undefined;
+    }
+  });
+
+  db.logConfigChange('category', id, 'delete', cat.name, null);
+  db.save();
+  res.json({ success: true, message: 'دسته‌بندی با موفقیت حذف گردید.' });
+});
+
+// ==========================================
 // 4. PRICE TABLES API (Requirement #8, #50)
 // ==========================================
 apiRouter.get('/price-tables', (req: Request, res: Response) => {
   const schema = db.getSchema();
+  if (!Array.isArray(schema.categories)) schema.categories = [];
   const todayStr = new Date().toISOString().split('T')[0];
 
   const enriched = schema.price_tables.map((t) => {
     const f = schema.factories.find((fac) => fac.id === t.factory_id);
+    const cat = schema.categories.find((c) => c.id === t.category_id);
     const sourceCount = schema.table_sources.filter((s) => s.price_table_id === t.id).length;
-    const productCount = schema.products.filter((p) => p.price_table_id === t.id).length;
+    // Count products matching either price_table_id OR both factory_id & category_id
+    const productCount = schema.products.filter(
+      (p) =>
+        p.price_table_id === t.id ||
+        (t.factory_id && t.category_id && p.factory_id === t.factory_id && p.category_id === t.category_id)
+    ).length;
     const daily = schema.daily_table_runs.find(
       (d) => d.price_table_id === t.id && d.run_date === todayStr
     );
 
     return {
       ...t,
-      factory_name: f?.name,
+      factory_name: f?.name || t.factory_name,
+      category_name: cat?.name || t.category_name,
       source_count: sourceCount,
       product_count: productCount,
       today_status: daily?.status || 'PENDING'
     };
   });
+
+  // Sort active tables first per user requirement: "اونایی که فعال هستند رو هم بالاتر نشون بده"
+  enriched.sort((a, b) => {
+    if (a.active === b.active) return b.id - a.id;
+    return a.active ? -1 : 1;
+  });
+
   res.json(enriched);
 });
 
@@ -2384,24 +2508,31 @@ apiRouter.all('/mock-wordpress/wp-json/price-system/v1/fetch-destination-data', 
     total_pages: 1,
     has_more: false,
     total_factories: 4,
+    total_categories: 4,
     total_price_tables: 4,
     factories: [
-      { id: 101, name: 'کارخانه فولاد مبارکه اصفهان' },
-      { id: 102, name: 'کارخانه ذوب آهن اصفهان' },
+      { id: 101, name: 'کارخانه ذوب آهن اصفهان' },
+      { id: 102, name: 'کارخانه فولاد مبارکه اصفهان' },
       { id: 103, name: 'فولاد خوزستان' },
       { id: 104, name: 'فولاد نیشابور' }
     ],
+    categories: [
+      { id: 201, name: 'میلگرد', slug: 'rebar' },
+      { id: 202, name: 'تیرآهن', slug: 'beam' },
+      { id: 203, name: 'ورق سیاه', slug: 'black-sheet' },
+      { id: 204, name: 'نبشی و ناودانی', slug: 'angle-channel' }
+    ],
     price_tables: [
-      { id: 201, name: 'تیرآهن' },
-      { id: 202, name: 'میلگرد' },
-      { id: 203, name: 'ورق سیاه' },
-      { id: 204, name: 'نبشی و ناودانی' }
+      { id: 3001, name: 'جدول قیمت میلگرد ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 201, category_name: 'میلگرد', active: false },
+      { id: 3002, name: 'جدول قیمت تیرآهن ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 202, category_name: 'تیرآهن', active: false },
+      { id: 3003, name: 'جدول قیمت ورق سیاه مبارکه', factory_id: 102, factory_name: 'کارخانه فولاد مبارکه اصفهان', category_id: 203, category_name: 'ورق سیاه', active: false },
+      { id: 3004, name: 'جدول قیمت میلگرد خوزستان', factory_id: 103, factory_name: 'فولاد خوزستان', category_id: 201, category_name: 'میلگرد', active: false }
     ],
     products: [
-      { post_id: 2001, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', category_name: 'تیرآهن', active: false },
-      { post_id: 2002, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', category_name: 'ورق سیاه', active: false },
-      { post_id: 2003, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', category_name: 'میلگرد', active: false },
-      { post_id: 2004, name: 'میلگرد ۱۴ نیشابور (سایت مقصد)', sku: 'REBAR-14-NISH', current_price: 28900, factory_name: 'فولاد نیشابور', category_name: 'میلگرد', active: false }
+      { post_id: 2001, name: 'میلگرد ۱۴ ذوب آهن (سایت مقصد)', sku: 'REBAR-14-ESF', current_price: 29500, factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'میلگرد', category_id: 201, active: true },
+      { post_id: 2002, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'تیرآهن', category_id: 202, active: true },
+      { post_id: 2003, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', factory_id: 102, category_name: 'ورق سیاه', category_id: 203, active: true },
+      { post_id: 2004, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', factory_id: 103, category_name: 'میلگرد', category_id: 201, active: true }
     ],
     message: 'اطلاعات با موفقیت استخراج شد.'
   });

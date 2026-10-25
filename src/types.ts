@@ -15,12 +15,26 @@ export interface Factory {
   sync_status?: 'SYNCED' | 'NOT_SYNCED' | 'PENDING' | 'FAILED';
 }
 
+export interface Category {
+  id: number;
+  destination_id?: number | null; // Category term ID in destination site (product_cat)
+  name: string;
+  slug?: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  product_count?: number;
+  table_count?: number;
+}
+
 export interface PriceTable {
   id: number;
-  destination_id?: number | null; // ID of the price table / post / custom entity in destination site
+  destination_id?: number | null; // ID of the price table / post of post_type 'price' in destination site
   name: string;
   factory_id: number;
   factory_name?: string;
+  category_id?: number | null;
+  category_name?: string;
   active: boolean;
   start_time: string; // e.g. "11:00"
   retry_interval_minutes: number; // e.g. 30
@@ -53,6 +67,8 @@ export interface Product {
   sku?: string;
   factory_id: number;
   factory_name?: string;
+  category_id?: number | null;
+  category_name?: string;
   price_table_id: number;
   price_table_name?: string;
   current_price: number;

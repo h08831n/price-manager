@@ -695,6 +695,7 @@ export interface DestinationImportResult {
   products_imported: number;
   products_updated: number;
   factories_imported: number;
+  categories_imported: number;
   tables_imported: number;
   total_fetched: number;
   items: Array<{
@@ -707,13 +708,16 @@ export interface DestinationImportResult {
 }
 
 /**
- * Pull all data (products, factories, price tables) from destination WordPress/WooCommerce site.
- * Supports paginated streaming (page by page) so sites with >1000 or >5000 products can be
- * imported completely without memory exhaustion or timeout.
+ * Pull all data (categories, factories from company taxonomy, price tables from post_type price, and products)
+ * from destination WordPress/WooCommerce site.
  * 
- * CRITICAL REQUIREMENT:
- * All newly imported products are STRICTLY DEFAULTED TO INACTIVE (active: false),
- * allowing the user to inspect, configure selectors, and selectively activate them.
+ * USER REQUIREMENTS:
+ * 1. Factories are extracted from taxonomy 'company'.
+ * 2. Categories are extracted from taxonomy 'product_cat'.
+ * 3. Price tables are extracted from custom post type 'price'.
+ * 4. Products default to ACTIVE (active: true).
+ * 5. Price tables default to INACTIVE (active: false), allowing the user to selectively activate them.
+ * 6. Products are matched to their price table by (category_id + factory_id), e.g. میلگرد + ذوب آهن -> جدول قیمت میلگرد ذوب آهن.
  */
 export async function pullDataFromDestination(options?: {
   defaultFactoryId?: number;
@@ -722,6 +726,11 @@ export async function pullDataFromDestination(options?: {
   maxPages?: number;
 }): Promise<DestinationImportResult> {
   const schema = db.getSchema();
+  if (!Array.isArray(schema.categories)) schema.categories = [];
+  if (!Array.isArray(schema.factories)) schema.factories = [];
+  if (!Array.isArray(schema.price_tables)) schema.price_tables = [];
+  if (!Array.isArray(schema.products)) schema.products = [];
+
   const settings = schema.global_settings;
   const baseUrl = (settings.wordpress_url || '').trim().replace(/\/$/, '');
   const token = (settings.wordpress_api_token || '').trim();
@@ -734,34 +743,41 @@ export async function pullDataFromDestination(options?: {
   const perPage = options?.perPage || 200;
   const maxPages = options?.maxPages || 50; // allows up to 10,000 products
 
-  db.log('INFO', `آغاز دریافت هوشمند داده‌ها (محصولات، جداول قیمت، کارخانه‌ها) از سایت مقصد (${baseUrl})...`, {
+  db.log('INFO', `آغاز دریافت هوشمند داده‌ها (دسته‌بندی‌ها، کارخانه‌ها، جداول قیمت، محصولات) از سایت مقصد (${baseUrl})...`, {
     baseEndpointUrl,
     perPage
   });
 
   let fetchedProducts: DestinationProductImportItem[] = [];
   let fetchedFactories: Array<{ id: number; name: string; slug?: string }> = [];
-  let fetchedTables: Array<{ id: number; name: string; slug?: string }> = [];
+  let fetchedCategories: Array<{ id: number; name: string; slug?: string }> = [];
+  let fetchedTables: Array<{ id: number; name: string; slug?: string; factory_id?: number; factory_name?: string; category_id?: number; category_name?: string }> = [];
 
   // Check if testing against local mock
   if (baseEndpointUrl.includes('localhost:3000/api/mock-wordpress')) {
     fetchedFactories = [
-      { id: 101, name: 'کارخانه فولاد مبارکه اصفهان' },
-      { id: 102, name: 'کارخانه ذوب آهن اصفهان' },
+      { id: 101, name: 'کارخانه ذوب آهن اصفهان' },
+      { id: 102, name: 'کارخانه فولاد مبارکه اصفهان' },
       { id: 103, name: 'فولاد خوزستان' },
       { id: 104, name: 'فولاد نیشابور' }
     ];
-    fetchedTables = [
-      { id: 201, name: 'تیرآهن' },
-      { id: 202, name: 'میلگرد' },
+    fetchedCategories = [
+      { id: 201, name: 'میلگرد' },
+      { id: 202, name: 'تیرآهن' },
       { id: 203, name: 'ورق سیاه' },
       { id: 204, name: 'نبشی و ناودانی' }
     ];
+    fetchedTables = [
+      { id: 3001, name: 'جدول قیمت میلگرد ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 201, category_name: 'میلگرد' },
+      { id: 3002, name: 'جدول قیمت تیرآهن ذوب آهن', factory_id: 101, factory_name: 'کارخانه ذوب آهن اصفهان', category_id: 202, category_name: 'تیرآهن' },
+      { id: 3003, name: 'جدول قیمت ورق سیاه مبارکه', factory_id: 102, factory_name: 'کارخانه فولاد مبارکه اصفهان', category_id: 203, category_name: 'ورق سیاه' },
+      { id: 3004, name: 'جدول قیمت میلگرد خوزستان', factory_id: 103, factory_name: 'فولاد خوزستان', category_id: 201, category_name: 'میلگرد' }
+    ];
     fetchedProducts = [
-      { post_id: 2001, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', category_name: 'تیرآهن', active: false },
-      { post_id: 2002, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', category_name: 'ورق سیاه', active: false },
-      { post_id: 2003, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', category_name: 'میلگرد', active: false },
-      { post_id: 2004, name: 'میلگرد ۱۴ نیشابور (سایت مقصد)', sku: 'REBAR-14-NISH', current_price: 28900, factory_name: 'فولاد نیشابور', category_name: 'میلگرد', active: false }
+      { post_id: 2001, name: 'میلگرد ۱۴ ذوب آهن (سایت مقصد)', sku: 'REBAR-14-ESF', current_price: 29500, factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'میلگرد', category_id: 201, active: true },
+      { post_id: 2002, name: 'تیرآهن ۱۴ ذوب آهن (سایت مقصد)', sku: 'TIR-14-ESF', current_price: 48500, factory_name: 'کارخانه ذوب آهن اصفهان', factory_id: 101, category_name: 'تیرآهن', category_id: 202, active: true },
+      { post_id: 2003, name: 'ورق سیاه ۲ میل مبارکه (سایت مقصد)', sku: 'ST37-2MM', current_price: 36200, factory_name: 'کارخانه فولاد مبارکه اصفهان', factory_id: 102, category_name: 'ورق سیاه', category_id: 203, active: true },
+      { post_id: 2004, name: 'میلگرد ۲۰ فولاد خوزستان (سایت مقصد)', sku: 'REBAR-20-KHZ', current_price: 29800, factory_name: 'فولاد خوزستان', factory_id: 103, category_name: 'میلگرد', category_id: 201, active: true }
     ];
   } else {
     // Paginated fetch loop
@@ -794,7 +810,16 @@ export async function pullDataFromDestination(options?: {
           throw new Error(data.message || `خطا در دریافت داده صفحه ${currentPage}`);
         }
 
-        // On first page (or subsequent), collect taxonomies
+        // 1. Collect Categories
+        if (Array.isArray(data.categories)) {
+          for (const c of data.categories) {
+            if (!fetchedCategories.some((existing) => existing.id === c.id || existing.name === c.name)) {
+              fetchedCategories.push(c);
+            }
+          }
+        }
+
+        // 2. Collect Factories (from taxonomy company)
         if (Array.isArray(data.factories)) {
           for (const f of data.factories) {
             if (!fetchedFactories.some((existing) => existing.id === f.id || existing.name === f.name)) {
@@ -803,6 +828,7 @@ export async function pullDataFromDestination(options?: {
           }
         }
 
+        // 3. Collect Price Tables (from post_type price)
         if (Array.isArray(data.price_tables)) {
           for (const t of data.price_tables) {
             if (!fetchedTables.some((existing) => existing.id === t.id || existing.name === t.name)) {
@@ -836,13 +862,39 @@ export async function pullDataFromDestination(options?: {
   }
 
   const now = new Date().toISOString();
+  let categoriesImported = 0;
   let factoriesImported = 0;
   let tablesImported = 0;
   let productsImported = 0;
   let productsUpdated = 0;
   const processedItems: Array<{ id: number; post_id: number; name: string; is_new: boolean; active: boolean }> = [];
 
-  // 1. Process and import factories from destination
+  // 1. Process and import Categories (product_cat)
+  for (const cat of fetchedCategories) {
+    if (!cat.name || !cat.name.trim()) continue;
+    const trimmedName = cat.name.trim();
+    const existing = schema.categories.find(
+      (c) => (cat.id && c.destination_id === cat.id) || c.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    if (!existing) {
+      const nextCatId = schema.categories.length > 0 ? Math.max(...schema.categories.map((c) => c.id)) + 1 : 1;
+      schema.categories.push({
+        id: nextCatId,
+        name: trimmedName,
+        slug: cat.slug || '',
+        destination_id: cat.id || nextCatId,
+        active: true,
+        created_at: now,
+        updated_at: now
+      });
+      categoriesImported++;
+    } else if (cat.id && !existing.destination_id) {
+      existing.destination_id = cat.id;
+    }
+  }
+
+  // 2. Process and import Factories (taxonomy 'company')
   for (const fac of fetchedFactories) {
     if (!fac.name || !fac.name.trim()) continue;
     const trimmedName = fac.name.trim();
@@ -866,24 +918,66 @@ export async function pullDataFromDestination(options?: {
     }
   }
 
-  // 2. Process and import price tables (categories) from destination
+  // Fallback defaults
+  const defaultFactoryId = options?.defaultFactoryId || schema.factories[0]?.id || 1;
+  const defaultCategoryId = schema.categories[0]?.id || 1;
+
+  // 3. Process and import Price Tables (post_type 'price')
+  // CRITICAL: newly imported price tables are strictly DEFAULTED TO INACTIVE (active: false)
+  // per explicit user requirement, allowing user to configure and selectively activate each table.
   for (const tbl of fetchedTables) {
     if (!tbl.name || !tbl.name.trim()) continue;
     const trimmedName = tbl.name.trim();
+
+    // Resolve table's factory
+    let tableFactoryId = defaultFactoryId;
+    let tableFactoryName = '';
+    if (tbl.factory_name) {
+      const matchedFac = schema.factories.find((f) => f.name.toLowerCase() === tbl.factory_name!.trim().toLowerCase());
+      if (matchedFac) {
+        tableFactoryId = matchedFac.id;
+        tableFactoryName = matchedFac.name;
+      }
+    } else if (tbl.factory_id) {
+      const matchedFac = schema.factories.find((f) => f.destination_id === tbl.factory_id);
+      if (matchedFac) {
+        tableFactoryId = matchedFac.id;
+        tableFactoryName = matchedFac.name;
+      }
+    }
+
+    // Resolve table's category
+    let tableCategoryId: number | null = null;
+    let tableCategoryName = '';
+    if (tbl.category_name) {
+      const matchedCat = schema.categories.find((c) => c.name.toLowerCase() === tbl.category_name!.trim().toLowerCase());
+      if (matchedCat) {
+        tableCategoryId = matchedCat.id;
+        tableCategoryName = matchedCat.name;
+      }
+    } else if (tbl.category_id) {
+      const matchedCat = schema.categories.find((c) => c.destination_id === tbl.category_id);
+      if (matchedCat) {
+        tableCategoryId = matchedCat.id;
+        tableCategoryName = matchedCat.name;
+      }
+    }
+
     const existing = schema.price_tables.find(
       (t) => (tbl.id && t.destination_id === tbl.id) || t.name.toLowerCase() === trimmedName.toLowerCase()
     );
 
     if (!existing) {
       const nextTblId = schema.price_tables.length > 0 ? Math.max(...schema.price_tables.map((t) => t.id)) + 1 : 1;
-      // Default to first factory or defaultFactoryId
-      const factoryIdForTable = schema.factories[0]?.id || 1;
       schema.price_tables.push({
         id: nextTblId,
         name: trimmedName,
-        factory_id: factoryIdForTable,
+        factory_id: tableFactoryId,
+        factory_name: tableFactoryName,
+        category_id: tableCategoryId,
+        category_name: tableCategoryName,
         destination_id: tbl.id || nextTblId,
-        active: true,
+        active: false, // Price tables strictly default to INACTIVE per user instruction
         start_time: '11:00',
         retry_interval_minutes: 30,
         max_attempts: 5,
@@ -894,16 +988,19 @@ export async function pullDataFromDestination(options?: {
         updated_at: now
       });
       tablesImported++;
-    } else if (tbl.id && !existing.destination_id) {
-      existing.destination_id = tbl.id;
+    } else {
+      if (tbl.id && !existing.destination_id) existing.destination_id = tbl.id;
+      if (tableFactoryId && !existing.factory_id) existing.factory_id = tableFactoryId;
+      if (tableCategoryId && !existing.category_id) existing.category_id = tableCategoryId;
     }
   }
 
-  // Fallback defaults
-  const defaultFactoryId = options?.defaultFactoryId || schema.factories[0]?.id || 1;
   const defaultTableId = options?.defaultTableId || schema.price_tables[0]?.id || 1;
 
-  // 3. Process and import products
+  // 4. Process and import Products
+  // CRITICAL REQUIREMENT:
+  // Products default to ACTIVE (active: true) as explicitly requested by user.
+  // And each product is linked to factory and category, and mapped to its price table.
   for (const item of fetchedProducts) {
     if (!item.name || !item.name.trim()) continue;
     const postId = Number(item.post_id) || 0;
@@ -912,14 +1009,16 @@ export async function pullDataFromDestination(options?: {
 
     // Resolve factory
     let resolvedFactoryId = defaultFactoryId;
+    let resolvedFactoryName = '';
     if (item.factory_name) {
       const matchedFac = schema.factories.find(
         (f) => f.name.toLowerCase() === item.factory_name!.trim().toLowerCase()
       );
       if (matchedFac) {
         resolvedFactoryId = matchedFac.id;
+        resolvedFactoryName = matchedFac.name;
       } else {
-        // Auto-create factory if missing
+        // Auto-create factory from company taxonomy if missing
         const nextFacId = schema.factories.length > 0 ? Math.max(...schema.factories.map((f) => f.id)) + 1 : 1;
         schema.factories.push({
           id: nextFacId,
@@ -931,45 +1030,86 @@ export async function pullDataFromDestination(options?: {
         });
         factoriesImported++;
         resolvedFactoryId = nextFacId;
+        resolvedFactoryName = item.factory_name.trim();
       }
     } else if (item.factory_id) {
       const matchedFac = schema.factories.find((f) => f.destination_id === item.factory_id);
-      if (matchedFac) resolvedFactoryId = matchedFac.id;
+      if (matchedFac) {
+        resolvedFactoryId = matchedFac.id;
+        resolvedFactoryName = matchedFac.name;
+      }
     }
 
-    // Resolve price table from category
-    let resolvedTableId = defaultTableId;
-    const categoryName = item.category_name || (Array.isArray(item.categories) && item.categories.length > 0 ? item.categories[0] : null);
-    if (categoryName) {
-      const matchedTable = schema.price_tables.find(
-        (t) => t.name.toLowerCase() === categoryName.trim().toLowerCase()
+    // Resolve category
+    let resolvedCategoryId: number | null = null;
+    let resolvedCategoryName = '';
+    const catName = item.category_name || (Array.isArray(item.categories) && item.categories.length > 0 ? item.categories[0] : null);
+    if (catName) {
+      const matchedCat = schema.categories.find(
+        (c) => c.name.toLowerCase() === catName.trim().toLowerCase()
       );
-      if (matchedTable) {
-        resolvedTableId = matchedTable.id;
+      if (matchedCat) {
+        resolvedCategoryId = matchedCat.id;
+        resolvedCategoryName = matchedCat.name;
       } else {
-        // Auto-create price table from category
-        const nextTblId = schema.price_tables.length > 0 ? Math.max(...schema.price_tables.map((t) => t.id)) + 1 : 1;
-        schema.price_tables.push({
-          id: nextTblId,
-          name: categoryName.trim(),
-          factory_id: resolvedFactoryId,
-          destination_id: item.category_id || nextTblId,
+        // Auto-create category if missing
+        const nextCatId = schema.categories.length > 0 ? Math.max(...schema.categories.map((c) => c.id)) + 1 : 1;
+        schema.categories.push({
+          id: nextCatId,
+          name: catName.trim(),
+          slug: '',
+          destination_id: item.category_id || nextCatId,
           active: true,
-          start_time: '11:00',
-          retry_interval_minutes: 30,
-          max_attempts: 5,
-          price_guard_percent: 30,
-          default_price_adjustment: 0,
-          sync_status: 'SYNCED',
           created_at: now,
           updated_at: now
         });
-        tablesImported++;
-        resolvedTableId = nextTblId;
+        categoriesImported++;
+        resolvedCategoryId = nextCatId;
+        resolvedCategoryName = catName.trim();
       }
     } else if (item.category_id) {
-      const matchedTable = schema.price_tables.find((t) => t.destination_id === item.category_id);
-      if (matchedTable) resolvedTableId = matchedTable.id;
+      const matchedCat = schema.categories.find((c) => c.destination_id === item.category_id);
+      if (matchedCat) {
+        resolvedCategoryId = matchedCat.id;
+        resolvedCategoryName = matchedCat.name;
+      }
+    }
+
+    // Match product to price table:
+    // User specification:
+    // "نمایش محصولات در جدول قیمت به این شکله که محصولاتی رو نمایش میده که مثلا دسته بندی میلگرد دارنده و کارخانه ذوب آهن واسشون ست شده پس دااخل جدول قیمت میلگرد ذوب آهن نشونشون میده"
+    let resolvedTableId = defaultTableId;
+    let resolvedTableName = '';
+
+    // First try matching both category and factory
+    if (resolvedCategoryId && resolvedFactoryId) {
+      const matchedTable = schema.price_tables.find(
+        (t) => t.category_id === resolvedCategoryId && t.factory_id === resolvedFactoryId
+      );
+      if (matchedTable) {
+        resolvedTableId = matchedTable.id;
+        resolvedTableName = matchedTable.name;
+      }
+    }
+
+    // Fallback: match by category only if no factory-specific table
+    if (!resolvedTableName && resolvedCategoryId) {
+      const matchedTable = schema.price_tables.find((t) => t.category_id === resolvedCategoryId);
+      if (matchedTable) {
+        resolvedTableId = matchedTable.id;
+        resolvedTableName = matchedTable.name;
+      }
+    }
+
+    // Fallback: match by destination table ID or name
+    if (!resolvedTableName && item.category_name) {
+      const matchedTable = schema.price_tables.find(
+        (t) => t.name.toLowerCase().includes(item.category_name!.toLowerCase())
+      );
+      if (matchedTable) {
+        resolvedTableId = matchedTable.id;
+        resolvedTableName = matchedTable.name;
+      }
     }
 
     // Find if product already exists by post_id, destination_id, or matching SKU
@@ -980,7 +1120,6 @@ export async function pullDataFromDestination(options?: {
     );
 
     if (existingIndex >= 0) {
-      // Update existing product without changing its active state if already set by user
       const existing = schema.products[existingIndex];
       existing.destination_id = postId > 0 ? postId : existing.destination_id;
       existing.post_id = postId > 0 ? postId : existing.post_id;
@@ -988,12 +1127,12 @@ export async function pullDataFromDestination(options?: {
         existing.current_price = item.current_price;
       }
       if (sku && !existing.sku) existing.sku = sku;
-      if (resolvedFactoryId && (!existing.factory_id || existing.factory_id === defaultFactoryId)) {
-        existing.factory_id = resolvedFactoryId;
-      }
-      if (resolvedTableId && (!existing.price_table_id || existing.price_table_id === defaultTableId)) {
-        existing.price_table_id = resolvedTableId;
-      }
+      if (resolvedFactoryId) existing.factory_id = resolvedFactoryId;
+      if (resolvedFactoryName) existing.factory_name = resolvedFactoryName;
+      if (resolvedCategoryId) existing.category_id = resolvedCategoryId;
+      if (resolvedCategoryName) existing.category_name = resolvedCategoryName;
+      if (resolvedTableId) existing.price_table_id = resolvedTableId;
+      if (resolvedTableName) existing.price_table_name = resolvedTableName;
       existing.sync_status = 'SYNCED';
       existing.last_synced_at = now;
       existing.updated_at = now;
@@ -1008,8 +1147,8 @@ export async function pullDataFromDestination(options?: {
       });
     } else {
       // Create NEW product
-      // CRITICAL: active is strictly false by default so the user can inspect,
-      // edit selectors, and selectively activate each product.
+      // CRITICAL: active is TRUE for products per explicit user requirement:
+      // "محصولات نمیخوام غیرفعال باشه فقط جدول محصول غیرفعال باشه که هرکدوم رو خواستم فعال کنم"
       const nextProdId = schema.products.length > 0 ? Math.max(...schema.products.map((p) => p.id)) + 1 : 1;
       const newProduct = {
         id: nextProdId,
@@ -1018,9 +1157,13 @@ export async function pullDataFromDestination(options?: {
         name: trimmedName,
         sku: sku,
         factory_id: resolvedFactoryId,
+        factory_name: resolvedFactoryName,
+        category_id: resolvedCategoryId,
+        category_name: resolvedCategoryName,
         price_table_id: resolvedTableId,
+        price_table_name: resolvedTableName,
         current_price: item.current_price || 0,
-        active: false, // STRICT REQUIREMENT: Default to inactive per user instruction
+        active: true, // ACTIVE by default for products as requested
         sync_status: 'SYNCED' as const,
         last_synced_at: now,
         created_at: now,
@@ -1035,7 +1178,7 @@ export async function pullDataFromDestination(options?: {
         post_id: postId,
         name: trimmedName,
         is_new: true,
-        active: false
+        active: true
       });
     }
   }
@@ -1045,16 +1188,17 @@ export async function pullDataFromDestination(options?: {
 
   db.log(
     'INFO',
-    `دریافت اطلاعات با موفقیت انجام شد: ${productsImported} محصول جدید (غیرفعال جهت بررسی)، ${productsUpdated} محصول بروزرسانی، ${factoriesImported} کارخانه و ${tablesImported} جدول قیمت افزوده شد.`,
-    { productsImported, productsUpdated, factoriesImported, tablesImported, totalFetched: fetchedProducts.length }
+    `دریافت اطلاعات با موفقیت انجام شد: ${productsImported} کالا (فعال)، ${categoriesImported} دسته‌بندی، ${factoriesImported} کارخانه، و ${tablesImported} جدول قیمت (غیرفعال جهت بررسی).`,
+    { productsImported, productsUpdated, categoriesImported, factoriesImported, tablesImported, totalFetched: fetchedProducts.length }
   );
 
   return {
     success: true,
-    message: `دریافت با موفقیت انجام شد: ${productsImported} محصول جدید (به صورت پیش‌فرض غیرفعال)، ${productsUpdated} محصول بروزرسانی، ${factoriesImported} کارخانه و ${tablesImported} جدول قیمت از سایت مقصد وارد شدند.`,
+    message: `دریافت با موفقیت انجام شد: ${productsImported} محصول جدید (فعال)، ${categoriesImported} دسته‌بندی، ${factoriesImported} کارخانه و ${tablesImported} جدول قیمت (غیرفعال) از سایت مقصد وارد شدند.`,
     products_imported: productsImported,
     products_updated: productsUpdated,
     factories_imported: factoriesImported,
+    categories_imported: categoriesImported,
     tables_imported: tablesImported,
     total_fetched: fetchedProducts.length,
     items: processedItems

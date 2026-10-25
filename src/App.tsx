@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { ProductsView } from './components/ProductsView';
+import { CategoriesView } from './components/CategoriesView';
 import { FactoriesView } from './components/FactoriesView';
 import { PriceTablesView } from './components/PriceTablesView';
 import { PriceTableDetailView } from './components/PriceTableDetailView';
@@ -21,6 +22,7 @@ import { useEscapeKey } from './hooks/useEscapeKey';
 import {
   DashboardData,
   Product,
+  Category,
   Factory,
   PriceTable,
   Site,
@@ -42,6 +44,7 @@ import {
 const PATH_TO_TAB: Record<string, string> = {
   '/': 'dashboard',
   '/products': 'products',
+  '/categories': 'categories',
   '/factories': 'factories',
   '/price-tables': 'price_tables',
   '/sites': 'sites',
@@ -55,6 +58,7 @@ const PATH_TO_TAB: Record<string, string> = {
 const TAB_TO_PATH: Record<string, string> = {
   dashboard: '/',
   products: '/products',
+  categories: '/categories',
   factories: '/factories',
   price_tables: '/price-tables',
   sites: '/sites',
@@ -103,6 +107,7 @@ export default function App() {
   // Core Data State
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [factories, setFactories] = useState<Factory[]>([]);
   const [priceTables, setPriceTables] = useState<PriceTable[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -202,6 +207,7 @@ export default function App() {
       const [
         dashRes,
         prodRes,
+        catRes,
         facRes,
         tblRes,
         siteRes,
@@ -220,6 +226,7 @@ export default function App() {
       ] = await Promise.all([
         fetchJson<DashboardData | null>('/api/dashboard', null),
         fetchJson<Product[]>('/api/products', []),
+        fetchJson<Category[]>('/api/categories', []),
         fetchJson<Factory[]>('/api/factories', []),
         fetchJson<PriceTable[]>('/api/price-tables', []),
         fetchJson<Site[]>('/api/sites', []),
@@ -239,6 +246,7 @@ export default function App() {
 
       if (dashRes) setDashboardData(dashRes);
       if (Array.isArray(prodRes)) setProducts(prodRes);
+      if (Array.isArray(catRes)) setCategories(catRes);
       if (Array.isArray(facRes)) setFactories(facRes);
       if (Array.isArray(tblRes)) setPriceTables(tblRes);
       if (Array.isArray(siteRes)) setSites(siteRes);
@@ -417,6 +425,24 @@ export default function App() {
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در ثبت کارخانه');
       showToast(fac.id ? 'کارخانه بروزرسانی شد' : 'کارخانه جدید با موفقیت ثبت شد');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleSaveCategory = async (cat: Partial<Category>) => {
+    try {
+      const method = cat.id ? 'PUT' : 'POST';
+      const url = cat.id ? `/api/categories/${cat.id}` : '/api/categories';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cat)
+      });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || 'خطا در ثبت دسته‌بندی');
+      showToast(cat.id ? 'دسته‌بندی بروزرسانی شد' : 'دسته‌بندی جدید با موفقیت ثبت شد');
       loadAllData();
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -723,6 +749,18 @@ export default function App() {
     }
   };
 
+  const handleDeleteCategory = async (id: number) => {
+    try {
+      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || 'خطا در حذف دسته‌بندی');
+      showToast('دسته‌بندی با موفقیت حذف گردید');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
   const handleDeletePriceTable = async (id: number) => {
     try {
       const res = await fetch(`/api/price-tables/${id}`, { method: 'DELETE' });
@@ -953,9 +991,20 @@ export default function App() {
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
                 onReload={loadAllData}
-                onSyncWithDestination={handleSyncProducts}
                 onPullFromDestination={handlePullFromDestination}
                 onBatchToggleStatus={handleBatchProductStatus}
+              />
+            )}
+
+            {activeTab === 'categories' && (
+              <CategoriesView
+                categories={categories}
+                onSaveCategory={handleSaveCategory}
+                onDeleteCategory={handleDeleteCategory}
+                onOpenImport={openImportModal}
+                onExport={handleExport}
+                onDownloadTemplate={handleDownloadTemplate}
+                onPullFromDestination={handlePullFromDestination}
               />
             )}
 
@@ -967,7 +1016,6 @@ export default function App() {
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
-                onSyncWithDestination={handleSyncFactories}
                 onPullFromDestination={handlePullFromDestination}
               />
             )}
@@ -987,7 +1035,6 @@ export default function App() {
                 onOpenImport={openImportModal}
                 onExport={handleExport}
                 onDownloadTemplate={handleDownloadTemplate}
-                onSyncWithDestination={handleSyncPriceTables}
                 onPullFromDestination={handlePullFromDestination}
               />
             )}

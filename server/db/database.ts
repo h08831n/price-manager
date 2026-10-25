@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   Factory,
+  Category,
   PriceTable,
   Product,
   Site,
@@ -60,6 +61,7 @@ export interface DailySourceRun {
 
 export interface DatabaseSchema {
   factories: Factory[];
+  categories: Category[];
   price_tables: PriceTable[];
   products: Product[];
   sites: Site[];
@@ -402,6 +404,7 @@ export class DatabaseManager {
 
         const loadedSchema: DatabaseSchema = {
           factories: parsed.factories || [],
+          categories: parsed.categories || [],
           price_tables: parsed.price_tables || [],
           products: parsed.products || [],
           sites,
@@ -444,6 +447,7 @@ export class DatabaseManager {
 
     const initial: DatabaseSchema = {
       factories: [],
+      categories: [],
       price_tables: [],
       products: [],
       sites: [],

@@ -3,6 +3,30 @@ import { db, DatabaseSchema } from './database';
 
 export function getSeedDatabase(timestamp: string = '2026-09-21T08:19:39.381Z'): DatabaseSchema {
   return {
+    categories: [
+      {
+        id: 1,
+        name: 'میلگرد',
+        slug: 'rebar',
+        active: true,
+        destination_id: 101,
+        product_count: 5,
+        table_count: 1,
+        created_at: timestamp,
+        updated_at: timestamp
+      },
+      {
+        id: 2,
+        name: 'تیرآهن',
+        slug: 'i-beam',
+        active: true,
+        destination_id: 102,
+        product_count: 0,
+        table_count: 0,
+        created_at: timestamp,
+        updated_at: timestamp
+      }
+    ],
     factories: [
       {
         id: 1,
@@ -17,7 +41,10 @@ export function getSeedDatabase(timestamp: string = '2026-09-21T08:19:39.381Z'):
         id: 1,
         name: 'میلگرد ذوب آهن',
         factory_id: 1,
-        active: true,
+        factory_name: 'ذوب آهن اصفهان',
+        category_id: 1,
+        category_name: 'میلگرد',
+        active: false,
         start_time: '11:00',
         retry_interval_minutes: 30,
         max_attempts: 5,

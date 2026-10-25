@@ -70,7 +70,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   }, Boolean(deletingTable || isAddModalOpen));
 
   const filteredTables = useMemo(() => {
-    return tables.filter((tbl) => {
+    const list = tables.filter((tbl) => {
       if (selectedFactoryFilter && tbl.factory_id !== selectedFactoryFilter) {
         return false;
       }
@@ -78,9 +78,16 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
       const q = normalizePersian(searchQuery);
       const nameMatch = normalizePersian(tbl.name).includes(q);
       const factoryMatch = tbl.factory_name && normalizePersian(tbl.factory_name).includes(q);
+      const categoryMatch = tbl.category_name && normalizePersian(tbl.category_name).includes(q);
       const idMatch = String(tbl.id).includes(q);
       const destMatch = String(tbl.destination_id ?? '').includes(q);
-      return nameMatch || factoryMatch || idMatch || destMatch;
+      return nameMatch || factoryMatch || categoryMatch || idMatch || destMatch;
+    });
+
+    // Sort active tables first per user requirement: "اونایی که فعال هستند رو هم بالاتر نشون بده"
+    return list.sort((a, b) => {
+      if (a.active === b.active) return b.id - a.id;
+      return a.active ? -1 : 1;
     });
   }, [tables, searchQuery, selectedFactoryFilter]);
 
@@ -109,6 +116,14 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
     }
   };
 
+  const handleToggleTableActive = async (tbl: PriceTable, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await onSaveTable({
+      id: tbl.id,
+      active: !tbl.active
+    });
+  };
+
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTable.name?.trim()) return;
@@ -123,7 +138,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
         <div>
           <h2 className="text-sm font-bold text-gray-900">مدیریت جداول قیمت کارخانجات</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            پایش زمان‌بندی‌شده، محاسبه حداقل قیمت در منابع رقیب و انتشار به ووکامرس ({tables.length} جدول ثبت شده)
+            پایش زمان‌بندی‌شده و محاسبه حداقل قیمت در منابع رقیب بر اساس جدول‌های فعال ({tables.length} جدول ثبت شده - فعال‌ها در بالای لیست)
           </p>
         </div>
 
@@ -142,31 +157,10 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
               }}
               disabled={isPulling}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
-              title="دریافت خودکار همه دسته‌بندی‌ها و جداول قیمت از سایت مقصد (WooCommerce)"
+              title="دریافت خودکار همه جداول قیمت از پست تایپ price سایت مقصد (WordPress)"
             >
               <DownloadCloud className={`w-3.5 h-3.5 text-purple-700 ${isPulling ? 'animate-bounce' : ''}`} />
-              <span>{isPulling ? 'در حال دریافت از مقصد...' : 'دریافت از سایت مقصد'}</span>
-            </button>
-          )}
-
-          {onSyncWithDestination && (
-            <button
-              id="btn-sync-tables-destination"
-              type="button"
-              onClick={async () => {
-                setIsSyncing(true);
-                try {
-                  await onSyncWithDestination();
-                } finally {
-                  setIsSyncing(false);
-                }
-              }}
-              disabled={isSyncing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
-              title="همگام‌سازی دسته‌ای و خودکار جداول قیمت با سایت مقصد (WordPress) بدون ایجاد بار روی سرور"
-            >
-              <Globe className={`w-3.5 h-3.5 text-emerald-700 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'در حال ارسال بسته‌ای به مقصد...' : 'ارسال به سایت مقصد'}</span>
+              <span>{isPulling ? 'در حال دریافت از مقصد...' : 'دریافت جداول از سایت مقصد'}</span>
             </button>
           )}
 
@@ -212,7 +206,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="جستجوی جدول قیمت بر اساس نام، نام کارخانه، یا شناسه مقصد..."
+            placeholder="جستجوی جدول قیمت بر اساس نام، نام کارخانه، دسته‌بندی یا شناسه مقصد..."
             className="w-full pl-9 pr-9 py-2 text-xs border border-gray-200 rounded-md focus:border-slate-800 focus:outline-hidden transition-colors"
           />
           {searchQuery && (
@@ -254,7 +248,8 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
               <tr>
                 <th className="py-3 px-4 w-16 text-center font-mono">آیدی سیستم</th>
                 <th className="py-3 px-4 w-24 text-center font-mono text-purple-900 bg-purple-50/50">آیدی مقصد</th>
-                <th className="py-3 px-4">نام جدول</th>
+                <th className="py-3 px-4">نام جدول قیمت</th>
+                <th className="py-3 px-4">دسته‌بندی کالا</th>
                 <th className="py-3 px-4">کارخانه مربوطه</th>
                 <th className="py-3 px-4 text-center">تعداد منابع</th>
                 <th className="py-3 px-4 text-center">تعداد کالاها</th>
@@ -262,14 +257,14 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                 <th className="py-3 px-4 text-center">فاصله تلاش</th>
                 <th className="py-3 px-4 text-center">سقف تلاش</th>
                 <th className="py-3 px-4 text-center">Price Guard</th>
-                <th className="py-3 px-4 text-center w-28">وضعیت اتصال</th>
+                <th className="py-3 px-4 text-center w-32">وضعیت فعال‌سازی</th>
                 <th className="py-3 px-4 text-center w-36">عملیات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredTables.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-gray-400">
+                  <td colSpan={13} className="py-8 text-center text-gray-400">
                     {searchQuery || selectedFactoryFilter ? 'هیچ جدول قیمتی با فیلتر انتخابی یافت نشد.' : 'هیچ جدول قیمتی در سیستم ثبت نشده است.'}
                   </td>
                 </tr>
@@ -278,37 +273,46 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                   <tr
                     key={tbl.id}
                     onClick={() => onSelectTable(tbl)}
-                    className="hover:bg-gray-50/80 cursor-pointer transition-colors"
+                    className={`cursor-pointer transition-colors ${tbl.active ? 'hover:bg-slate-50/80 bg-white' : 'hover:bg-amber-50/40 bg-amber-50/20'}`}
                   >
                     <td className="py-3 px-4 font-mono font-bold text-slate-800 text-center bg-slate-50/50">#{tbl.id}</td>
                     <td className="py-3 px-4 text-center font-mono font-bold text-purple-700 bg-purple-50/30">
-                      <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه جدول در سایت مقصد">
+                      <span className="px-2 py-0.5 rounded bg-purple-100/70 border border-purple-200" title="شناسه جدول در سایت مقصد (پست تایپ price)">
                         {tbl.destination_id ?? tbl.id}
                       </span>
                     </td>
-                    <td className="py-3 px-4 font-bold text-gray-900">{tbl.name}</td>
-                    <td className="py-3 px-4 text-gray-600">{tbl.factory_name}</td>
-                    <td className="py-3 px-4 text-center font-mono">{tbl.source_count} منبع</td>
-                    <td className="py-3 px-4 text-center font-mono">{tbl.product_count} کالا</td>
+                    <td className="py-3 px-4 font-bold text-gray-900">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${tbl.active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                        <span>{tbl.name}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-indigo-700 font-medium">
+                      <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded">
+                        {tbl.category_name || 'همه دسته‌ها'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-gray-700 font-medium">{tbl.factory_name || '-'}</td>
+                    <td className="py-3 px-4 text-center font-mono">{tbl.source_count || 0} منبع</td>
+                    <td className="py-3 px-4 text-center font-mono font-bold text-slate-900">{tbl.product_count || 0} کالا</td>
                     <td className="py-3 px-4 text-center font-mono text-slate-700 font-semibold">{tbl.start_time}</td>
                     <td className="py-3 px-4 text-center">{tbl.retry_interval_minutes} دقیقه</td>
                     <td className="py-3 px-4 text-center">{tbl.max_attempts} بار</td>
                     <td className="py-3 px-4 text-center font-mono">{tbl.price_guard_percent}٪</td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            tbl.sync_status === 'SYNCED'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-amber-50 text-amber-800 border border-amber-200'
-                          }`}
-                        >
-                          {tbl.sync_status === 'SYNCED' ? 'متصل به مقصد' : 'نیازمند همگام‌سازی'}
-                        </span>
-                        <span className="text-[9px] text-gray-400">
-                          {tbl.today_status === 'COMPLETED' ? 'پایش امروز انجام شد' : 'در انتظار پایش'}
-                        </span>
-                      </div>
+                    <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleTableActive(tbl, e)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-all border ${
+                          tbl.active
+                            ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border-emerald-300 shadow-2xs'
+                            : 'bg-amber-100/80 hover:bg-amber-200 text-amber-900 border-amber-300'
+                        }`}
+                        title={tbl.active ? 'جدول فعال است (کلیک برای غیرفعال‌سازی)' : 'جدول غیرفعال است (کلیک برای فعال‌سازی و شروع پایش قیمت)'}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${tbl.active ? 'bg-emerald-600' : 'bg-amber-600'}`} />
+                        <span>{tbl.active ? 'فعال' : 'غیرفعال'}</span>
+                      </button>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>

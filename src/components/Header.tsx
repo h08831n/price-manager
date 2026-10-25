@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
+  Layers,
   Factory,
   TableProperties,
   Globe,
@@ -39,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
     const path = location.pathname;
     if (path === '/' || path === '') return 'dashboard';
     if (path.startsWith('/products')) return 'products';
+    if (path.startsWith('/categories')) return 'categories';
     if (path.startsWith('/factories')) return 'factories';
     if (path.startsWith('/price-tables')) return 'price_tables';
     if (path.startsWith('/sites')) return 'sites';
@@ -55,6 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
   const navItems = [
     { id: 'dashboard', path: '/', label: 'داشبورد', icon: LayoutDashboard },
     { id: 'products', path: '/products', label: 'محصولات', icon: Package },
+    { id: 'categories', path: '/categories', label: 'دسته‌بندی‌ها', icon: Layers },
     { id: 'factories', path: '/factories', label: 'کارخانه‌ها', icon: Factory },
     { id: 'price_tables', path: '/price-tables', label: 'جداول قیمت', icon: TableProperties },
     { id: 'sites', path: '/sites', label: 'سایت‌ها / منابع', icon: Globe },
