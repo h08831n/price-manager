@@ -1,0 +1,587 @@
+{
+  "categories": [
+    {
+      "id": 1,
+      "name": "میلگرد",
+      "slug": "rebar",
+      "active": true,
+      "destination_id": 101,
+      "product_count": 5,
+      "table_count": 1,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 2,
+      "name": "تیرآهن",
+      "slug": "i-beam",
+      "active": true,
+      "destination_id": 102,
+      "product_count": 0,
+      "table_count": 0,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    }
+  ],
+  "factories": [
+    {
+      "id": 1,
+      "name": "ذوب آهن اصفهان",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    }
+  ],
+  "price_tables": [
+    {
+      "id": 1,
+      "name": "میلگرد ذوب آهن",
+      "factory_id": 1,
+      "factory_name": "ذوب آهن اصفهان",
+      "category_id": 1,
+      "category_name": "میلگرد",
+      "active": false,
+      "start_time": "11:00",
+      "retry_interval_minutes": 30,
+      "max_attempts": 5,
+      "price_guard_percent": 30,
+      "working_days": "شنبه تا چهارشنبه",
+      "recheck_default": false,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 2,
+      "destination_id": 2,
+      "name": "جدول تست آزمایشی وارداتی",
+      "factory_id": 1,
+      "category_id": null,
+      "start_time": "12:30",
+      "retry_interval_minutes": 45,
+      "max_attempts": 7,
+      "price_guard_percent": 25,
+      "default_price_adjustment": 150,
+      "working_days": "شنبه تا چهارشنبه",
+      "recheck_default": false,
+      "assignment_mode": "TAXONOMY",
+      "manual_product_ids": [],
+      "product_by_attr": [],
+      "product_by_attr_company": false,
+      "active": true,
+      "created_at": "2026-10-25T22:36:42.540Z",
+      "updated_at": "2026-10-25T22:36:42.540Z"
+    }
+  ],
+  "products": [
+    {
+      "id": 1,
+      "post_id": 1840,
+      "name": "میلگرد ۱۲ ذوب آهن",
+      "sku": "ZOB-RB-12",
+      "factory_id": 1,
+      "price_table_id": 1,
+      "current_price": 58000,
+      "previous_price": 58500,
+      "active": true,
+      "attributes": {
+        "pa_size": "12",
+        "pa_factory": "ذوب آهن اصفهان",
+        "pa_grade": "A3",
+        "pa_type": "آجدار",
+        "unit": "کیلوگرم"
+      },
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 2,
+      "post_id": 1841,
+      "name": "میلگرد ۱۴ ذوب آهن",
+      "sku": "ZOB-RB-14",
+      "factory_id": 1,
+      "price_table_id": 1,
+      "current_price": 58400,
+      "previous_price": 58900,
+      "active": true,
+      "attributes": {
+        "pa_size": "14",
+        "pa_factory": "ذوب آهن اصفهان",
+        "pa_grade": "A3",
+        "pa_type": "آجدار",
+        "unit": "کیلوگرم"
+      },
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 3,
+      "post_id": 1842,
+      "name": "میلگرد ۱۶ ذوب آهن",
+      "sku": "ZOB-RB-16",
+      "factory_id": 1,
+      "price_table_id": 1,
+      "current_price": 59100,
+      "previous_price": 59500,
+      "active": true,
+      "attributes": {
+        "pa_size": "16",
+        "pa_factory": "ذوب آهن اصفهان",
+        "pa_grade": "A3",
+        "pa_type": "آجدار",
+        "unit": "کیلوگرم"
+      },
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 4,
+      "post_id": 1843,
+      "name": "میلگرد ۱۸ ذوب آهن",
+      "sku": "ZOB-RB-18",
+      "factory_id": 1,
+      "price_table_id": 1,
+      "current_price": 60100,
+      "previous_price": 60800,
+      "active": true,
+      "attributes": {
+        "pa_size": "18",
+        "pa_factory": "ذوب آهن اصفهان",
+        "pa_grade": "A3",
+        "pa_type": "آجدار",
+        "unit": "کیلوگرم"
+      },
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    }
+  ],
+  "sites": [
+    {
+      "id": 1,
+      "name": "منبع الف (آهن‌نیوز)",
+      "base_url": "http://localhost:3000/fixtures/source-a.html",
+      "scrape_method": "FETCH",
+      "browser": "Chromium",
+      "timeout": 30,
+      "wait_after_load": 1000,
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 2,
+      "name": "منبع ب (بورس فلزات)",
+      "base_url": "http://localhost:3000/fixtures/source-b.html",
+      "scrape_method": "FETCH",
+      "browser": "Chromium",
+      "timeout": 30,
+      "wait_after_load": 1000,
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 3,
+      "name": "منبع ج (فولاد آنلاین)",
+      "base_url": "http://localhost:3000/fixtures/source-c.html",
+      "scrape_method": "FETCH",
+      "browser": "Chromium",
+      "timeout": 30,
+      "wait_after_load": 1000,
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 4,
+      "name": "منبع د (آهن‌مارکت)",
+      "base_url": "http://localhost:3000/fixtures/source-d.html",
+      "scrape_method": "FETCH",
+      "browser": "Chromium",
+      "timeout": 30,
+      "wait_after_load": 1000,
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 5,
+      "name": "منبع هـ (مرکز آهن)",
+      "base_url": "http://localhost:3000/fixtures/source-e.html",
+      "scrape_method": "FETCH",
+      "browser": "Chromium",
+      "timeout": 30,
+      "wait_after_load": 1000,
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 6,
+      "name": "سایت تست وارداتی",
+      "base_url": "http://localhost:3000",
+      "scrape_method": "PLAYWRIGHT",
+      "browser": "Chromium",
+      "timeout": 30,
+      "wait_after_load": 1500,
+      "active": true,
+      "created_at": "2026-10-25T22:36:42.540Z",
+      "updated_at": "2026-10-25T22:36:42.540Z"
+    }
+  ],
+  "source_pages": [
+    {
+      "id": 1,
+      "site_id": 1,
+      "url": "http://localhost:3000/fixtures/source-a.html",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 2,
+      "site_id": 2,
+      "url": "http://localhost:3000/fixtures/source-b.html",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 3,
+      "site_id": 3,
+      "url": "http://localhost:3000/fixtures/source-c.html",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 4,
+      "site_id": 4,
+      "url": "http://localhost:3000/fixtures/source-d.html",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 5,
+      "site_id": 5,
+      "url": "http://localhost:3000/fixtures/source-e.html",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 6,
+      "site_id": 6,
+      "url": "http://localhost:3000/fixtures/source-imported.html",
+      "active": true,
+      "created_at": "2026-10-25T22:36:42.540Z",
+      "updated_at": "2026-10-25T22:36:42.540Z"
+    }
+  ],
+  "table_sources": [
+    {
+      "id": 1,
+      "price_table_id": 1,
+      "site_id": 1,
+      "source_page_id": 1,
+      "active": true,
+      "update_time_xpath": "//*[@id=\"last-update\"]",
+      "recheck_enabled": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 2,
+      "price_table_id": 1,
+      "site_id": 2,
+      "source_page_id": 2,
+      "active": true,
+      "update_time_xpath": "//*[@id=\"source-b-update\"]",
+      "recheck_enabled": false,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 3,
+      "price_table_id": 1,
+      "site_id": 3,
+      "source_page_id": 3,
+      "active": true,
+      "update_time_xpath": "//*[@id=\"update-date-c\"]",
+      "recheck_enabled": false,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 4,
+      "price_table_id": 1,
+      "site_id": 4,
+      "source_page_id": 4,
+      "active": true,
+      "update_time_xpath": "//*[@id=\"meta-update\"]",
+      "recheck_enabled": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 5,
+      "price_table_id": 1,
+      "site_id": 5,
+      "source_page_id": 5,
+      "active": true,
+      "update_time_xpath": "//*[@id=\"date-e\"]",
+      "recheck_enabled": false,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 6,
+      "price_table_id": 2,
+      "site_id": 6,
+      "source_page_id": 6,
+      "update_time_xpath": "//div[@class=\"test-date\"]",
+      "recheck_enabled": true,
+      "active": true,
+      "max_attempts_override": null,
+      "retry_interval_override": null,
+      "timeout_override": null,
+      "price_guard_override": null,
+      "created_at": "2026-10-25T22:36:42.540Z",
+      "updated_at": "2026-10-25T22:36:42.540Z"
+    }
+  ],
+  "product_selectors": [
+    {
+      "id": 1,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 1,
+      "price_xpath": "//table[@id=\"zobahan-table\"]//tr[1]/td[5]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 2,
+      "product_id": 2,
+      "post_id": 1841,
+      "table_source_id": 1,
+      "price_xpath": "//table[@id=\"zobahan-table\"]//tr[2]/td[5]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 3,
+      "product_id": 3,
+      "post_id": 1842,
+      "table_source_id": 1,
+      "price_xpath": "//table[@id=\"zobahan-table\"]//tr[3]/td[5]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 4,
+      "product_id": 4,
+      "post_id": 1843,
+      "table_source_id": 1,
+      "price_xpath": "//table[@id=\"zobahan-table\"]//tr[4]/td[5]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 5,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 2,
+      "price_xpath": "//table[@id=\"prices-b\"]//tr[@data-id=\"rebar-12\"]/td[3]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 6,
+      "product_id": 2,
+      "post_id": 1841,
+      "table_source_id": 2,
+      "price_xpath": "//table[@id=\"prices-b\"]//tr[@data-id=\"rebar-14\"]/td[3]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 7,
+      "product_id": 3,
+      "post_id": 1842,
+      "table_source_id": 2,
+      "price_xpath": "//table[@id=\"prices-b\"]//tr[@data-id=\"rebar-16\"]/td[3]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 8,
+      "product_id": 4,
+      "post_id": 1843,
+      "table_source_id": 2,
+      "price_xpath": "//table[@id=\"prices-b\"]//tr[@data-id=\"rebar-18\"]/td[3]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 9,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 3,
+      "price_xpath": "//table[@id=\"tbl-c\"]//tr[1]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 10,
+      "product_id": 2,
+      "post_id": 1841,
+      "table_source_id": 3,
+      "price_xpath": "//table[@id=\"tbl-c\"]//tr[2]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 11,
+      "product_id": 3,
+      "post_id": 1842,
+      "table_source_id": 3,
+      "price_xpath": "//table[@id=\"tbl-c\"]//tr[3]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 12,
+      "product_id": 4,
+      "post_id": 1843,
+      "table_source_id": 3,
+      "price_xpath": "//table[@id=\"tbl-c\"]//tr[4]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 13,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 4,
+      "price_xpath": "//table[@id=\"d-prices\"]//tr[2]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 14,
+      "product_id": 2,
+      "post_id": 1841,
+      "table_source_id": 4,
+      "price_xpath": "//table[@id=\"d-prices\"]//tr[3]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 15,
+      "product_id": 3,
+      "post_id": 1842,
+      "table_source_id": 4,
+      "price_xpath": "//table[@id=\"d-prices\"]//tr[4]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 16,
+      "product_id": 4,
+      "post_id": 1843,
+      "table_source_id": 4,
+      "price_xpath": "//table[@id=\"d-prices\"]//tr[5]/td[2]",
+      "active": true,
+      "created_at": "2026-09-21T08:19:39.381Z",
+      "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 17,
+      "product_id": 1,
+      "post_id": 1840,
+      "table_source_id": 6,
+      "price_xpath": "//div[@id=\"test-price-12\"]",
+      "update_time_xpath": null,
+      "active": true,
+      "created_at": "2026-10-25T22:36:42.540Z",
+      "updated_at": "2026-10-25T22:36:42.540Z"
+    },
+    {
+      "id": 18,
+      "product_id": 2,
+      "post_id": 1841,
+      "table_source_id": 6,
+      "price_xpath": "//div[@id=\"test-price-14\"]",
+      "update_time_xpath": null,
+      "active": true,
+      "created_at": "2026-10-25T22:36:42.540Z",
+      "updated_at": "2026-10-25T22:36:42.540Z"
+    }
+  ],
+  "page_actions": [
+    {
+      "id": 1,
+      "scope": "TABLE_SOURCE",
+      "site_id": 6,
+      "table_source_id": 6,
+      "order": 1,
+      "action_type": "WAIT",
+      "selector": "",
+      "value": "2000",
+      "active": true,
+      "created_at": "2026-10-25T22:36:42.540Z",
+      "updated_at": "2026-10-25T22:36:42.540Z"
+    }
+  ],
+  "global_settings": {
+    "working_hours_start": "08:30",
+    "working_hours_end": "17:00",
+    "friday_enabled": false,
+    "default_retry_interval": 30,
+    "default_max_attempts": 5,
+    "default_price_guard_percent": 30,
+    "default_browser_timeout_sec": 30,
+    "default_page_load_wait_ms": 1500,
+    "default_recheck": false,
+    "wordpress_url": "http://localhost:3000/api/mock-wordpress",
+    "wordpress_api_token": "secure-test-token-xyz",
+    "timezone": "Asia/Tehran",
+    "admin_password": "admin123"
+  },
+  "runs": [],
+  "run_locks": [],
+  "daily_table_runs": [],
+  "daily_source_runs": [],
+  "price_records": [],
+  "price_changes": [],
+  "table_revisions": [],
+  "table_revision_items": [],
+  "errors": [],
+  "logs": [
+    {
+      "id": 1,
+      "level": "INFO",
+      "message": "اعمال موفق پیکربندی جداول قیمت: 1 جدول جدید، 0 جدول بروزرسانی، 1 منبع، 2 سلکتور",
+      "metadata": {},
+      "created_at": "2026-10-25T22:36:42.541Z"
+    }
+  ],
+  "config_history": [],
+  "import_history": []
+}

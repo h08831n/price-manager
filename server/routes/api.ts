@@ -31,6 +31,7 @@ import {
   getSiteDefaultPageActions,
   getTableSourcePageActionsInfo
 } from '../scraper/pageActions';
+import { tableConfigService } from '../engine/tableConfigService';
 import { DashboardData, Site, PageAction } from '../../src/types';
 
 export const apiRouter = express.Router();
@@ -1170,6 +1171,154 @@ apiRouter.post('/price-tables/batch-run', async (req: Request, res: Response) =>
     message: `اجرای ${activeTables.length} جدول قیمت با موفقیت انجام شد.${inactiveCount > 0 ? ` (${inactiveCount} جدول غیرفعال نادیده گرفته شد)` : ''}`
   });
 });
+
+// ==========================================
+// 4B. PRICE TABLES & SOURCES CONFIG EXPORT / IMPORT
+// ==========================================
+
+// Export Price Tables Configuration (including attached sources, selectors & actions)
+apiRouter.get('/price-tables/config/export', (req: Request, res: Response) => {
+  try {
+    let tableIds: number[] | undefined = undefined;
+
+    if (req.query.table_ids) {
+      tableIds = String(req.query.table_ids)
+        .split(',')
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !isNaN(n) && n > 0);
+    } else if (req.query.table_id) {
+      const singleId = parseInt(String(req.query.table_id), 10);
+      if (!isNaN(singleId) && singleId > 0) {
+        tableIds = [singleId];
+      }
+    }
+
+    const exportPackage = tableConfigService.exportConfig(tableIds);
+
+    const isDownload = req.query.download === '1' || req.query.download === 'true';
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = tableIds && tableIds.length === 1
+      ? `price-table-${tableIds[0]}-config-${dateStr}.json`
+      : `price-tables-config-${dateStr}.json`;
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (isDownload) {
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    }
+
+    res.send(JSON.stringify(exportPackage, null, 2));
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `خطا در استخراج فایل تنظیمات: ${err.message}` });
+  }
+});
+
+// Preview Price Tables Configuration Import (Validation & Diff)
+apiRouter.post(
+  '/price-tables/config/preview-import',
+  upload.single('file'),
+  (req: Request, res: Response) => {
+    try {
+      let payload: any = null;
+
+      if (req.file) {
+        const rawText = req.file.buffer.toString('utf-8');
+        try {
+          payload = JSON.parse(rawText);
+        } catch {
+          return res.status(400).json({
+            valid: false,
+            errors: ['فایل آپلود شده یک فایل JSON معتبر نیست.']
+          });
+        }
+      } else if (req.body) {
+        if (typeof req.body === 'string') {
+          try {
+            payload = JSON.parse(req.body);
+          } catch {
+            return res.status(400).json({
+              valid: false,
+              errors: ['متن ارسال‌شده یک ساختار JSON معتبر نیست.']
+            });
+          }
+        } else if (req.body.config) {
+          payload = typeof req.body.config === 'string' ? JSON.parse(req.body.config) : req.body.config;
+        } else {
+          payload = req.body;
+        }
+      }
+
+      if (!payload) {
+        return res.status(400).json({
+          valid: false,
+          errors: ['هیچ اطلاعات یا فایلی برای بررسی ارسال نشده است.']
+        });
+      }
+
+      const preview = tableConfigService.previewImport(payload);
+      res.json(preview);
+    } catch (err: any) {
+      res.status(500).json({ valid: false, errors: [`خطای سرور: ${err.message}`] });
+    }
+  }
+);
+
+// Apply Price Tables Configuration Import
+apiRouter.post(
+  '/price-tables/config/import',
+  upload.single('file'),
+  (req: Request, res: Response) => {
+    try {
+      let payload: any = null;
+      let mode: 'upsert' | 'skip_existing' = 'upsert';
+
+      if (req.file) {
+        const rawText = req.file.buffer.toString('utf-8');
+        try {
+          payload = JSON.parse(rawText);
+        } catch {
+          return res.status(400).json({
+            success: false,
+            message: 'فایل آپلود شده ساختار JSON معتبر ندارد.'
+          });
+        }
+        if (req.body?.mode === 'skip_existing') {
+          mode = 'skip_existing';
+        }
+      } else if (req.body) {
+        if (req.body.mode === 'skip_existing') {
+          mode = 'skip_existing';
+        }
+
+        if (req.body.config) {
+          payload = typeof req.body.config === 'string' ? JSON.parse(req.body.config) : req.body.config;
+        } else if (typeof req.body === 'string') {
+          try {
+            payload = JSON.parse(req.body);
+          } catch {
+            return res.status(400).json({
+              success: false,
+              message: 'متن ارسالی ساختار JSON معتبر ندارد.'
+            });
+          }
+        } else {
+          payload = req.body;
+        }
+      }
+
+      if (!payload) {
+        return res.status(400).json({
+          success: false,
+          message: 'داده‌ای برای اعمال تنظیمات یافت نشد.'
+        });
+      }
+
+      const result = tableConfigService.applyImport(payload, { mode });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: `خطا در اعمال پیکربندی: ${err.message}` });
+    }
+  }
+);
 
 // ==========================================
 // 5. SITES & SOURCE PAGES (Requirement #9, #10)

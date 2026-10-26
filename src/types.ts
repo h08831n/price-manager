@@ -443,3 +443,115 @@ export interface DashboardData {
     max_attempts: number;
   }[];
 }
+
+// ==========================================
+// PRICE TABLE CONFIGURATION EXPORT / IMPORT
+// ==========================================
+
+export interface PriceTableSelectorConfig {
+  product_id?: number;
+  post_id?: number;
+  product_name?: string;
+  price_xpath: string;
+  update_time_xpath?: string | null;
+  active: boolean;
+}
+
+export interface PriceTableActionConfig {
+  order: number;
+  action_type: PageActionType;
+  selector_type?: 'XPATH' | 'CSS';
+  selector?: string;
+  value?: string;
+  active: boolean;
+}
+
+export interface PriceTableSourceConfig {
+  id?: number;
+  url: string;
+  site_name?: string;
+  site_base_url?: string;
+  scrape_method?: 'FETCH' | 'PLAYWRIGHT';
+  active: boolean;
+  update_time_xpath?: string | null;
+  recheck_enabled: boolean;
+  max_attempts_override?: number | null;
+  retry_interval_override?: number | null;
+  timeout_override?: number | null;
+  price_guard_override?: number | null;
+  selectors: PriceTableSelectorConfig[];
+  page_actions: PriceTableActionConfig[];
+}
+
+export interface PriceTableConfigItem {
+  id?: number;
+  destination_id?: number | null;
+  name: string;
+  factory_id?: number;
+  factory_name?: string;
+  category_id?: number | null;
+  category_name?: string;
+  active: boolean;
+  start_time: string;
+  retry_interval_minutes: number;
+  max_attempts: number;
+  price_guard_percent: number;
+  default_price_adjustment?: number;
+  working_days?: string;
+  recheck_default?: boolean;
+  assignment_mode?: 'MANUAL' | 'ATTRIBUTE' | 'TAXONOMY';
+  manual_product_ids?: number[];
+  manual_product_names?: string[];
+  product_by_attr?: Array<{ taxonomy: string; term: string }>;
+  product_by_attr_company?: boolean;
+  sources: PriceTableSourceConfig[];
+}
+
+export interface PriceTablesExportPackage {
+  format: 'price_tables_config_export';
+  version: number;
+  exported_at: string;
+  source_app: string;
+  total_tables: number;
+  total_sources: number;
+  total_selectors: number;
+  total_page_actions: number;
+  tables: PriceTableConfigItem[];
+  referenced_sites?: Partial<Site>[];
+}
+
+export interface PriceTablesImportPreview {
+  valid: boolean;
+  version?: number;
+  exported_at?: string;
+  total_tables: number;
+  total_sources: number;
+  total_selectors: number;
+  total_page_actions: number;
+  tables: Array<{
+    name: string;
+    destination_id?: number | null;
+    factory_name?: string;
+    category_name?: string;
+    sources_count: number;
+    selectors_count: number;
+    actions_count: number;
+    action: 'UPDATE' | 'CREATE';
+    existing_table_id?: number;
+  }>;
+  sites_to_create: string[];
+  errors: string[];
+}
+
+export interface PriceTablesImportResult {
+  success: boolean;
+  message: string;
+  created_tables: number;
+  updated_tables: number;
+  created_sources: number;
+  updated_sources: number;
+  configured_selectors: number;
+  configured_actions: number;
+  created_sites: number;
+}
+

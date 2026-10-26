@@ -28,7 +28,9 @@ import {
   Table,
   Search,
   CheckSquare,
-  Square
+  Square,
+  Download,
+  FileCode2
 } from 'lucide-react';
 import {
   PriceTable,
@@ -657,6 +659,18 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               <span>حذف جدول</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              window.open(`/api/price-tables/config/export?table_id=${table.id}&download=1`, '_blank');
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-300 rounded-md transition-colors shadow-xs cursor-pointer"
+            title="خروجی گرفتن از تنظیمات این جدول قیمت و تمام منابع، سلکتورها و دستورات مرتبط به فرمت JSON"
+          >
+            <FileCode2 className="w-3.5 h-3.5 text-purple-700" />
+            <span>خروجی تنظیمات (JSON)</span>
+          </button>
 
           <button
             id={`btn-run-full-table-${table.id}`}

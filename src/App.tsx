@@ -1193,6 +1193,8 @@ export default function App() {
                 onBatchToggleStatus={handleBatchPriceTableStatus}
                 onBatchDelete={handleBatchPriceTableDelete}
                 onBatchRun={handleBatchPriceTableRun}
+                onReload={loadAllData}
+                showToast={showToast}
               />
             )}
 

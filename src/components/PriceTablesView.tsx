@@ -19,10 +19,12 @@ import {
   Square,
   CheckCircle2,
   XCircle,
-  Power
+  Power,
+  FileCode2
 } from 'lucide-react';
 import { PriceTable, Factory } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { PriceTableConfigModal } from './PriceTableConfigModal';
 
 interface PriceTablesViewProps {
   tables: PriceTable[];
@@ -38,6 +40,8 @@ interface PriceTablesViewProps {
   onBatchToggleStatus?: (ids: number[], active: boolean) => Promise<any>;
   onBatchDelete?: (ids: number[]) => Promise<any>;
   onBatchRun?: (ids: number[]) => Promise<any>;
+  onReload?: () => Promise<void> | void;
+  showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 function normalizePersian(str: string): string {
@@ -64,7 +68,9 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   onPullFromDestination,
   onBatchToggleStatus,
   onBatchDelete,
-  onBatchRun
+  onBatchRun,
+  onReload,
+  showToast = () => {}
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTable, setNewTable] = useState<Partial<PriceTable>>({
@@ -94,12 +100,30 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
   const [deletingTable, setDeletingTable] = useState<PriceTable | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Price Table Config Export / Import Modal State
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [configModalTab, setConfigModalTab] = useState<'export' | 'import'>('export');
+  const [configModalPreselectedIds, setConfigModalPreselectedIds] = useState<number[] | undefined>(undefined);
+
+  const handleOpenConfigExport = (ids?: number[]) => {
+    setConfigModalPreselectedIds(ids);
+    setConfigModalTab('export');
+    setIsConfigModalOpen(true);
+  };
+
+  const handleOpenConfigImport = () => {
+    setConfigModalPreselectedIds(undefined);
+    setConfigModalTab('import');
+    setIsConfigModalOpen(true);
+  };
+
   // Close modals on Escape
   useEscapeKey(() => {
-    if (isBatchDeletingModalOpen) setIsBatchDeletingModalOpen(false);
+    if (isConfigModalOpen) setIsConfigModalOpen(false);
+    else if (isBatchDeletingModalOpen) setIsBatchDeletingModalOpen(false);
     else if (deletingTable) setDeletingTable(null);
     else if (isAddModalOpen) setIsAddModalOpen(false);
-  }, Boolean(isBatchDeletingModalOpen || deletingTable || isAddModalOpen));
+  }, Boolean(isConfigModalOpen || isBatchDeletingModalOpen || deletingTable || isAddModalOpen));
 
   const filteredTables = useMemo(() => {
     const list = tables.filter((tbl) => {
@@ -272,6 +296,28 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
           </button>
 
           <button
+            id="btn-export-tables-config"
+            type="button"
+            onClick={() => handleOpenConfigExport()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-300 rounded-md transition-colors cursor-pointer shadow-xs"
+            title="خروجی گرفتن از تنظیمات تمام جداول قیمت، منابع، XPathها و دستورات صفحه به فرمت JSON"
+          >
+            <FileCode2 className="w-3.5 h-3.5 text-purple-700" />
+            <span>خروجی تنظیمات (JSON)</span>
+          </button>
+
+          <button
+            id="btn-import-tables-config"
+            type="button"
+            onClick={handleOpenConfigImport}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-md transition-colors cursor-pointer shadow-xs"
+            title="ورود و اعمال تنظیمات جداول قیمت و منابع از فایل JSON"
+          >
+            <Upload className="w-3.5 h-3.5 text-emerald-700" />
+            <span>ورود تنظیمات (JSON)</span>
+          </button>
+
+          <button
             onClick={() => onOpenImport('price_tables')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
           >
@@ -381,6 +427,17 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
             >
               <Play className={`w-3.5 h-3.5 ${isBatchRunning ? 'animate-spin' : ''}`} />
               <span>{isBatchRunning ? 'در حال اجرای گروهی...' : 'اجرای همگانی جداول فعال'}</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isBatchUpdating || isBatchRunning}
+              onClick={() => handleOpenConfigExport(Array.from(selectedIds))}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white rounded font-medium transition-colors cursor-pointer"
+              title="خروجی گرفتن از تنظیمات جداول انتخاب‌شده به همراه منابع آن‌ها به فرمت JSON"
+            >
+              <FileCode2 className="w-3.5 h-3.5 text-purple-200" />
+              <span>خروجی تنظیمات ({selectedIds.size})</span>
             </button>
 
             {onBatchDelete && (
@@ -537,6 +594,19 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                         >
                           <Edit2 className="w-3.5 h-3.5 text-slate-700" />
                           <span>ویرایش و منابع</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenConfigExport([tbl.id]);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition-colors"
+                          title="خروجی گرفتن از تنظیمات و منابع این جدول قیمت (JSON)"
+                        >
+                          <FileCode2 className="w-3 h-3 text-purple-600" />
+                          <span>خروجی</span>
                         </button>
 
                         {onDeleteTable && (
@@ -832,6 +902,19 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Price Table Config Export & Import Modal */}
+      <PriceTableConfigModal
+        isOpen={isConfigModalOpen}
+        initialTab={configModalTab}
+        preselectedTableIds={configModalPreselectedIds}
+        tables={tables}
+        onClose={() => setIsConfigModalOpen(false)}
+        onSuccess={async () => {
+          if (onReload) await onReload();
+        }}
+        showToast={showToast}
+      />
     </div>
   );
 };
