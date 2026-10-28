@@ -8,9 +8,36 @@ import { FIXTURE_PAGES } from './server/fixtures/fixtures';
 import { seedInitialDataIfEmpty } from './server/db/seed';
 import { scheduler } from './server/engine/scheduler';
 
+// Process crash protection
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [Server] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ [Server] Unhandled Rejection:', reason);
+});
+
+function getCliArg(flag: string): string | undefined {
+  const index = process.argv.indexOf(flag);
+  if (index !== -1 && index + 1 < process.argv.length) {
+    return process.argv[index + 1];
+  }
+  const prefix = `${flag}=`;
+  const match = process.argv.find((a) => a.startsWith(prefix));
+  if (match) {
+    return match.substring(prefix.length);
+  }
+  return undefined;
+}
+
 async function startServer() {
   const app = express();
-  const PORT = parseInt(process.env.PORT || '3000', 10);
+  const portArg = getCliArg('--port') || getCliArg('-p');
+  const hostArg = getCliArg('--host') || getCliArg('-h') || '0.0.0.0';
+  // Per environment constraints: Dev server must run on port 3000.
+  // Avoid using Cloud Run's external container PORT=8080 where the ingress proxy is already bound.
+  const PORT = portArg ? parseInt(portArg, 10) : 3000;
+  const HOST = hostArg;
 
   // Middlewares
   app.use(cors());
@@ -75,8 +102,8 @@ async function startServer() {
   }
 
   // 4. Start Server on Port 3000
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Price Collector System running at http://0.0.0.0:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`🚀 Price Collector System running at http://${HOST}:${PORT}`);
     // Start database-driven scheduler
     scheduler.start();
   });
