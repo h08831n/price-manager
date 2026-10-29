@@ -54,6 +54,13 @@ class PriceSystemSyncPlugin {
             'permission_callback' => array($this, 'verify_api_token'),
         ));
 
+        // Update Table Last Update Time Endpoint
+        register_rest_route(self::API_NAMESPACE, '/update-table-time', array(
+            'methods'  => 'POST',
+            'callback' => array($this, 'handle_update_table_time'),
+            'permission_callback' => array($this, 'verify_api_token'),
+        ));
+
         // Comprehensive Products Sync & Connect Endpoint
         register_rest_route(self::API_NAMESPACE, '/sync-products', array(
             'methods'  => 'POST',
@@ -206,20 +213,93 @@ class PriceSystemSyncPlugin {
             );
         }
 
-        // If price_table_id is provided, update table's last_update_time and bump cache version
+        // If price_table_id is not explicitly passed, attempt to resolve from table_destination_id or destination_id
+        if ($price_table_id <= 0) {
+            if (isset($params['table_destination_id']) && intval($params['table_destination_id']) > 0) {
+                $price_table_id = intval($params['table_destination_id']);
+            } elseif (isset($params['destination_id']) && intval($params['destination_id']) > 0) {
+                $price_table_id = intval($params['destination_id']);
+            }
+        }
+
+        // If still 0, check if products have associated table id in postmeta
+        if ($price_table_id <= 0 && !empty($products)) {
+            foreach ($products as $p_check) {
+                $check_pid = isset($p_check['post_id']) ? intval($p_check['post_id']) : 0;
+                if ($check_pid > 0) {
+                    $associated_tbl = (int) get_post_meta($check_pid, '_price_system_table_id', true);
+                    if ($associated_tbl > 0) {
+                        $price_table_id = $associated_tbl;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $timestamp = !empty($params['last_update_time']) ? intval($params['last_update_time']) : time();
+
+        // If price_table_id is resolved, update table's last_update_time and bump cache version
         if ($price_table_id > 0) {
-            update_post_meta($price_table_id, 'last_update_time', time());
+            update_post_meta($price_table_id, 'last_update_time', $timestamp);
             $current_v = (int) get_post_meta($price_table_id, '_price_table_cache_v', true);
             if ($current_v < 1) $current_v = 1;
             update_post_meta($price_table_id, '_price_table_cache_v', $current_v + 1);
+
+            // Invalidate transient caches for this price table
+            delete_transient('price_' . $price_table_id);
+            wp_cache_delete('price_' . $price_table_id, 'price_table');
         }
 
         return rest_ensure_response(array(
-            'success'        => true,
-            'price_table_id' => $price_table_id,
-            'updated'        => $updated_count,
-            'failed'         => $failed_count,
-            'items'          => $results
+            'success'          => true,
+            'price_table_id'   => $price_table_id,
+            'last_update_time' => $timestamp,
+            'updated'          => $updated_count,
+            'failed'           => $failed_count,
+            'items'            => $results
+        ));
+    }
+
+    /**
+     * Handle Direct Update of Table Last Update Time
+     */
+    public function handle_update_table_time($request) {
+        $params = $request->get_json_params();
+        $price_table_id = isset($params['price_table_id']) ? intval($params['price_table_id']) : 0;
+        if ($price_table_id <= 0 && isset($params['table_destination_id'])) {
+            $price_table_id = intval($params['table_destination_id']);
+        }
+        if ($price_table_id <= 0 && isset($params['destination_id'])) {
+            $price_table_id = intval($params['destination_id']);
+        }
+        if ($price_table_id <= 0 && isset($params['id'])) {
+            $price_table_id = intval($params['id']);
+        }
+
+        if ($price_table_id <= 0) {
+            return new WP_Error('invalid_table_id', 'شناسه معتبر جدول قیمت ارسال نشده است.', array('status' => 400));
+        }
+
+        $timestamp = !empty($params['last_update_time']) ? intval($params['last_update_time']) : time();
+
+        // Update post meta 'last_update_time'
+        update_post_meta($price_table_id, 'last_update_time', $timestamp);
+
+        // Bump cache version
+        $current_v = (int) get_post_meta($price_table_id, '_price_table_cache_v', true);
+        if ($current_v < 1) $current_v = 1;
+        update_post_meta($price_table_id, '_price_table_cache_v', $current_v + 1);
+
+        // Invalidate transient caches
+        delete_transient('price_' . $price_table_id);
+        wp_cache_delete('price_' . $price_table_id, 'price_table');
+
+        return rest_ensure_response(array(
+            'success'          => true,
+            'price_table_id'   => $price_table_id,
+            'last_update_time' => $timestamp,
+            'cache_version'    => $current_v + 1,
+            'message'          => 'متای last_update_time جدول با موفقیت در وردپرس بروز شد.'
         ));
     }
 

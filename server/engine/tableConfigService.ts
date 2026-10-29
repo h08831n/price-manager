@@ -127,6 +127,7 @@ export class TableConfigService {
         max_attempts: table.max_attempts || 5,
         price_guard_percent: table.price_guard_percent ?? 30,
         default_price_adjustment: table.default_price_adjustment ?? 0,
+        vat_percent: table.vat_percent ?? 10,
         working_days: table.working_days || 'شنبه تا چهارشنبه',
         recheck_default: Boolean(table.recheck_default),
         assignment_mode: table.assignment_mode || 'TAXONOMY',
@@ -419,6 +420,9 @@ export class TableConfigService {
         if (item.default_price_adjustment !== undefined) {
           targetTable.default_price_adjustment = item.default_price_adjustment;
         }
+        if (item.vat_percent !== undefined) {
+          targetTable.vat_percent = item.vat_percent;
+        }
         if (item.working_days !== undefined) targetTable.working_days = item.working_days;
         if (item.recheck_default !== undefined) targetTable.recheck_default = Boolean(item.recheck_default);
         if (item.assignment_mode !== undefined) targetTable.assignment_mode = item.assignment_mode;
@@ -442,6 +446,7 @@ export class TableConfigService {
           max_attempts: item.max_attempts || 5,
           price_guard_percent: item.price_guard_percent ?? 30,
           default_price_adjustment: item.default_price_adjustment ?? 0,
+          vat_percent: item.vat_percent ?? 10,
           working_days: item.working_days || 'شنبه تا چهارشنبه',
           recheck_default: Boolean(item.recheck_default),
           assignment_mode: item.assignment_mode || (manualProductIds.length > 0 ? 'MANUAL' : 'TAXONOMY'),

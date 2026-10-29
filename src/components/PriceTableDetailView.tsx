@@ -113,12 +113,37 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     max_attempts: table.max_attempts || 5,
     price_guard_percent: table.price_guard_percent || 30,
     default_price_adjustment: table.default_price_adjustment ?? 0,
+    vat_percent: table.vat_percent ?? 10,
     assignment_mode: table.assignment_mode || (table.manual_product_ids && table.manual_product_ids.length > 0 ? 'MANUAL' : 'TAXONOMY'),
     manual_product_ids: table.manual_product_ids || [],
     active: table.active ?? true
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSavedSuccess, setSettingsSavedSuccess] = useState(false);
+  const [isSyncingTime, setIsSyncingTime] = useState(false);
+  const [syncTimeMessage, setSyncTimeMessage] = useState<string | null>(null);
+
+  const handleSyncWordpressTime = async () => {
+    setIsSyncingTime(true);
+    setSyncTimeMessage(null);
+    try {
+      const res = await fetch(`/api/price-tables/${table.id}/update-wordpress-time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ last_update_time: Math.floor(Date.now() / 1000) })
+      });
+      const data = await res.json();
+      if (data.success) {
+        table.last_update_time = data.last_update_time || Math.floor(Date.now() / 1000);
+      } else {
+        setSyncTimeMessage(`خطا: ${data.message || data.error || 'ارسال ناموفق'}`);
+      }
+    } catch (err: any) {
+      setSyncTimeMessage(`خطا در ارتباط: ${err.message}`);
+    } finally {
+      setIsSyncingTime(false);
+    }
+  };
 
   // Manual Products Picker Modal state (ACF get_field('products'))
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -642,12 +667,20 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               <span>فاصله تکرار: <strong className="text-gray-700">{table.retry_interval_minutes} دقیقه</strong></span>
               <span>حداکثر تلاش: <strong className="text-gray-700">{table.max_attempts} بار</strong></span>
               <span>آستانه Price Guard: <strong className="text-gray-700">{table.price_guard_percent}٪</strong></span>
+              <span>
+                آخرین بروزرسانی در وردپرس:{' '}
+                <strong className="text-emerald-700 font-mono">
+                  {table.last_update_time
+                    ? new Date(table.last_update_time * 1000).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
+                    : 'ثبت نشده'}
+                </strong>
+              </span>
             </div>
           </div>
         </div>
 
         {/* Header Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onDeleteTable && (
             <button
               type="button"
@@ -659,6 +692,17 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               <span>حذف جدول</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={handleSyncWordpressTime}
+            disabled={isSyncingTime}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-md transition-colors shadow-xs"
+            title="ارسال و ثبت متای last_update_time جدول در وب‌سایت وردپرس"
+          >
+            <Clock className={`w-3.5 h-3.5 ${isSyncingTime ? 'animate-spin' : ''}`} />
+            <span>{isSyncingTime ? 'در حال ثبت...' : 'بروزرسانی تاریخ در وردپرس'}</span>
+          </button>
 
           <button
             type="button"
@@ -683,6 +727,17 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
           </button>
         </div>
       </div>
+
+      {syncTimeMessage && (
+        <div className={`p-3 rounded-lg text-xs font-medium border flex items-center justify-between ${
+          syncTimeMessage.startsWith('خطا') ? 'bg-rose-50 text-rose-800 border-rose-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+        }`}>
+          <span>{syncTimeMessage}</span>
+          <button onClick={() => setSyncTimeMessage(null)} className="text-gray-400 hover:text-gray-600">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Navigation Tabs between Sources & Table Settings */}
       <div className="flex border-b border-gray-200 gap-2">
@@ -831,6 +886,32 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                   }
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                 />
+              </div>
+
+              <div>
+                <label className="block text-gray-700 font-semibold mb-1">
+                  درصد مالیات بر ارزش افزوده (ارزش افزوده)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={tableSettings.vat_percent ?? 10}
+                    onChange={(e) =>
+                      setTableSettings((prev) => ({
+                        ...prev,
+                        vat_percent: e.target.value === '' ? 10 : parseFloat(e.target.value)
+                      }))
+                    }
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono text-xs"
+                  />
+                  <span className="text-xs text-gray-600 font-medium font-mono">٪</span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  قیمت نهایی ارسالی به وب‌سایت وردپرس/ووکامرس مقصد، قیمت با احتساب ارزش افزوده خواهد بود (پیش‌فرض: ۱۰٪).
+                </p>
               </div>
 
               <div className="md:col-span-2 p-3 bg-blue-50/60 border border-blue-200/80 rounded-lg">
@@ -1074,8 +1155,8 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                     <th className="py-3 px-3 min-w-[100px] bg-purple-50 text-purple-950 font-bold border-r border-purple-200 text-center">
                       تعدیل قیمت (افست)
                     </th>
-                    <th className="py-3 px-3 min-w-[130px] bg-blue-50 text-blue-950 font-bold border-r border-blue-200">
-                      قیمت نهایی قابل انتشار
+                    <th className="py-3 px-3 min-w-[150px] bg-blue-50 text-blue-950 font-bold border-r border-blue-200">
+                      قیمت ارسالی به مقصد (با ارزش افزوده) ★
                     </th>
                   </tr>
                 </thead>
@@ -1110,6 +1191,22 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
 
                       const validPrices = sourceObservations.filter((s) => s.isValid).map((s) => s.num);
                       const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
+                      const vatPercent = typeof table.vat_percent === 'number' ? table.vat_percent : 10;
+                      const effectiveAdj =
+                        product.price_adjustment !== undefined && product.price_adjustment !== null
+                          ? product.price_adjustment
+                          : (table.default_price_adjustment || 0);
+
+                      const baseCalcPrice =
+                        minPrice !== null
+                          ? Math.max(0, minPrice + effectiveAdj)
+                          : (product.current_price || 0);
+
+                      const finalVatPrice =
+                        product.price_with_vat ||
+                        (baseCalcPrice > 0
+                          ? Math.round(baseCalcPrice * (1 + vatPercent / 100))
+                          : 0);
 
                       return (
                         <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
@@ -1183,10 +1280,6 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                           <td className="py-3 px-3 border-r border-purple-100 bg-purple-50/10 text-center font-mono">
                             {(() => {
                               const hasCustom = product.price_adjustment !== undefined && product.price_adjustment !== null;
-                              const effectiveAdj = hasCustom
-                                ? product.price_adjustment!
-                                : (table.default_price_adjustment || 0);
-
                               if (effectiveAdj === 0) {
                                 return <span className="text-gray-400 text-[11px]">بدون تغییر (۰)</span>;
                               }
@@ -1207,29 +1300,32 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                             })()}
                           </td>
 
-                          {/* Final Published / System Price */}
-                          <td className="py-3 px-3 border-r border-blue-100 bg-blue-50/20">
-                            <div className="flex flex-col gap-0.5">
-                              <div className="flex items-center gap-1 font-bold text-slate-900 font-mono">
+                          {/* Final Published Price Sent to Destination (WITH VAT) */}
+                          <td className="py-3 px-3 border-r border-blue-100 bg-blue-50/30">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1 font-bold text-blue-950 font-mono text-sm">
                                 <span>
-                                  {product.current_price > 0
-                                    ? product.current_price.toLocaleString('fa-IR')
-                                    : minPrice !== null
-                                    ? (
-                                        Math.max(
-                                          0,
-                                          minPrice +
-                                            (product.price_adjustment !== undefined && product.price_adjustment !== null
-                                              ? product.price_adjustment
-                                              : (table.default_price_adjustment || 0))
-                                        )
-                                      ).toLocaleString('fa-IR')
+                                  {finalVatPrice > 0
+                                    ? finalVatPrice.toLocaleString('fa-IR')
                                     : '—'}
                                 </span>
-                                <span className="text-[10px] text-gray-500 font-normal">تومان</span>
+                                <span className="text-[10px] text-blue-700 font-normal">تومان</span>
+                                {finalVatPrice > 0 && (
+                                  <span className="inline-flex items-center text-[9px] font-bold text-blue-800 bg-blue-100 px-1 py-0.5 rounded border border-blue-200">
+                                    با ارزش افزوده ({vatPercent}٪)
+                                  </span>
+                                )}
                               </div>
+
+                              {baseCalcPrice > 0 && (
+                                <div className="text-[10px] text-gray-500 font-mono">
+                                  <span>پایه (بدون مالیات): </span>
+                                  <span className="font-semibold">{baseCalcPrice.toLocaleString('fa-IR')} تومان</span>
+                                </div>
+                              )}
+
                               {/* WordPress price fluctuation status & diff (matches generateDataTable.php) */}
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                                 {product.price_status === 2 || (product.previous_price && product.current_price > product.previous_price) ? (
                                   <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                                     <span>▲</span>
@@ -1245,15 +1341,6 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                                 ) : (
                                   <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.2 rounded border border-gray-100">
                                     ثابت
-                                  </span>
-                                )}
-
-                                {product.current_price > 0 && (
-                                  <span
-                                    className="text-[10px] text-gray-500 font-mono"
-                                    title="محاسبه قیمت بدون ۱۰٪ مالیات بر ارزش افزوده در قالب سایت"
-                                  >
-                                    بدون مالیات: {Math.ceil(product.current_price / 1.1).toLocaleString('fa-IR')}
                                   </span>
                                 )}
                               </div>

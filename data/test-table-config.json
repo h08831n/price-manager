@@ -61,6 +61,7 @@
       "max_attempts": 7,
       "price_guard_percent": 25,
       "default_price_adjustment": 150,
+      "vat_percent": 10,
       "working_days": "شنبه تا چهارشنبه",
       "recheck_default": false,
       "assignment_mode": "TAXONOMY",
@@ -68,8 +69,8 @@
       "product_by_attr": [],
       "product_by_attr_company": false,
       "active": true,
-      "created_at": "2026-10-25T22:36:42.540Z",
-      "updated_at": "2026-10-25T22:36:42.540Z"
+      "created_at": "2026-10-29T06:44:36.278Z",
+      "updated_at": "2026-10-29T06:44:36.278Z"
     }
   ],
   "products": [
@@ -224,8 +225,8 @@
       "timeout": 30,
       "wait_after_load": 1500,
       "active": true,
-      "created_at": "2026-10-25T22:36:42.540Z",
-      "updated_at": "2026-10-25T22:36:42.540Z"
+      "created_at": "2026-10-29T06:44:36.278Z",
+      "updated_at": "2026-10-29T06:44:36.278Z"
     }
   ],
   "source_pages": [
@@ -274,8 +275,8 @@
       "site_id": 6,
       "url": "http://localhost:3000/fixtures/source-imported.html",
       "active": true,
-      "created_at": "2026-10-25T22:36:42.540Z",
-      "updated_at": "2026-10-25T22:36:42.540Z"
+      "created_at": "2026-10-29T06:44:36.279Z",
+      "updated_at": "2026-10-29T06:44:36.279Z"
     }
   ],
   "table_sources": [
@@ -346,8 +347,8 @@
       "retry_interval_override": null,
       "timeout_override": null,
       "price_guard_override": null,
-      "created_at": "2026-10-25T22:36:42.540Z",
-      "updated_at": "2026-10-25T22:36:42.540Z"
+      "created_at": "2026-10-29T06:44:36.279Z",
+      "updated_at": "2026-10-29T06:44:36.279Z"
     }
   ],
   "product_selectors": [
@@ -519,8 +520,8 @@
       "price_xpath": "//div[@id=\"test-price-12\"]",
       "update_time_xpath": null,
       "active": true,
-      "created_at": "2026-10-25T22:36:42.540Z",
-      "updated_at": "2026-10-25T22:36:42.540Z"
+      "created_at": "2026-10-29T06:44:36.279Z",
+      "updated_at": "2026-10-29T06:44:36.279Z"
     },
     {
       "id": 18,
@@ -530,8 +531,8 @@
       "price_xpath": "//div[@id=\"test-price-14\"]",
       "update_time_xpath": null,
       "active": true,
-      "created_at": "2026-10-25T22:36:42.540Z",
-      "updated_at": "2026-10-25T22:36:42.540Z"
+      "created_at": "2026-10-29T06:44:36.279Z",
+      "updated_at": "2026-10-29T06:44:36.279Z"
     }
   ],
   "page_actions": [
@@ -545,8 +546,8 @@
       "selector": "",
       "value": "2000",
       "active": true,
-      "created_at": "2026-10-25T22:36:42.540Z",
-      "updated_at": "2026-10-25T22:36:42.540Z"
+      "created_at": "2026-10-29T06:44:36.279Z",
+      "updated_at": "2026-10-29T06:44:36.279Z"
     }
   ],
   "global_settings": {
@@ -579,7 +580,7 @@
       "level": "INFO",
       "message": "اعمال موفق پیکربندی جداول قیمت: 1 جدول جدید، 0 جدول بروزرسانی، 1 منبع، 2 سلکتور",
       "metadata": {},
-      "created_at": "2026-10-25T22:36:42.541Z"
+      "created_at": "2026-10-29T06:44:36.280Z"
     }
   ],
   "config_history": [],

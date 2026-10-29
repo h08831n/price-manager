@@ -17,6 +17,7 @@ import {
 } from '../scraper/pickerCache';
 import {
   publishTableToWordPress,
+  updateWordPressTableTime,
   syncFactoriesToDestination,
   syncPriceTablesToDestination,
   syncProductsToDestination,
@@ -389,10 +390,15 @@ apiRouter.get('/products', (req: Request, res: Response) => {
         ? p.price_adjustment
         : tableDefaultAdj;
 
+    const vatPercent = typeof t?.vat_percent === 'number' ? t.vat_percent : (schema.global_settings?.default_vat_percent ?? 10);
+    const priceWithVat = p.price_with_vat ?? (p.current_price > 0 && vatPercent > 0 ? Math.round(p.current_price * (1 + vatPercent / 100)) : p.current_price);
+
     return {
       ...p,
       factory_name: f?.name,
       price_table_name: t?.name,
+      vat_percent: vatPercent,
+      price_with_vat: priceWithVat,
       table_default_adjustment: tableDefaultAdj,
       effective_adjustment: effectiveAdj,
       has_custom_adjustment: p.price_adjustment !== undefined && p.price_adjustment !== null
@@ -966,6 +972,7 @@ apiRouter.post('/price-tables', (req: Request, res: Response) => {
     max_attempts: parseInt(max_attempts, 10) || 5,
     price_guard_percent: parseFloat(price_guard_percent) || 30,
     default_price_adjustment: parseFloat(default_price_adjustment) || 0,
+    vat_percent: req.body.vat_percent !== undefined && req.body.vat_percent !== null && req.body.vat_percent !== '' ? parseFloat(req.body.vat_percent) : 10,
     assignment_mode: assignment_mode || (Array.isArray(manual_product_ids) && manual_product_ids.length > 0 ? 'MANUAL' : 'TAXONOMY'),
     manual_product_ids: Array.isArray(manual_product_ids) ? manual_product_ids.map(Number) : [],
     product_by_attr: Array.isArray(product_by_attr) ? product_by_attr : [],
@@ -1009,6 +1016,9 @@ apiRouter.put('/price-tables/:id', (req: Request, res: Response) => {
   if (req.body.price_guard_percent !== undefined) table.price_guard_percent = parseFloat(req.body.price_guard_percent);
   if (req.body.default_price_adjustment !== undefined) {
     table.default_price_adjustment = parseFloat(req.body.default_price_adjustment) || 0;
+  }
+  if (req.body.vat_percent !== undefined) {
+    table.vat_percent = req.body.vat_percent === '' || req.body.vat_percent === null ? 10 : parseFloat(req.body.vat_percent);
   }
   if (req.body.active !== undefined) table.active = Boolean(req.body.active);
   if (req.body.assignment_mode !== undefined) table.assignment_mode = req.body.assignment_mode;
@@ -1079,6 +1089,18 @@ apiRouter.post('/price-tables/:id/run', async (req: Request, res: Response) => {
   try {
     const run = await executePriceTable(id, { triggerType: 'MANUAL_TABLE' });
     res.json({ success: true, run });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Explicit endpoint to update last_update_time on destination WordPress site
+apiRouter.post('/price-tables/:id/update-wordpress-time', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  const customTimestamp = req.body?.last_update_time ? parseInt(String(req.body.last_update_time), 10) : undefined;
+  try {
+    const result = await updateWordPressTableTime(id, customTimestamp);
+    res.json(result);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2811,19 +2833,60 @@ apiRouter.post('/products/batch-status', (req: Request, res: Response) => {
 
 // Mock WordPress Endpoints for local testing & live verification
 apiRouter.post('/mock-wordpress/wp-json/price-system/v1/bulk-update', (req: Request, res: Response) => {
-  const { price_table_id, products } = req.body;
+  const { price_table_id, table_destination_id, last_update_time, cache_version, products } = req.body;
   const items = (products || []).map((p: any) => ({
     post_id: p.post_id,
     new_price: p.price,
     success: true
   }));
 
+  const schema = db.getSchema();
+  const targetId = price_table_id || table_destination_id;
+  const targetTable = schema.price_tables.find(
+    (t) => t.id === targetId || t.destination_id === targetId
+  );
+  if (targetTable) {
+    targetTable.last_update_time = last_update_time || Math.floor(Date.now() / 1000);
+    if (cache_version) targetTable.cache_version = cache_version;
+    targetTable.last_synced_at = new Date().toISOString();
+    targetTable.sync_status = 'SYNCED';
+    db.save();
+  }
+
   res.json({
     success: true,
     price_table_id,
+    last_update_time: last_update_time || Math.floor(Date.now() / 1000),
+    cache_version: cache_version || 1,
     updated: items.length,
     failed: 0,
     items
+  });
+});
+
+apiRouter.post('/mock-wordpress/wp-json/price-system/v1/update-table-time', (req: Request, res: Response) => {
+  const { price_table_id, table_destination_id, last_update_time, cache_version } = req.body;
+  const targetId = price_table_id || table_destination_id;
+  const unixNow = last_update_time || Math.floor(Date.now() / 1000);
+
+  const schema = db.getSchema();
+  const targetTable = schema.price_tables.find(
+    (t) => t.id === targetId || t.destination_id === targetId
+  );
+  if (targetTable) {
+    targetTable.last_update_time = unixNow;
+    if (cache_version) targetTable.cache_version = cache_version;
+    targetTable.last_synced_at = new Date().toISOString();
+    targetTable.sync_status = 'SYNCED';
+    db.save();
+  }
+
+  res.json({
+    success: true,
+    price_table_id: targetId,
+    last_update_time: unixNow,
+    cache_version: cache_version || 1,
+    message: 'تاریخ بروزرسانی جدول در شبیه‌ساز با موفقیت ثبت شد.'
   });
 });
 

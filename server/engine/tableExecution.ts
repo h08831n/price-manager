@@ -2,7 +2,7 @@
 import { db } from '../db/database';
 import { scrapeTableSource } from '../scraper/engine';
 import { getEffectiveConfig, checkPriceGuard, calculateMinimumPrices } from './priceGuard';
-import { publishTableToWordPress, WordPressProductPayload } from '../wordpress/client';
+import { publishTableToWordPress, updateWordPressTableTime, WordPressProductPayload } from '../wordpress/client';
 import { Run, RunTriggerType, AppError, TableRevision, PriceTable, Product } from '../../src/types';
 
 /**
@@ -417,6 +417,16 @@ export async function executePriceTable(
         const calculatedPrice = Math.max(0, rawMinPrice + effectiveAdjustment);
         const previousPrice = prod.current_price || prod.previous_price || 0;
 
+        // VAT Calculation: Value-added tax rate (default 10% or table-specific vat_percent)
+        const vatPercent =
+          typeof priceTable.vat_percent === 'number'
+            ? priceTable.vat_percent
+            : (schema.global_settings?.default_vat_percent ?? 10);
+        const priceWithVat =
+          vatPercent > 0
+            ? Math.round(calculatedPrice * (1 + vatPercent / 100))
+            : calculatedPrice;
+
         // Price Guard check
         const guardResult = checkPriceGuard(previousPrice, calculatedPrice, priceTable.price_guard_percent);
 
@@ -427,6 +437,8 @@ export async function executePriceTable(
           post_id: prod.post_id,
           product_name: prod.name,
           calculated_price: calculatedPrice,
+          price_with_vat: priceWithVat,
+          vat_percent: vatPercent,
           raw_min_price: rawMinPrice,
           price_adjustment: effectiveAdjustment,
           previous_price: previousPrice,
@@ -482,13 +494,17 @@ export async function executePriceTable(
             targetProd.price_adjustment = prod.price_adjustment ?? null;
             targetProd.effective_adjustment = effectiveAdjustment;
             targetProd.current_price = calculatedPrice;
+            targetProd.price_with_vat = priceWithVat;
             targetProd.updated_at = new Date().toISOString();
           }
 
-          // Send adjusted final price to WordPress
+          // User Requirement: The price sent to destination site MUST be the price with VAT (ارزش افزوده)
           wpProductsPayload.push({
             post_id: prod.post_id,
-            price: calculatedPrice
+            price: priceWithVat,
+            price_with_vat: priceWithVat,
+            base_price: calculatedPrice,
+            vat_percent: vatPercent
           });
 
           // Track price change if price altered
@@ -535,6 +551,8 @@ export async function executePriceTable(
         }
       } else {
         revision.wordpress_status = 'SKIPPED';
+        // User Requirement: Still update destination table last_update_time so destination reflects latest check
+        await updateWordPressTableTime(priceTableId);
       }
 
       runRecord.products_extracted = minPricesMap.size;
@@ -652,8 +670,18 @@ export function recalculateProductPrices(productId?: number, priceTableId?: numb
           : (table?.default_price_adjustment || 0);
 
       const finalPrice = Math.max(0, rawMin + adjustment);
+      const vatPercent =
+        typeof table?.vat_percent === 'number'
+          ? table.vat_percent
+          : (schema.global_settings?.default_vat_percent ?? 10);
+      const priceWithVat =
+        vatPercent > 0
+          ? Math.round(finalPrice * (1 + vatPercent / 100))
+          : finalPrice;
+
       prod.raw_min_price = rawMin;
       prod.effective_adjustment = adjustment;
+      prod.price_with_vat = priceWithVat;
       if (prod.current_price !== finalPrice) {
         prod.previous_price = prod.current_price || finalPrice;
         prod.current_price = finalPrice;

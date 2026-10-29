@@ -41,6 +41,7 @@ export interface PriceTable {
   max_attempts: number; // e.g. 5
   price_guard_percent: number; // e.g. 30
   default_price_adjustment?: number; // e.g. -100 or +100 Tomans table-wide default
+  vat_percent?: number; // e.g. 10 (percentage of value added tax applied before sending to destination site)
   working_days?: string;
   recheck_default?: boolean;
   // WordPress ACF & Template Matching Modes:
@@ -79,6 +80,7 @@ export interface Product {
   price_table_id: number;
   price_table_name?: string;
   current_price: number;
+  price_with_vat?: number; // Final price with VAT sent to destination site (WooCommerce / WordPress)
   previous_price?: number;
   raw_min_price?: number; // Lowest price extracted from sources before adjustment
   price_adjustment?: number | null; // Specific override adjustment in Tomans (highest priority)
@@ -351,7 +353,9 @@ export interface TableRevisionItem {
   product_id: number;
   post_id: number;
   product_name?: string;
-  calculated_price: number;
+  calculated_price: number; // Base calculated price (after adjustment, before VAT)
+  price_with_vat?: number; // Final price with VAT sent to WordPress
+  vat_percent?: number; // VAT percentage used
   raw_min_price?: number;
   price_adjustment?: number;
   previous_price: number;
@@ -367,6 +371,7 @@ export interface GlobalSettings {
   default_retry_interval: number; // 30 mins
   default_max_attempts: number; // 5
   default_price_guard_percent: number; // 30%
+  default_vat_percent?: number; // 10% standard VAT rate in Iran
   default_browser_timeout_sec: number; // 30 sec
   default_page_load_wait_ms: number; // 2000 ms
   default_recheck: boolean; // false
@@ -497,6 +502,7 @@ export interface PriceTableConfigItem {
   max_attempts: number;
   price_guard_percent: number;
   default_price_adjustment?: number;
+  vat_percent?: number;
   working_days?: string;
   recheck_default?: boolean;
   assignment_mode?: 'MANUAL' | 'ATTRIBUTE' | 'TAXONOMY';

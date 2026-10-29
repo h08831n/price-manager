@@ -43,6 +43,7 @@
       "updated_at": "2026-10-24T21:38:02.686Z"
     }
   ],
+  "categories": [],
   "price_tables": [
     {
       "id": 1,
@@ -123,6 +124,31 @@
       "sync_status": "SYNCED",
       "created_at": "2026-10-24T21:38:02.686Z",
       "updated_at": "2026-10-24T21:38:02.686Z"
+    },
+    {
+      "id": 9901,
+      "name": "جدول تست ارزش افزوده",
+      "factory_id": 1,
+      "category_id": 1,
+      "active": true,
+      "start_time": "11:00",
+      "retry_interval_minutes": 30,
+      "max_attempts": 5,
+      "price_guard_percent": 50,
+      "default_price_adjustment": 0,
+      "vat_percent": 9,
+      "created_at": "2026-10-29T06:42:59.648Z",
+      "updated_at": "2026-10-29T08:13:46.847Z",
+      "working_days": "شنبه تا چهارشنبه",
+      "recheck_default": false,
+      "assignment_mode": "TAXONOMY",
+      "manual_product_ids": [],
+      "product_by_attr": [],
+      "product_by_attr_company": false,
+      "last_update_time": 1793261626,
+      "cache_version": 6,
+      "last_synced_at": "2026-10-29T08:13:46.899Z",
+      "sync_status": "SYNCED"
     }
   ],
   "products": [
@@ -152,7 +178,7 @@
       "margin_percent": 0,
       "destination_id": 1840,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T20:42:12.950Z"
+      "last_synced_at": "2026-10-29T08:13:46.835Z"
     },
     {
       "id": 2,
@@ -180,7 +206,7 @@
       "margin_percent": 0,
       "destination_id": 1841,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T20:42:12.950Z"
+      "last_synced_at": "2026-10-29T08:13:46.835Z"
     },
     {
       "id": 3,
@@ -208,7 +234,7 @@
       "margin_percent": 0,
       "destination_id": 1842,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T20:42:12.950Z"
+      "last_synced_at": "2026-10-29T08:13:46.835Z"
     },
     {
       "id": 4,
@@ -236,7 +262,7 @@
       "margin_percent": 0,
       "destination_id": 1843,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T20:42:12.950Z"
+      "last_synced_at": "2026-10-29T08:13:46.835Z"
     },
     {
       "id": 5,
@@ -249,7 +275,7 @@
       "current_price": 48500,
       "active": true,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T21:38:02.686Z",
+      "last_synced_at": "2026-10-29T08:13:46.835Z",
       "created_at": "2026-10-24T21:19:40.217Z",
       "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
@@ -265,7 +291,7 @@
       "current_price": 36200,
       "active": true,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T21:38:02.686Z",
+      "last_synced_at": "2026-10-29T08:13:46.835Z",
       "created_at": "2026-10-24T21:19:40.217Z",
       "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
@@ -281,7 +307,7 @@
       "current_price": 29800,
       "active": false,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T21:38:02.686Z",
+      "last_synced_at": "2026-10-29T08:13:46.835Z",
       "created_at": "2026-10-24T21:19:40.217Z",
       "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
@@ -297,10 +323,29 @@
       "current_price": 28900,
       "active": false,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-24T21:38:02.686Z",
+      "last_synced_at": "2026-10-29T08:13:46.835Z",
       "created_at": "2026-10-24T21:38:02.686Z",
       "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
+    },
+    {
+      "id": 9901,
+      "post_id": 9901,
+      "destination_id": 9901,
+      "name": "محصول تست ارزش افزوده",
+      "factory_id": 1,
+      "price_table_id": 9901,
+      "current_price": 40000,
+      "active": true,
+      "attributes": {},
+      "created_at": "2026-10-29T06:42:59.648Z",
+      "updated_at": "2026-10-29T08:13:46.841Z",
+      "sync_status": "SYNCED",
+      "last_synced_at": "2026-10-29T08:13:46.835Z",
+      "raw_min_price": 40000,
+      "effective_adjustment": 0,
+      "price_with_vat": 44000,
+      "previous_price": 30000
     }
   ],
   "sites": [
@@ -470,6 +515,53 @@
       "recheck_enabled": false,
       "created_at": "2026-09-21T08:19:39.381Z",
       "updated_at": "2026-09-21T08:19:39.381Z"
+    },
+    {
+      "id": 9901,
+      "price_table_id": 9901,
+      "site_id": 1,
+      "source_page_id": 1,
+      "active": true,
+      "recheck_enabled": false,
+      "created_at": "2026-10-29T06:42:59.726Z",
+      "updated_at": "2026-10-29T08:13:46.847Z",
+      "update_time_xpath": null,
+      "max_attempts_override": null,
+      "retry_interval_override": null,
+      "timeout_override": null,
+      "price_guard_override": null
+    },
+    {
+      "id": 9901,
+      "price_table_id": 9901,
+      "site_id": 1,
+      "source_page_id": 1,
+      "active": true,
+      "recheck_enabled": false,
+      "created_at": "2026-10-29T06:44:24.419Z",
+      "updated_at": "2026-10-29T06:44:24.419Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 9901,
+      "price_table_id": 9901,
+      "site_id": 1,
+      "source_page_id": 1,
+      "active": true,
+      "recheck_enabled": false,
+      "created_at": "2026-10-29T07:49:16.940Z",
+      "updated_at": "2026-10-29T07:49:16.940Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 9901,
+      "price_table_id": 9901,
+      "site_id": 1,
+      "source_page_id": 1,
+      "active": true,
+      "recheck_enabled": false,
+      "created_at": "2026-10-29T08:13:46.840Z",
+      "updated_at": "2026-10-29T08:13:46.840Z"
     }
   ],
   "product_selectors": [
@@ -688,6 +780,57 @@
       "last_extracted_value": "60,000",
       "last_status": "VALID",
       "last_extracted_at": "2026-09-28T16:42:13.475Z"
+    },
+    {
+      "id": 17,
+      "product_id": 9901,
+      "post_id": 9901,
+      "table_source_id": 9901,
+      "price_xpath": "//div",
+      "last_status": "VALID",
+      "last_parsed_price": 40000,
+      "active": true,
+      "created_at": "2026-10-29T06:42:59.726Z",
+      "updated_at": "2026-10-29T08:13:46.848Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 18,
+      "product_id": 9901,
+      "post_id": 9901,
+      "table_source_id": 9901,
+      "price_xpath": "//div",
+      "last_status": "VALID",
+      "last_parsed_price": 40000,
+      "active": true,
+      "created_at": "2026-10-29T06:44:24.419Z",
+      "updated_at": "2026-10-29T06:44:24.419Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 19,
+      "product_id": 9901,
+      "post_id": 9901,
+      "table_source_id": 9901,
+      "price_xpath": "//div",
+      "last_status": "VALID",
+      "last_parsed_price": 40000,
+      "active": true,
+      "created_at": "2026-10-29T07:49:16.940Z",
+      "updated_at": "2026-10-29T07:49:16.940Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 20,
+      "product_id": 9901,
+      "post_id": 9901,
+      "table_source_id": 9901,
+      "price_xpath": "//div",
+      "last_status": "VALID",
+      "last_parsed_price": 40000,
+      "active": true,
+      "created_at": "2026-10-29T08:13:46.840Z",
+      "updated_at": "2026-10-29T08:13:46.840Z"
     }
   ],
   "page_actions": [],
@@ -3340,6 +3483,157 @@
     }
   ],
   "logs": [
+    {
+      "id": 125,
+      "level": "INFO",
+      "message": "[شبیه‌ساز وردپرس] متای last_update_time جدول 9901 با موفقیت به 1793261626 بروز شد.",
+      "metadata": {},
+      "created_at": "2026-10-29T08:13:46.901Z"
+    },
+    {
+      "id": 124,
+      "level": "INFO",
+      "message": "[شبیه‌ساز وردپرس] متای last_update_time جدول 9901 با موفقیت به 1750000000 بروز شد.",
+      "metadata": {},
+      "created_at": "2026-10-29T08:13:46.896Z"
+    },
+    {
+      "id": 123,
+      "level": "INFO",
+      "message": "نتیجه انتشار دسته‌ای در وردپرس: 1 موفق، 0 ناموفق (1 بسته)",
+      "metadata": {
+        "updated": 1,
+        "failed": 0,
+        "batches": 1,
+        "last_update_time": 1793261626
+      },
+      "price_table_id": 9901,
+      "created_at": "2026-10-29T08:13:46.889Z"
+    },
+    {
+      "id": 122,
+      "level": "INFO",
+      "message": "[شبیه‌ساز وردپرس] متای last_update_time جدول 9901 با موفقیت به 1793261626 بروز شد.",
+      "metadata": {},
+      "created_at": "2026-10-29T08:13:46.882Z"
+    },
+    {
+      "id": 121,
+      "level": "INFO",
+      "message": "ارسال دسته‌ای قیمت‌ها به وب‌سایت وردپرس/ووکامرس (1 محصول در 1 بسته، هر بسته 25 تایی، last_update_time=1793261626)...",
+      "metadata": {
+        "priceTableId": 9901,
+        "destinationTableId": 9901,
+        "unixNow": 1793261626,
+        "count": 1,
+        "batches": 1,
+        "batchSize": 25,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 9901,
+      "created_at": "2026-10-29T08:13:46.854Z"
+    },
+    {
+      "id": 120,
+      "level": "INFO",
+      "message": "اعمال موفق پیکربندی جداول قیمت: 0 جدول جدید، 1 جدول بروزرسانی، 4 منبع، 16 سلکتور",
+      "metadata": {},
+      "created_at": "2026-10-29T08:13:46.850Z"
+    },
+    {
+      "id": 119,
+      "level": "INFO",
+      "message": "همگام‌سازی دسته‌ای محصولات با سایت مقصد (9 محصول در 1 بسته، هر بسته 25 تایی)...",
+      "metadata": {
+        "total": 9,
+        "batches": 1,
+        "batchSize": 25
+      },
+      "created_at": "2026-10-29T08:13:46.700Z"
+    },
+    {
+      "id": 118,
+      "level": "INFO",
+      "message": "نتیجه انتشار دسته‌ای در وردپرس: 1 موفق، 0 ناموفق (1 بسته)",
+      "metadata": {
+        "updated": 1,
+        "failed": 0,
+        "batches": 1,
+        "last_update_time": 1793260156
+      },
+      "price_table_id": 9901,
+      "created_at": "2026-10-29T07:49:16.974Z"
+    },
+    {
+      "id": 117,
+      "level": "INFO",
+      "message": "ارسال دسته‌ای قیمت‌ها به وب‌سایت وردپرس/ووکامرس (1 محصول در 1 بسته، هر بسته 25 تایی، last_update_time=1793260156)...",
+      "metadata": {
+        "priceTableId": 9901,
+        "destinationTableId": 9901,
+        "unixNow": 1793260156,
+        "count": 1,
+        "batches": 1,
+        "batchSize": 25,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 9901,
+      "created_at": "2026-10-29T07:49:16.956Z"
+    },
+    {
+      "id": 116,
+      "level": "INFO",
+      "message": "اعمال موفق پیکربندی جداول قیمت: 0 جدول جدید، 1 جدول بروزرسانی، 3 منبع، 9 سلکتور",
+      "metadata": {},
+      "created_at": "2026-10-29T07:49:16.950Z"
+    },
+    {
+      "id": 115,
+      "level": "INFO",
+      "message": "همگام‌سازی دسته‌ای محصولات با سایت مقصد (9 محصول در 1 بسته، هر بسته 25 تایی)...",
+      "metadata": {
+        "total": 9,
+        "batches": 1,
+        "batchSize": 25
+      },
+      "created_at": "2026-10-29T07:49:16.808Z"
+    },
+    {
+      "id": 114,
+      "level": "INFO",
+      "message": "اعمال موفق پیکربندی جداول قیمت: 0 جدول جدید، 1 جدول بروزرسانی، 2 منبع، 4 سلکتور",
+      "metadata": {},
+      "created_at": "2026-10-29T06:44:24.426Z"
+    },
+    {
+      "id": 113,
+      "level": "INFO",
+      "message": "همگام‌سازی دسته‌ای محصولات با سایت مقصد (9 محصول در 1 بسته، هر بسته 25 تایی)...",
+      "metadata": {
+        "total": 9,
+        "batches": 1,
+        "batchSize": 25
+      },
+      "created_at": "2026-10-29T06:44:24.339Z"
+    },
+    {
+      "id": 112,
+      "level": "INFO",
+      "message": "اعمال موفق پیکربندی جداول قیمت: 0 جدول جدید، 1 جدول بروزرسانی، 1 منبع، 1 سلکتور",
+      "metadata": {},
+      "created_at": "2026-10-29T06:42:59.738Z"
+    },
+    {
+      "id": 111,
+      "level": "INFO",
+      "message": "همگام‌سازی دسته‌ای محصولات با سایت مقصد (9 محصول در 1 بسته، هر بسته 25 تایی)...",
+      "metadata": {
+        "total": 9,
+        "batches": 1,
+        "batchSize": 25
+      },
+      "created_at": "2026-10-29T06:42:59.651Z"
+    },
     {
       "id": 110,
       "level": "INFO",

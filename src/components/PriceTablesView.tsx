@@ -82,6 +82,7 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
     max_attempts: 5,
     price_guard_percent: 30,
     default_price_adjustment: 0,
+    vat_percent: 10,
     active: true
   });
   const [runningId, setRunningId] = useState<number | null>(null);
@@ -742,6 +743,32 @@ export const PriceTablesView: React.FC<PriceTablesViewProps> = ({
                     }
                     className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">
+                    درصد مالیات بر ارزش افزوده (ارزش افزوده)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={newTable.vat_percent ?? 10}
+                      onChange={(e) =>
+                        setNewTable({
+                          ...newTable,
+                          vat_percent: e.target.value === '' ? 10 : parseFloat(e.target.value)
+                        })
+                      }
+                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded focus:bg-white focus:outline-none focus:border-slate-800 font-mono"
+                    />
+                    <span className="text-xs text-gray-500 font-medium">٪</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    قیمت ارسالی به مقصد بر اساس این درصد با ارزش افزوده محاسبه می‌شود (پیش‌فرض: ۱۰٪).
+                  </p>
                 </div>
               </div>
 
