@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, Check, Globe, Clock, ShieldCheck, Key, RefreshCw, Lock, AlertCircle, Eye, EyeOff, CheckCircle2, XCircle, Wifi, Layers } from 'lucide-react';
+import { Save, Check, Globe, Clock, ShieldCheck, Key, RefreshCw, Lock, AlertCircle, Eye, EyeOff, CheckCircle2, XCircle, Wifi, Layers, Download } from 'lucide-react';
 import { GlobalSettings } from '../types';
 
 interface SettingsViewProps {
@@ -504,8 +504,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
               </label>
             </div>
 
+            <div className="p-3.5 bg-blue-50/70 rounded-lg border border-blue-200 text-xs text-blue-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <span className="font-bold flex items-center gap-1.5 text-blue-950">
+                  <Download className="w-4 h-4 text-blue-600" />
+                  دانلود افزونه اختصاصی وردپرس (نسخه جدید با ثبت خودکار در charting_price)
+                </span>
+                <p className="text-[11px] text-blue-700 leading-relaxed">
+                  فایل افزونه <code>price-system-sync.php</code> اکنون شامل متد و ثبت مستقیم در جدول و ساختار <code>charting_price</code> است تا قیمت‌های ارسالی بلافاصله در نمودار تغییرات قیمت نمایش داده شوند.
+                </p>
+              </div>
+              <a
+                href="/api/wordpress-plugin/download"
+                download="price-system-sync.php"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded text-xs transition-colors shadow-xs whitespace-nowrap self-end sm:self-auto"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>دانلود فایل افزونه</span>
+              </a>
+            </div>
+
             <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-[11px] text-gray-600 leading-relaxed">
-              💡 <strong>راهنما:</strong> فایل افزونه اختصاصی وردپرس در مسیر <code>wordpress-plugin/price-system-sync.php</code> قرار دارد. کافیست آن را در پوشه افزونه‌های هاست خود فعال کرده و همان توکنی که در افزونه وارد کرده‌اید را در کادر بالا درج کنید. تمام اطلاعات به صورت پویا در پایگاه‌داده ذخیره می‌شوند و هیچ نیازی به تغییر سورس‌کد پروژه نیست.
+              💡 <strong>راهنما:</strong> فایل افزونه اختصاصی وردپرس در مسیر <code>wordpress-plugin/price-system-sync.php</code> قرار دارد. کافیست آن را در پوشه افزونه‌های هاست خود جایگزین کرده و همان توکنی که در افزونه وارد کرده‌اید را در کادر بالا درج کنید.
             </div>
           </div>
         </div>

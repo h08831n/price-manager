@@ -2836,12 +2836,25 @@ apiRouter.post('/products/batch-status', (req: Request, res: Response) => {
   });
 });
 
+// Download Updated WordPress Plugin
+apiRouter.get('/wordpress-plugin/download', (_req: Request, res: Response) => {
+  const pluginPath = path.resolve(process.cwd(), 'wordpress-plugin/price-system-sync.php');
+  if (fs.existsSync(pluginPath)) {
+    res.setHeader('Content-Type', 'application/x-php');
+    res.setHeader('Content-Disposition', 'attachment; filename="price-system-sync.php"');
+    fs.createReadStream(pluginPath).pipe(res);
+  } else {
+    res.status(404).json({ error: 'فایل افزونه وردپرس یافت نشد.' });
+  }
+});
+
 // Mock WordPress Endpoints for local testing & live verification
 apiRouter.post('/mock-wordpress/wp-json/price-system/v1/bulk-update', (req: Request, res: Response) => {
   const { price_table_id, table_destination_id, last_update_time, cache_version, products } = req.body;
   const items = (products || []).map((p: any) => ({
     post_id: p.post_id,
     new_price: p.price,
+    charting_price_recorded: true,
     success: true
   }));
 

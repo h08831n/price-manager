@@ -146,6 +146,7 @@ class PriceSystemSyncPlugin {
         }
 
         $price_table_id = isset($params['price_table_id']) ? intval($params['price_table_id']) : 0;
+        $timestamp = !empty($params['last_update_time']) ? intval($params['last_update_time']) : time();
         $products = $params['products'];
 
         $updated_count = 0;
@@ -155,6 +156,10 @@ class PriceSystemSyncPlugin {
         foreach ($products as $item) {
             $post_id = isset($item['post_id']) ? intval($item['post_id']) : 0;
             $new_price = isset($item['price']) ? floatval($item['price']) : null;
+            $base_price = isset($item['base_price']) ? floatval($item['base_price']) : null;
+            if ($base_price === null || $base_price <= 0) {
+                $base_price = isset($item['price_without_vat']) ? floatval($item['price_without_vat']) : null;
+            }
 
             if ($post_id <= 0 || $new_price === null || $new_price <= 0) {
                 $failed_count++;
@@ -196,6 +201,9 @@ class PriceSystemSyncPlugin {
             update_post_meta($post_id, 'price_diff', $price_diff);
             update_post_meta($post_id, '_price_system_last_sync', current_time('mysql'));
             update_post_meta($post_id, '_price_system_table_id', $price_table_id);
+
+            // Record sent price into charting_price table / plugin for chart history
+            $this->record_charting_price($post_id, $new_price, $base_price, $price_table_id, $timestamp);
 
             // Clear WooCommerce transients
             if (function_exists('wc_delete_product_transients')) {
@@ -322,9 +330,14 @@ class PriceSystemSyncPlugin {
 
         $old_price = floatval(get_post_meta($post_id, '_price', true));
 
+        $base_price = isset($params['base_price']) ? floatval($params['base_price']) : null;
+
         update_post_meta($post_id, '_regular_price', $new_price);
         update_post_meta($post_id, '_price', $new_price);
         update_post_meta($post_id, '_price_system_last_sync', current_time('mysql'));
+
+        // Record sent price into charting_price table / plugin for chart history
+        $this->record_charting_price($post_id, $new_price, $base_price, 0, time());
 
         if (function_exists('wc_delete_product_transients')) {
             wc_delete_product_transients($post_id);
@@ -880,6 +893,180 @@ class PriceSystemSyncPlugin {
             'factories' => $factories,
             'total'     => count($factories)
         ));
+    }
+
+    /**
+     * Record sent price into charting_price table / plugin so it appears in price history charts
+     */
+    public function record_charting_price($post_id, $price, $base_price = null, $price_table_id = 0, $timestamp = null) {
+        global $wpdb;
+
+        if ($post_id <= 0 || $price <= 0) {
+            return false;
+        }
+
+        $timestamp = !empty($timestamp) ? intval($timestamp) : time();
+        $mysql_now = date('Y-m-d H:i:s', $timestamp);
+        $date_only = date('Y-m-d', $timestamp);
+        $time_only = date('H:i:s', $timestamp);
+
+        // Fallback for base price (price without tax)
+        if ($base_price === null || $base_price <= 0) {
+            $base_price = round($price / 1.1);
+        }
+
+        // 1. Check and insert into charting_price database table(s)
+        $candidate_tables = array(
+            $wpdb->prefix . 'charting_price',
+            'charting_price',
+            $wpdb->prefix . 'charting_prices',
+            'charting_prices',
+            $wpdb->prefix . 'price_chart',
+            'price_chart'
+        );
+
+        $inserted = false;
+
+        foreach ($candidate_tables as $tbl) {
+            $tbl_escaped = esc_sql($tbl);
+            $check = $wpdb->get_var("SHOW TABLES LIKE '{$tbl_escaped}'");
+            if ($check === $tbl) {
+                // Table exists! Read columns to adapt to its exact schema
+                $cols = $wpdb->get_col("DESC `{$tbl_escaped}`");
+                if (!empty($cols)) {
+                    $data = array();
+                    $format = array();
+
+                    // Product ID mapping
+                    if (in_array('product_id', $cols)) {
+                        $data['product_id'] = $post_id;
+                        $format[] = '%d';
+                    } elseif (in_array('post_id', $cols)) {
+                        $data['post_id'] = $post_id;
+                        $format[] = '%d';
+                    }
+
+                    // Price (sent price / price with tax)
+                    if (in_array('price', $cols)) {
+                        $data['price'] = $price;
+                        $format[] = '%f';
+                    } elseif (in_array('current_price', $cols)) {
+                        $data['current_price'] = $price;
+                        $format[] = '%f';
+                    }
+
+                    // Price without tax or base price
+                    if (in_array('price_no_tax', $cols)) {
+                        $data['price_no_tax'] = $base_price;
+                        $format[] = '%f';
+                    }
+                    if (in_array('base_price', $cols)) {
+                        $data['base_price'] = $base_price;
+                        $format[] = '%f';
+                    }
+                    if (in_array('tax_price', $cols)) {
+                        $data['tax_price'] = $price;
+                        $format[] = '%f';
+                    }
+                    if (in_array('price_with_tax', $cols)) {
+                        $data['price_with_tax'] = $price;
+                        $format[] = '%f';
+                    }
+
+                    // Dates and Timestamps
+                    if (in_array('created_at', $cols)) {
+                        $data['created_at'] = $mysql_now;
+                        $format[] = '%s';
+                    }
+                    if (in_array('date', $cols)) {
+                        $data['date'] = $mysql_now;
+                        $format[] = '%s';
+                    }
+                    if (in_array('updated_at', $cols)) {
+                        $data['updated_at'] = $mysql_now;
+                        $format[] = '%s';
+                    }
+                    if (in_array('date_time', $cols)) {
+                        $data['date_time'] = $mysql_now;
+                        $format[] = '%s';
+                    }
+                    if (in_array('time', $cols)) {
+                        $data['time'] = $time_only;
+                        $format[] = '%s';
+                    }
+                    if (in_array('timestamp', $cols)) {
+                        $data['timestamp'] = $timestamp;
+                        $format[] = '%d';
+                    }
+
+                    // Price Table ID
+                    if (in_array('price_table_id', $cols) && $price_table_id > 0) {
+                        $data['price_table_id'] = $price_table_id;
+                        $format[] = '%d';
+                    } elseif (in_array('table_id', $cols) && $price_table_id > 0) {
+                        $data['table_id'] = $price_table_id;
+                        $format[] = '%d';
+                    }
+
+                    // Jalali / Persian date
+                    if (in_array('jdate', $cols) && function_exists('jdate')) {
+                        $data['jdate'] = jdate('Y-m-d H:i:s', $timestamp);
+                        $format[] = '%s';
+                    }
+
+                    if (!empty($data)) {
+                        $wpdb->insert($tbl, $data, $format);
+                        $inserted = true;
+                    }
+                }
+            }
+        }
+
+        // 2. If Charting_price_Admin or Charting_price PHP class exists, invoke its handler
+        if (class_exists('Charting_price_Admin')) {
+            try {
+                $admin = new Charting_price_Admin();
+                $methods = array('record_price', 'save_price', 'add_price', 'insert_price', 'update_price', 'save_product_price');
+                foreach ($methods as $m) {
+                    if (method_exists($admin, $m)) {
+                        @call_user_func(array($admin, $m), $post_id, $price);
+                        break;
+                    }
+                }
+            } catch (Exception $e) {}
+        }
+        if (class_exists('Charting_price')) {
+            try {
+                $methods = array('record_price', 'save_price', 'add_price', 'insert_price', 'update_price');
+                foreach ($methods as $m) {
+                    if (method_exists('Charting_price', $m)) {
+                        @call_user_func(array('Charting_price', $m), $post_id, $price);
+                        break;
+                    }
+                }
+            } catch (Exception $e) {}
+        }
+
+        // 3. Post meta tracking for charting_price
+        $chart_meta = get_post_meta($post_id, 'charting_price', true);
+        if (is_array($chart_meta)) {
+            $chart_meta[] = array(
+                'price'      => $price,
+                'base_price' => $base_price,
+                'date'       => $mysql_now,
+                'timestamp'  => $timestamp
+            );
+            update_post_meta($post_id, 'charting_price', $chart_meta);
+        }
+        update_post_meta($post_id, '_last_charting_price', $price);
+        update_post_meta($post_id, '_last_charting_price_time', $timestamp);
+
+        // 4. Fire action hooks so any listeners on the site trigger
+        do_action('charting_price_after_insert', $post_id, $price, $price_table_id);
+        do_action('charting_price_record', $post_id, $price);
+        do_action('woocommerce_update_product', $post_id);
+
+        return true;
     }
 
     /**
