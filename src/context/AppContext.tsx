@@ -77,7 +77,7 @@ interface AppContextType {
   handleDeletePageAction: (id: number) => Promise<void>;
   handleClearTableSourceActions: (tableSourceId: number) => Promise<void>;
   handleRunTable: (tableId: number) => Promise<void>;
-  handleRunSource: (sourceId: number) => Promise<any>;
+  handleRunSource: (sourceId: number, forceDate?: boolean) => Promise<any>;
   handleRetryPublish: (revisionId: number) => Promise<void>;
   handleSaveSettings: (newSettings: Partial<GlobalSettings>) => Promise<void>;
   handleExport: (entity: string) => void;
@@ -609,12 +609,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const handleRunSource = async (sourceId: number) => {
+  const handleRunSource = async (sourceId: number, forceDate: boolean = false) => {
     try {
-      showToast('در حال اجرای تست استخراج این منبع...', 'info');
+      showToast(
+        forceDate
+          ? 'در حال استخراج و ثبت اجباری قیمت‌های این منبع (بدون شرط تاریخ)...'
+          : 'در حال اجرای تست استخراج این منبع...',
+        'info'
+      );
       const res = await fetch(`/api/table-sources/${sourceId}/run`, {
         method: 'POST',
-        headers: getAuthHeaders()
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ forceDate })
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'خطا در برقراری ارتباط با سرور');
@@ -622,7 +631,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!data.success && data.source_status === 'FAILED') {
         const errMsg = data.message || data.last_error || 'المان‌های قیمت با XPath در صفحه یافت نشدند';
         showToast(`نتیجه استخراج منبع: ${errMsg}`, 'error');
-      } else if (data.source_status === 'NOT_UPDATED' || !data.fresh) {
+      } else if (!forceDate && (data.source_status === 'NOT_UPDATED' || !data.fresh)) {
         showToast(
           `صفحه بررسی شد اما تاریخ بروزرسانی امروز نیست (${data.last_update_text || 'تاریخ قدیمی'})`,
           'info'
@@ -630,9 +639,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
         const count = data.products_extracted ?? 0;
         showToast(
-          count > 0
-            ? `استخراج منبع با موفقیت انجام شد (${count} محصول خوانده شد)`
-            : 'استخراج منبع با موفقیت انجام شد',
+          forceDate
+            ? (count > 0
+                ? `استخراج و ثبت اجباری انجام شد (${count} محصول ثبت و قیمت‌ها محاسبه شدند)`
+                : 'منبع بررسی شد و شرط تاریخ نادیده گرفته شد')
+            : (count > 0
+                ? `استخراج منبع با موفقیت انجام شد (${count} محصول خوانده شد)`
+                : 'استخراج منبع با موفقیت انجام شد'),
           'success'
         );
       }

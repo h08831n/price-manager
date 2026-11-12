@@ -30,7 +30,8 @@ import {
   CheckSquare,
   Square,
   Download,
-  FileCode2
+  FileCode2,
+  Zap
 } from 'lucide-react';
 import {
   PriceTable,
@@ -58,7 +59,7 @@ interface PriceTableDetailViewProps {
   factories?: Factory[];
   onBack: () => void;
   onRunTable: (tableId: number) => Promise<void>;
-  onRunSource: (sourceId: number) => Promise<any>;
+  onRunSource: (sourceId: number, forceDate?: boolean) => Promise<any>;
   onSaveTable?: (table: Partial<PriceTable>) => Promise<void>;
   onDeleteTable?: (tableId: number) => Promise<void>;
   onSaveTableSource?: (data: Partial<TableSource> & { url?: string; new_url?: string }) => Promise<void>;
@@ -177,6 +178,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
   const [sourceTestReports, setSourceTestReports] = useState<Record<number, any>>({});
 
   // Expanded states for accordions
+  const [expandedSources, setExpandedSources] = useState<Record<number, boolean>>({});
   const [expandedProducts, setExpandedProducts] = useState<Record<number, boolean>>({});
   const [expandedActions, setExpandedActions] = useState<Record<number, boolean>>({});
 
@@ -337,7 +339,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
     }
   };
 
-  const handleRunSource = async (sourceId: number) => {
+  const handleRunSource = async (sourceId: number, forceDate: boolean = false) => {
     setRunningSourceId(sourceId);
     try {
       // 1. Auto-save source configuration if modified in UI
@@ -384,7 +386,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
       }
 
       // 3. Now execute source run
-      const report = await onRunSource(sourceId);
+      const report = await onRunSource(sourceId, forceDate);
       if (report) {
         setSourceTestReports((prev) => ({ ...prev, [sourceId]: report }));
       }
@@ -1376,16 +1378,48 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
               </p>
             </div>
 
-            {onSaveTableSource && (
-              <button
-                type="button"
-                onClick={() => setIsAddSourceModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>افزودن منبع جدید</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {tableSources.length > 1 && (
+                <div className="flex items-center gap-1 border border-gray-200 rounded-md p-0.5 bg-gray-50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allOpen: Record<number, boolean> = {};
+                      tableSources.forEach((s) => (allOpen[s.id] = true));
+                      setExpandedSources(allOpen);
+                    }}
+                    className="px-2 py-1 text-[11px] font-medium text-gray-700 hover:text-slate-900 hover:bg-white rounded transition-colors"
+                    title="باز کردن تمام منابع"
+                  >
+                    باز کردن همه
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allClosed: Record<number, boolean> = {};
+                      tableSources.forEach((s) => (allClosed[s.id] = false));
+                      setExpandedSources(allClosed);
+                    }}
+                    className="px-2 py-1 text-[11px] font-medium text-gray-700 hover:text-slate-900 hover:bg-white rounded transition-colors"
+                    title="بستن تمام منابع"
+                  >
+                    بستن همه
+                  </button>
+                </div>
+              )}
+
+              {onSaveTableSource && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddSourceModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>افزودن منبع جدید</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {tableSources.length === 0 ? (
@@ -1404,6 +1438,7 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                 const overrideActions = getSourceOverrideActions(source.id);
                 const siteDefaults = getSiteDefaultActions(currentSiteIdVal);
                 const hasOverrides = overrideActions.length > 0;
+                const isSourceOpen = expandedSources[source.id] !== false; // open by default, can be collapsed
                 const isProductsOpen = expandedProducts[source.id] !== false; // open by default
                 const isActionsOpen = expandedActions[source.id] === true;
 
@@ -1413,8 +1448,28 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                     className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden transition-all"
                   >
                     {/* Source Card Header */}
-                    <div className="p-4 bg-slate-50/80 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div 
+                      className="p-4 bg-slate-50/80 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-100/70 transition-colors"
+                      onClick={() => setExpandedSources((prev) => ({ ...prev, [source.id]: !isSourceOpen }))}
+                    >
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* Collapse / Expand Indicator Icon */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedSources((prev) => ({ ...prev, [source.id]: !isSourceOpen }));
+                          }}
+                          className="p-1 text-slate-700 hover:text-slate-900 hover:bg-gray-200/70 rounded transition-colors"
+                          title={isSourceOpen ? 'بستن منبع (Collapse)' : 'باز کردن منبع (Expand)'}
+                        >
+                          {isSourceOpen ? (
+                            <ChevronUp className="w-4 h-4 text-slate-700" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-700" />
+                          )}
+                        </button>
+
                         <span className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
                           <Globe className="w-4 h-4 text-slate-700" />
                           {source.site_name || siteObj?.name || `سایت ${source.site_id}`}
@@ -1473,16 +1528,27 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                       </div>
 
                       {/* Header Controls */}
-                      <div className="flex items-center gap-1.5 self-end md:self-auto">
+                      <div className="flex items-center gap-1.5 self-end md:self-auto" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          onClick={() => handleRunSource(source.id)}
+                          onClick={() => handleRunSource(source.id, false)}
                           disabled={runningSourceId === source.id}
                           className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white border border-gray-300 rounded hover:bg-gray-50 shadow-xs disabled:opacity-50 transition-colors"
-                          title="اجرای مستقل این منبع"
+                          title="اجرای مستقل این منبع (با بررسی شرط تاریخ)"
                         >
                           <Play className={`w-3 h-3 ${runningSourceId === source.id ? 'animate-spin' : ''}`} />
                           <span>تست استخراج</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRunSource(source.id, true)}
+                          disabled={runningSourceId === source.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded shadow-xs disabled:opacity-50 transition-colors"
+                          title="استخراج و ثبت قیمت این منبع حتی در صورتی که تاریخ صفحه قدیمی باشد (ثبت دستی فوری)"
+                        >
+                          <Zap className={`w-3 h-3 text-amber-600 ${runningSourceId === source.id ? 'animate-spin' : ''}`} />
+                          <span>ثبت قیمت بدون شرط تاریخ</span>
                         </button>
 
                         <button
@@ -1504,8 +1570,22 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSources((prev) => ({ ...prev, [source.id]: !isSourceOpen }))}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded transition-colors"
+                          title={isSourceOpen ? 'بستن مشخصات منبع' : 'مشاهده و باز کردن مشخصات منبع'}
+                        >
+                          <span>{isSourceOpen ? 'بستن' : 'باز کردن'}</span>
+                          {isSourceOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
                       </div>
                     </div>
+
+                    {/* Source Body (Collapsible) */}
+                    {isSourceOpen && (
+                      <div className="divide-y divide-gray-100 animate-in fade-in duration-150">
 
                     {/* Live Test Extraction Feedback Report */}
                     {sourceTestReports[source.id] && (
@@ -1541,9 +1621,17 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                             {sourceTestReports[source.id].last_update_text || 'خوانده نشد یا تعیین نشده است'}
                           </span>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            sourceTestReports[source.id].fresh ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            sourceTestReports[source.id].forced
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : sourceTestReports[source.id].fresh
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
                           }`}>
-                            {sourceTestReports[source.id].fresh ? 'بروز امروز' : 'قدیمی یا نامشخص'}
+                            {sourceTestReports[source.id].forced
+                              ? 'ثبت اجباری (شرط تاریخ نادیده گرفته شد)'
+                              : sourceTestReports[source.id].fresh
+                              ? 'بروز امروز'
+                              : 'قدیمی یا نامشخص'}
                           </span>
                         </div>
 
@@ -2176,8 +2264,10 @@ export const PriceTableDetailView: React.FC<PriceTableDetailViewProps> = ({
                       )}
                     </div>
                   </div>
-                );
-              })}
+                )}
+              </div>
+            );
+          })}
             </div>
           )}
         </div>

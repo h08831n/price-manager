@@ -76,6 +76,7 @@ export interface ExecuteTableOptions {
   triggerType: RunTriggerType;
   attemptNumber?: number;
   specificSourceId?: number; // If manual single source run
+  forceDate?: boolean; // Force extraction and recording even if source date is stale/not fresh
 }
 
 export async function executePriceTable(
@@ -216,7 +217,7 @@ export async function executePriceTable(
         dailySource.recheck_count += 1;
       }
 
-      const res = await scrapeTableSource(source, runId, preloadedHtml);
+      const res = await scrapeTableSource(source, runId, preloadedHtml, { forceDate: options.forceDate });
       scrapeResults.push({ source, res });
 
       // Cache page HTML for shared page optimization so duplicate requests to same page are eliminated
@@ -233,7 +234,7 @@ export async function executePriceTable(
       // Update daily source record
       dailySource.raw_update_text = res.updateResult.raw_text;
       dailySource.normalized_update_date = res.updateResult.normalized_date || undefined;
-      dailySource.fresh = res.fresh;
+      dailySource.fresh = options.forceDate ? true : res.fresh;
 
       if (!res.success && (res.errors.length > 0 || res.structuredErrors?.length > 0)) {
         dailySource.status = 'FAILED';
@@ -288,11 +289,12 @@ export async function executePriceTable(
             });
           }
         }
-      } else if (!res.fresh) {
+      } else if (!res.fresh && !options.forceDate) {
         dailySource.status = 'NOT_UPDATED';
         dailySource.last_error = undefined;
       } else {
         dailySource.status = 'UPDATED';
+        dailySource.fresh = true;
         dailySource.last_error = undefined;
         dailySource.last_price_fetch_at = new Date().toISOString();
       }

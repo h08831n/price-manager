@@ -1782,6 +1782,7 @@ apiRouter.delete('/table-sources/:id', (req: Request, res: Response) => {
 // Manual Run of Single Source (Requirement #30, #50)
 apiRouter.post('/table-sources/:id/run', async (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
+  const forceDate = req.body?.forceDate === true || req.query?.forceDate === 'true';
   const schema = db.getSchema();
   const source = schema.table_sources.find((s) => s.id === id);
   if (!source) return res.status(404).json({ error: 'منبع یافت نشد.' });
@@ -1789,7 +1790,8 @@ apiRouter.post('/table-sources/:id/run', async (req: Request, res: Response) => 
   try {
     const run = await executePriceTable(source.price_table_id, {
       triggerType: 'MANUAL_SOURCE',
-      specificSourceId: id
+      specificSourceId: id,
+      forceDate
     });
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -1827,7 +1829,9 @@ apiRouter.post('/table-sources/:id/run', async (req: Request, res: Response) => 
     const isPartial = successCount > 0 && failCount > 0;
 
     let summaryMessage = '';
-    if (successCount === relevantSelectors.length && relevantSelectors.length > 0) {
+    if (forceDate && isSuccess) {
+      summaryMessage = `استخراج و ثبت اجباری با موفقیت انجام شد (${successCount} کالا ثبت شد و شرط تاریخ نادیده گرفته شد).`;
+    } else if (successCount === relevantSelectors.length && relevantSelectors.length > 0) {
       summaryMessage = `استخراج با موفقیت انجام شد (${successCount} کالا استخراج شد).`;
     } else if (isPartial) {
       summaryMessage = `استخراج تا حدی موفق بود (${successCount} کالا استخراج شد، ${failCount} کالا با سلکتور فعلی یافت نشد).`;
@@ -1841,6 +1845,7 @@ apiRouter.post('/table-sources/:id/run', async (req: Request, res: Response) => 
       success: isSuccess,
       source_status: dailySource?.status || (isSuccess ? 'UPDATED' : 'FAILED'),
       fresh: dailySource?.fresh || false,
+      forced: forceDate,
       products_extracted: successCount,
       products_failed: failCount,
       product_results: productResults,

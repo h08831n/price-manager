@@ -109,7 +109,8 @@ export async function fetchHtmlForUrl(url: string, timeoutMs: number = 30000): P
 export async function scrapeTableSource(
   tableSource: TableSource,
   runId: number,
-  preloadedHtml?: string
+  preloadedHtml?: string,
+  options?: { forceDate?: boolean }
 ): Promise<SourceScrapeResult> {
   const startTime = Date.now();
   const schema = db.getSchema();
@@ -204,20 +205,33 @@ export async function scrapeTableSource(
         }
       } else {
         result.updateResult = evaluateFreshness(updateExtraction.firstValue);
-        result.fresh = result.updateResult.fresh;
+        
+        if (options?.forceDate) {
+          result.fresh = true;
+          result.updateResult.fresh = true;
+          result.updateResult.reason = `اجرای دستی اجباری توسط کاربر (صرف‌نظر از تاریخ: ${result.updateResult.raw_text})`;
+          db.log(
+            'INFO',
+            `[استخراج اجباری] تاریخ منبع بررسی شد اما شرط تاریخ با درخواست کاربر نادیده گرفته شد: ${result.updateResult.raw_text}`,
+            result.updateResult,
+            { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
+          );
+        } else {
+          result.fresh = result.updateResult.fresh;
 
-        db.log(
-          result.fresh ? 'INFO' : 'WARNING',
-          `بررسی تازگی جدول منبع: ${result.updateResult.raw_text} -> ${result.fresh ? 'بروز (امروز)' : 'قدیمی'} (${result.updateResult.reason})`,
-          result.updateResult,
-          { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
-        );
+          db.log(
+            result.fresh ? 'INFO' : 'WARNING',
+            `بررسی تازگی جدول منبع: ${result.updateResult.raw_text} -> ${result.fresh ? 'بروز (امروز)' : 'قدیمی'} (${result.updateResult.reason})`,
+            result.updateResult,
+            { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
+          );
 
-        // If table-level update is stale: mark NOT_UPDATED and do not extract products
-        if (!result.fresh) {
-          result.success = true; // Completed without crash, but not updated yet today
-          result.duration_ms = Date.now() - startTime;
-          return result;
+          // If table-level update is stale: mark NOT_UPDATED and do not extract products
+          if (!result.fresh) {
+            result.success = true; // Completed without crash, but not updated yet today
+            result.duration_ms = Date.now() - startTime;
+            return result;
+          }
         }
       }
     } else {
@@ -272,7 +286,16 @@ export async function scrapeTableSource(
         prodUpdateTime = evaluatedProdDate.normalized_time;
         productFresh = evaluatedProdDate.fresh;
 
-        if (!productFresh) {
+        if (options?.forceDate) {
+          productFresh = true;
+          selector.last_fresh = true;
+          db.log(
+            'INFO',
+            `[استخراج اجباری کالا] استخراج قیمت کالا ${selector.product_id} بدون شرط تاریخ انجام می‌شود (تاریخ صفحه: ${evaluatedProdDate.raw_text}).`,
+            { selector_id: selector.id, raw_date: evaluatedProdDate.raw_text },
+            { run_id: runId, table_source_id: tableSource.id, site_id: tableSource.site_id }
+          );
+        } else if (!productFresh) {
           selector.last_status = 'NOT_UPDATED';
           selector.last_extracted_at = new Date().toISOString();
           result.products.push({
