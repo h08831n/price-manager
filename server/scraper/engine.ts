@@ -65,6 +65,7 @@ export interface SourceScrapeResult {
   structuredErrors: StructuredScraperError[];
   htmlSnapshotPath?: string;
   screenshotPath?: string;
+  pageHtml?: string;
   duration_ms: number;
 }
 
@@ -436,6 +437,7 @@ export async function scrapeTableSource(
     }
   } finally {
     if (loadedPage) {
+      result.pageHtml = loadedPage.content;
       await loadedPage.close().catch(() => {});
     }
   }

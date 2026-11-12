@@ -419,6 +419,8 @@ class PriceSystemSyncPlugin {
                 continue;
             }
 
+            $tbl_time = !empty($t['last_update_time']) ? intval($t['last_update_time']) : time();
+
             // Save table definition in WordPress options
             update_option('price_system_table_' . $id, array(
                 'id' => $id,
@@ -426,8 +428,16 @@ class PriceSystemSyncPlugin {
                 'factory_id' => isset($t['factory_id']) ? intval($t['factory_id']) : 0,
                 'destination_id' => $dest_id,
                 'default_price_adjustment' => isset($t['default_price_adjustment']) ? floatval($t['default_price_adjustment']) : 0,
+                'last_update_time' => $tbl_time,
                 'synced_at' => current_time('mysql')
             ));
+
+            // Also persist directly into post meta if post exists in WordPress
+            if ($dest_id > 0) {
+                update_post_meta($dest_id, 'last_update_time', $tbl_time);
+                $cur_v = (int) get_post_meta($dest_id, '_price_table_cache_v', true);
+                update_post_meta($dest_id, '_price_table_cache_v', ($cur_v > 0 ? $cur_v + 1 : 1));
+            }
 
             $synced_count++;
             $results[] = array(

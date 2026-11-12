@@ -138,16 +138,16 @@
       "default_price_adjustment": 0,
       "vat_percent": 9,
       "created_at": "2026-10-29T06:42:59.648Z",
-      "updated_at": "2026-10-29T08:13:46.847Z",
+      "updated_at": "2026-11-12T07:36:32.356Z",
       "working_days": "شنبه تا چهارشنبه",
       "recheck_default": false,
       "assignment_mode": "TAXONOMY",
       "manual_product_ids": [],
       "product_by_attr": [],
       "product_by_attr_company": false,
-      "last_update_time": 1793261626,
-      "cache_version": 6,
-      "last_synced_at": "2026-10-29T08:13:46.899Z",
+      "last_update_time": 1794468992,
+      "cache_version": 10,
+      "last_synced_at": "2026-11-12T07:36:32.377Z",
       "sync_status": "SYNCED"
     }
   ],
@@ -178,7 +178,7 @@
       "margin_percent": 0,
       "destination_id": 1840,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z"
+      "last_synced_at": "2026-11-12T07:36:32.351Z"
     },
     {
       "id": 2,
@@ -206,7 +206,7 @@
       "margin_percent": 0,
       "destination_id": 1841,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z"
+      "last_synced_at": "2026-11-12T07:36:32.351Z"
     },
     {
       "id": 3,
@@ -234,7 +234,7 @@
       "margin_percent": 0,
       "destination_id": 1842,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z"
+      "last_synced_at": "2026-11-12T07:36:32.351Z"
     },
     {
       "id": 4,
@@ -262,7 +262,7 @@
       "margin_percent": 0,
       "destination_id": 1843,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z"
+      "last_synced_at": "2026-11-12T07:36:32.351Z"
     },
     {
       "id": 5,
@@ -275,7 +275,7 @@
       "current_price": 48500,
       "active": true,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z",
+      "last_synced_at": "2026-11-12T07:36:32.351Z",
       "created_at": "2026-10-24T21:19:40.217Z",
       "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
@@ -291,7 +291,7 @@
       "current_price": 36200,
       "active": true,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z",
+      "last_synced_at": "2026-11-12T07:36:32.351Z",
       "created_at": "2026-10-24T21:19:40.217Z",
       "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
@@ -307,7 +307,7 @@
       "current_price": 29800,
       "active": false,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z",
+      "last_synced_at": "2026-11-12T07:36:32.351Z",
       "created_at": "2026-10-24T21:19:40.217Z",
       "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
@@ -323,7 +323,7 @@
       "current_price": 28900,
       "active": false,
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z",
+      "last_synced_at": "2026-11-12T07:36:32.351Z",
       "created_at": "2026-10-24T21:38:02.686Z",
       "updated_at": "2026-10-24T21:38:02.686Z",
       "attributes": {}
@@ -339,9 +339,9 @@
       "active": true,
       "attributes": {},
       "created_at": "2026-10-29T06:42:59.648Z",
-      "updated_at": "2026-10-29T08:13:46.841Z",
+      "updated_at": "2026-11-12T07:36:32.353Z",
       "sync_status": "SYNCED",
-      "last_synced_at": "2026-10-29T08:13:46.835Z",
+      "last_synced_at": "2026-11-12T07:36:32.351Z",
       "raw_min_price": 40000,
       "effective_adjustment": 0,
       "price_with_vat": 44000,
@@ -524,7 +524,7 @@
       "active": true,
       "recheck_enabled": false,
       "created_at": "2026-10-29T06:42:59.726Z",
-      "updated_at": "2026-10-29T08:13:46.847Z",
+      "updated_at": "2026-11-12T07:36:32.356Z",
       "update_time_xpath": null,
       "max_attempts_override": null,
       "retry_interval_override": null,
@@ -561,7 +561,18 @@
       "active": true,
       "recheck_enabled": false,
       "created_at": "2026-10-29T08:13:46.840Z",
-      "updated_at": "2026-10-29T08:13:46.840Z"
+      "updated_at": "2026-10-29T08:13:46.840Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 9901,
+      "price_table_id": 9901,
+      "site_id": 1,
+      "source_page_id": 1,
+      "active": true,
+      "recheck_enabled": false,
+      "created_at": "2026-11-12T07:36:32.353Z",
+      "updated_at": "2026-11-12T07:36:32.353Z"
     }
   ],
   "product_selectors": [
@@ -791,7 +802,7 @@
       "last_parsed_price": 40000,
       "active": true,
       "created_at": "2026-10-29T06:42:59.726Z",
-      "updated_at": "2026-10-29T08:13:46.848Z",
+      "updated_at": "2026-11-12T07:36:32.356Z",
       "update_time_xpath": null
     },
     {
@@ -830,7 +841,20 @@
       "last_parsed_price": 40000,
       "active": true,
       "created_at": "2026-10-29T08:13:46.840Z",
-      "updated_at": "2026-10-29T08:13:46.840Z"
+      "updated_at": "2026-10-29T08:13:46.840Z",
+      "update_time_xpath": null
+    },
+    {
+      "id": 21,
+      "product_id": 9901,
+      "post_id": 9901,
+      "table_source_id": 9901,
+      "price_xpath": "//div",
+      "last_status": "VALID",
+      "last_parsed_price": 40000,
+      "active": true,
+      "created_at": "2026-11-12T07:36:32.353Z",
+      "updated_at": "2026-11-12T07:36:32.353Z"
     }
   ],
   "page_actions": [],
@@ -3483,6 +3507,74 @@
     }
   ],
   "logs": [
+    {
+      "id": 132,
+      "level": "INFO",
+      "message": "[شبیه‌ساز وردپرس] متای last_update_time جدول 9901 با موفقیت به 1794468992 بروز شد.",
+      "metadata": {},
+      "created_at": "2026-11-12T07:36:32.378Z"
+    },
+    {
+      "id": 131,
+      "level": "INFO",
+      "message": "[شبیه‌ساز وردپرس] متای last_update_time جدول 9901 با موفقیت به 1750000000 بروز شد.",
+      "metadata": {},
+      "created_at": "2026-11-12T07:36:32.376Z"
+    },
+    {
+      "id": 130,
+      "level": "INFO",
+      "message": "نتیجه انتشار دسته‌ای در وردپرس: 1 موفق، 0 ناموفق (1 بسته)",
+      "metadata": {
+        "updated": 1,
+        "failed": 0,
+        "batches": 1,
+        "last_update_time": 1794468992
+      },
+      "price_table_id": 9901,
+      "created_at": "2026-11-12T07:36:32.372Z"
+    },
+    {
+      "id": 129,
+      "level": "INFO",
+      "message": "[شبیه‌ساز وردپرس] متای last_update_time جدول 9901 با موفقیت به 1794468992 بروز شد.",
+      "metadata": {},
+      "created_at": "2026-11-12T07:36:32.371Z"
+    },
+    {
+      "id": 128,
+      "level": "INFO",
+      "message": "ارسال دسته‌ای قیمت‌ها به وب‌سایت وردپرس/ووکامرس (1 محصول در 1 بسته، هر بسته 25 تایی، last_update_time=1794468992)...",
+      "metadata": {
+        "priceTableId": 9901,
+        "destinationTableId": 9901,
+        "unixNow": 1794468992,
+        "count": 1,
+        "batches": 1,
+        "batchSize": 25,
+        "targetUrl": "http://localhost:3000/api/mock-wordpress/wp-json/price-system/v1/bulk-update"
+      },
+      "price_table_id": 9901,
+      "created_at": "2026-11-12T07:36:32.359Z"
+    },
+    {
+      "id": 127,
+      "level": "INFO",
+      "message": "اعمال موفق پیکربندی جداول قیمت: 0 جدول جدید، 1 جدول بروزرسانی، 5 منبع، 25 سلکتور",
+      "metadata": {},
+      "created_at": "2026-11-12T07:36:32.357Z"
+    },
+    {
+      "id": 126,
+      "level": "INFO",
+      "message": "همگام‌سازی دسته‌ای محصولات با سایت مقصد (9 محصول در 1 بسته، هر بسته 25 تایی)...",
+      "metadata": {
+        "total": 9,
+        "batches": 1,
+        "batchSize": 25
+      },
+      "created_at": "2026-11-12T07:36:32.294Z"
+    },
     {
       "id": 125,
       "level": "INFO",

@@ -178,14 +178,16 @@ export async function executePriceTable(
       { run_id: runId, price_table_id: priceTableId }
     );
 
-    // Shared Page Optimization (Requirement #10 & #54): Group by source_page_id
-    const pageCache = new Map<number, string>();
+    // Shared Page Optimization (Requirement #10 & #54): Group by source_page_id or URL
+    const pageCache = new Map<any, string>();
     const scrapeResults = [];
 
     for (const source of sourcesToCheck) {
       let preloadedHtml: string | undefined = undefined;
       if (source.source_page_id && pageCache.has(source.source_page_id)) {
         preloadedHtml = pageCache.get(source.source_page_id);
+      } else if (source.url && pageCache.has(source.url)) {
+        preloadedHtml = pageCache.get(source.url);
       }
 
       // Ensure daily record exists
@@ -217,9 +219,15 @@ export async function executePriceTable(
       const res = await scrapeTableSource(source, runId, preloadedHtml);
       scrapeResults.push({ source, res });
 
-      // Cache page HTML for shared page optimization
-      if (source.source_page_id && !pageCache.has(source.source_page_id)) {
-        // Can be reused by other sources sharing this source_page_id
+      // Cache page HTML for shared page optimization so duplicate requests to same page are eliminated
+      if (res.pageHtml) {
+        if (source.source_page_id) {
+          pageCache.set(source.source_page_id, res.pageHtml);
+        }
+        if (source.url) {
+          // Also allow lookup by URL hash/string if shared URL
+          pageCache.set(source.url as any, res.pageHtml);
+        }
       }
 
       // Update daily source record
